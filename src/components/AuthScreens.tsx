@@ -153,19 +153,44 @@ export function RegisterScreen({
 
 export function AccountScreen({
   email,
+  displayName,
   cloudConfigured,
   cloudSlotCount,
   onLogout,
   onBack,
+  onChangeUsername,
+  usernameBusy,
+  usernameError,
   loggingOut,
 }: {
   email: string
+  displayName?: string
   cloudConfigured: boolean
   cloudSlotCount: number
   onLogout: () => void
   onBack: () => void
+  onChangeUsername: (newName: string) => Promise<void>
+  usernameBusy?: boolean
+  usernameError?: string | null
   loggingOut: boolean
 }) {
+  const [editingName, setEditingName] = useState(false)
+  const [newName, setNewName] = useState(displayName ?? '')
+  const [localError, setLocalError] = useState<string | null>(null)
+
+  async function handleSaveUsername(e: React.FormEvent) {
+    e.preventDefault()
+    setLocalError(null)
+    try {
+      await onChangeUsername(newName)
+      setEditingName(false)
+    } catch (err) {
+      setLocalError(err instanceof Error ? err.message : 'Could not update name.')
+    }
+  }
+
+  const nameError = localError ?? usernameError
+
   return (
     <main className="auth-screen">
       <header className="screen-header">
@@ -177,6 +202,55 @@ export function AccountScreen({
           <span className="panel-label">Email</span>
           {email}
         </p>
+        <p>
+          <span className="panel-label">Trainer name</span>
+          {displayName ?? 'Not set — create one when using Daily Run or Play'}
+        </p>
+        {!editingName ? (
+          <button
+            type="button"
+            className="btn btn--small"
+            onClick={() => {
+              setNewName(displayName ?? '')
+              setLocalError(null)
+              setEditingName(true)
+            }}
+            disabled={!cloudConfigured || loggingOut}
+          >
+            Change Username
+          </button>
+        ) : (
+          <form className="auth-screen__inline-form" onSubmit={(e) => void handleSaveUsername(e)}>
+            <label className="auth-screen__field">
+              <span className="panel-label">New trainer name</span>
+              <input
+                type="text"
+                value={newName}
+                maxLength={16}
+                onChange={(e) => setNewName(e.target.value)}
+                required
+              />
+            </label>
+            {nameError && (
+              <p className="auth-screen__error" role="alert">
+                {nameError}
+              </p>
+            )}
+            <div className="auth-screen__inline-actions">
+              <button type="submit" className="btn btn--primary btn--small" disabled={usernameBusy}>
+                {usernameBusy ? 'Saving…' : 'Save'}
+              </button>
+              <button
+                type="button"
+                className="btn btn--small"
+                onClick={() => setEditingName(false)}
+                disabled={usernameBusy}
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        )}
         <p>
           <span className="panel-label">Save mode</span>
           Cloud

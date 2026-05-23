@@ -261,3 +261,23 @@ export function isStatusCategory(
 export function abilityDealsDamage(ability: AbilityDefinition): boolean {
   return ability.category !== 'status' && ability.power > 0
 }
+
+/** Short label for combat ability cards (no fake damage on pure status). */
+export function formatAbilityEffectPreview(ability: AbilityDefinition): string {
+  const effect = ability.effects?.[0]
+  if (!effect) {
+    return ability.category === 'status' ? 'Status' : ability.category
+  }
+  switch (effect.type) {
+    case 'statDebuff':
+      return `↓ Foe ${STAT_LABELS[effect.stat]}`
+    case 'statBuff':
+      return `↑ ${STAT_LABELS[effect.stat]}`
+    case 'heal':
+      return `Heal ${Math.round(effect.percent * 100)}%`
+    case 'applyStatus':
+      return `${effect.status} ${effect.chance}%`
+    default:
+      return ability.category
+  }
+}

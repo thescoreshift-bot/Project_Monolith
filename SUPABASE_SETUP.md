@@ -102,11 +102,167 @@ for each row
 execute function public.update_updated_at_column();
 ```
 
+### Player profiles (trainer names for leaderboards)
+
+Run this **after** the `game_saves` SQL. Required for Daily Run, leaderboards, and cloud play usernames.
+
+```sql
+create table if not exists public.player_profiles (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid unique not null references auth.users(id) on delete cascade,
+  display_name text unique not null,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+alter table public.player_profiles enable row level security;
+
+create policy "Anyone can read player profiles"
+on public.player_profiles
+for select
+to authenticated
+using (true);
+
+create policy "Users can create their own profile"
+on public.player_profiles
+for insert
+to authenticated
+with check ((select auth.uid()) = user_id);
+
+create policy "Users can update their own profile"
+on public.player_profiles
+for update
+to authenticated
+using ((select auth.uid()) = user_id)
+with check ((select auth.uid()) = user_id);
+
+create or replace function public.update_updated_at_column()
+returns trigger
+language plpgsql
+as $$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$$;
+
+drop trigger if exists update_player_profiles_updated_at on public.player_profiles;
+
+create trigger update_player_profiles_updated_at
+before update on public.player_profiles
+for each row
+execute function public.update_updated_at_column();
+```
+
+**If you already created `player_profiles` without a unique `display_name`**, run once:
+
+```sql
+alter table public.player_profiles
+add constraint player_profiles_display_name_key unique (display_name);
+```
+
+**Schema cache note:** After creating a new table in Supabase, refresh the app (restart `npm run dev` or redeploy). If you still see “Could not find the table … in the schema cache”, wait a minute and try again, or open **Supabase → Settings → API** and confirm the table appears under **Table Editor**.
+
+### Daily leaderboards
+
+```sql
+create table if not exists public.daily_leaderboards (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  display_name text not null,
+  daily_seed text not null,
+  score integer not null,
+  region text,
+  starter_name text,
+  final_team jsonb,
+  badges_earned integer default 0,
+  highest_level integer default 1,
+  evolutions_count integer default 0,
+  completed boolean default false,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now(),
+  unique(user_id, daily_seed)
+);
+
+alter table public.daily_leaderboards enable row level security;
+
+create policy "Authenticated users can read daily leaderboards"
+on public.daily_leaderboards
+for select
+to authenticated
+using (true);
+
+create policy "Users can insert their own leaderboard scores"
+on public.daily_leaderboards
+for insert
+to authenticated
+with check ((select auth.uid()) = user_id);
+
+create policy "Users can update their own leaderboard scores"
+on public.daily_leaderboards
+for update
+to authenticated
+using ((select auth.uid()) = user_id)
+with check ((select auth.uid()) = user_id);
+
+drop trigger if exists update_daily_leaderboards_updated_at on public.daily_leaderboards;
+
+create trigger update_daily_leaderboards_updated_at
+before update on public.daily_leaderboards
+for each row
+execute function public.update_updated_at_column();
+```
+
+### Optional extras
+
+```sql
+-- Tutorial flag on profiles (cloud sync)
+alter table public.player_profiles
+add column if not exists tutorial_completed boolean default false;
+
+-- Tester feedback (optional — form still works offline via copyable report)
+create table if not exists public.feedback_reports (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references auth.users(id) on delete set null,
+  kind text not null,
+  what_happened text not null,
+  expected_behavior text,
+  contact text,
+  screen text,
+  region text,
+  save_slot text,
+  app_version text,
+  created_at timestamptz default now()
+);
+
+alter table public.feedback_reports enable row level security;
+
+create policy "Users can insert feedback"
+on public.feedback_reports
+for insert
+to authenticated
+with check (user_id is null or (select auth.uid()) = user_id);
+
+create policy "Users can read own feedback"
+on public.feedback_reports
+for select
+to authenticated
+using (user_id is null or (select auth.uid()) = user_id);
+```
+
 3. If policies already exist from an older run, drop them first or skip duplicate-policy errors.
 
 ---
 
-## Step 5 — Run the game
+## Step 5 — Run player_profiles and daily_leaderboards SQL
+
+**Open `SUPABASE_SETUP.md` and run the new `player_profiles` and `daily_leaderboards` SQL blocks in the Supabase SQL Editor** (sections above). Cursor cannot create tables in your project unless you use Supabase CLI locally.
+
+After running the SQL, restart `npm run dev` if the app still reports a stale schema cache.
+
+---
+
+## Step 6 — Run the game
 
 ```bash
 npm.cmd install

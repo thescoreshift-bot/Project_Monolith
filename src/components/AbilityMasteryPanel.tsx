@@ -84,6 +84,14 @@ export function AbilityMasteryPanel({
           mods,
           typeMult,
           badgeMult,
+          {
+            defenderMaxHp:
+              previewDefender && 'maxHp' in previewDefender
+                ? (previewDefender as { maxHp: number }).maxHp
+                : undefined,
+            attackerLevel: creature.level,
+            encounterKind: 'normal',
+          },
         )
       : null
 

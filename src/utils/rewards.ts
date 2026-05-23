@@ -1,4 +1,9 @@
 import type { EncounterKind } from '../data/enemies'
+import {
+  EARLY_BATTLE_COINS_MAX,
+  EARLY_BATTLE_COINS_MIN,
+  EARLY_BATTLE_XP_BASE,
+} from './earlyGameBalance'
 import { scaleRewardByRegion } from './regionRewards'
 
 export type CoinRewardType =
@@ -16,7 +21,7 @@ function randomInRange(min: number, max: number): number {
 function baseCoinReward(type: CoinRewardType): number {
   switch (type) {
     case 'battle':
-      return randomInRange(5, 10)
+      return randomInRange(EARLY_BATTLE_COINS_MIN, EARLY_BATTLE_COINS_MAX)
     case 'elite':
       return randomInRange(15, 25)
     case 'alphaNest':
@@ -41,7 +46,7 @@ function baseCoinReward(type: CoinRewardType): number {
 function baseXpReward(type: XpRewardType): number {
   switch (type) {
     case 'battle':
-      return 20
+      return EARLY_BATTLE_XP_BASE
     case 'elite':
       return 35
     case 'alphaNest':

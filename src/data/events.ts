@@ -1,3 +1,5 @@
+import { gameRandom } from '../utils/seededRandom'
+
 export type EventChoiceId = 'a' | 'b'
 
 export type GameEvent = {
@@ -83,7 +85,7 @@ export const GAME_EVENTS: GameEvent[] = [
 ]
 
 export function pickRandomEvent(): GameEvent {
-  const index = Math.floor(Math.random() * GAME_EVENTS.length)
+  const index = Math.floor(gameRandom() * GAME_EVENTS.length)
   return GAME_EVENTS[index]
 }
 

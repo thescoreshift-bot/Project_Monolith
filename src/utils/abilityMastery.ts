@@ -18,6 +18,10 @@ import {
   sanitizeDamage,
   type AbilityCombatModifiers,
 } from './combat'
+import {
+  applyEarlyGameDamageCap,
+  type EncounterDamageKind,
+} from './damageBalance'
 import type { PartyCreature } from './party'
 import type { RunCreature } from './progression'
 import {
@@ -37,6 +41,8 @@ export type AbilityMasteryEntry = {
   transformedAbilityId?: string
   rank5TransformationChosen?: boolean
   rank10TransformationChosen?: boolean
+  /** Mastery perk choice ranks already claimed (2,3,4,6,7,8,9). */
+  claimedPerkRanks?: number[]
 }
 
 export type AbilityMasteryMap = Record<string, AbilityMasteryEntry>
@@ -116,6 +122,7 @@ export function createDefaultMasteryEntry(abilityId: string): AbilityMasteryEntr
     rank: 0,
     xpToNextRank: getAbilityXpToNextRank(0),
     selectedPerks: [],
+    claimedPerkRanks: [],
   }
 }
 
@@ -126,6 +133,7 @@ export function migrateMasteryEntry(raw: AbilityMasteryEntry): AbilityMasteryEnt
     ...createDefaultMasteryEntry(raw.abilityId),
     ...raw,
     selectedPerks,
+    claimedPerkRanks: raw.claimedPerkRanks ?? [],
     xpToNextRank:
       raw.rank >= MASTERY_MAX_RANK
         ? 0
@@ -196,6 +204,22 @@ export function rankRequiresMasteryPerkChoice(rank: number): boolean {
 
 export function rankRequiresUpgradeChoice(rank: number): boolean {
   return rankRequiresMasteryPerkChoice(rank)
+}
+
+export function isMasteryPerkRankClaimed(
+  entry: AbilityMasteryEntry,
+  rank: number,
+): boolean {
+  return (entry.claimedPerkRanks ?? []).includes(rank)
+}
+
+export function markMasteryPerkRankClaimed(
+  entry: AbilityMasteryEntry,
+  rank: number,
+): AbilityMasteryEntry {
+  const claimed = entry.claimedPerkRanks ?? []
+  if (claimed.includes(rank)) return entry
+  return { ...entry, claimedPerkRanks: [...claimed, rank] }
 }
 
 export function buildAbilityMasteryPerkQueueEntry(
@@ -310,7 +334,10 @@ export function grantMasteryXp(
     }
     rankUpMessages.push(`${abilityName} reached Rank ${newRank}!`)
 
-    if (rankRequiresMasteryPerkChoice(newRank)) {
+    if (
+      rankRequiresMasteryPerkChoice(newRank) &&
+      !isMasteryPerkRankClaimed(next, newRank)
+    ) {
       perkQueueEntries.push({
         creatureId: '',
         abilityId: next.abilityId,
@@ -445,6 +472,12 @@ export function rollHitsWithMastery(
   return Math.random() * 100 < effective
 }
 
+export type DamageCalcOptions = {
+  defenderMaxHp?: number
+  attackerLevel?: number
+  encounterKind?: EncounterDamageKind
+}
+
 export function calcDamageWithMastery(
   ability: Ability,
   attacker: CombatStats,
@@ -453,6 +486,7 @@ export function calcDamageWithMastery(
   typeMultiplier: number,
   badgeMultiplier: number,
   crit: boolean,
+  options: DamageCalcOptions = {},
 ): number {
   if (ability.category === 'status' || ability.power <= 0) return 0
   const raw = safeCalcDamage(ability, attacker, defender)
@@ -462,7 +496,17 @@ export function calcDamageWithMastery(
   if (crit) {
     damage = Math.floor(damage * 1.5)
   }
-  return sanitizeDamage(damage, 9999)
+  const maxHp = options.defenderMaxHp ?? 9999
+  if (options.attackerLevel !== undefined && options.defenderMaxHp !== undefined) {
+    damage = applyEarlyGameDamageCap(
+      damage,
+      options.defenderMaxHp,
+      options.attackerLevel,
+      typeMultiplier,
+      options.encounterKind ?? 'normal',
+    )
+  }
+  return sanitizeDamage(damage, maxHp)
 }
 
 export function estimateAbilityDamage(
@@ -472,6 +516,7 @@ export function estimateAbilityDamage(
   modifiers: AbilityCombatModifiers,
   typeMultiplier: number,
   badgeMultiplier: number,
+  options: DamageCalcOptions = {},
 ): number {
   return calcDamageWithMastery(
     ability,
@@ -481,6 +526,7 @@ export function estimateAbilityDamage(
     typeMultiplier,
     badgeMultiplier,
     false,
+    options,
   )
 }
 
@@ -488,19 +534,24 @@ export function applyPerkToCreature<T extends CombatFighterWithMastery>(
   creature: T,
   baseAbilityId: string,
   perkId: string,
+  perkRank?: number,
 ): T {
   const ensured = ensureAbilityMastery(creature)
   const entry = getMasteryEntry(ensured, baseAbilityId)
   const key = findMasteryKeyForActive(ensured.abilityMastery, baseAbilityId) ?? baseAbilityId
   if (entry.selectedPerks.includes(perkId)) return ensured as T
+  let nextEntry = {
+    ...entry,
+    selectedPerks: [...entry.selectedPerks, perkId],
+  }
+  if (perkRank !== undefined) {
+    nextEntry = markMasteryPerkRankClaimed(nextEntry, perkRank)
+  }
   return {
     ...ensured,
     abilityMastery: {
       ...ensured.abilityMastery,
-      [key]: {
-        ...entry,
-        selectedPerks: [...entry.selectedPerks, perkId],
-      },
+      [key]: nextEntry,
     },
   } as T
 }

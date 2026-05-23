@@ -1,6 +1,8 @@
 import { REGION_1_BADGES } from '../data/badges'
 import { getRegion } from '../data/regions'
 import type { MapNode, NodeType, NodeVisitState } from '../data/nodeMap'
+import type { DailyModifier } from './dailyRun'
+import { gameRandom } from './seededRandom'
 
 function getBadgesForRegion(regionNumber: number) {
   if (regionNumber !== 1) return []
@@ -38,10 +40,22 @@ function getLabels(regionId: string): Record<NodeType, string[]> {
   }
 }
 
-function pickWeightedType(exclude: NodeType[] = []): NodeType {
-  const pool = TYPE_WEIGHTS.filter((t) => !exclude.includes(t.type))
+function getTypeWeights(modifier?: DailyModifier | null): { type: NodeType; weight: number }[] {
+  if (!modifier?.restWeightMult) return TYPE_WEIGHTS
+  return TYPE_WEIGHTS.map((t) =>
+    t.type === 'rest'
+      ? { ...t, weight: Math.max(1, Math.round(t.weight * modifier.restWeightMult!)) }
+      : t,
+  )
+}
+
+function pickWeightedType(
+  exclude: NodeType[] = [],
+  modifier?: DailyModifier | null,
+): NodeType {
+  const pool = getTypeWeights(modifier).filter((t) => !exclude.includes(t.type))
   const total = pool.reduce((s, t) => s + t.weight, 0)
-  let roll = Math.random() * total
+  let roll = gameRandom() * total
   for (const entry of pool) {
     roll -= entry.weight
     if (roll <= 0) return entry.type
@@ -51,7 +65,7 @@ function pickWeightedType(exclude: NodeType[] = []): NodeType {
 
 function labelFor(type: NodeType, regionId: string): string {
   const options = getLabels(regionId)[type]
-  return options[Math.floor(Math.random() * options.length)]
+  return options[Math.floor(gameRandom() * options.length)]
 }
 
 function columnForIndex(index: number, count: number): number {
@@ -73,7 +87,7 @@ function pickConnections(
       toIds.length,
       minLinks + Math.floor(Math.random() * maxLinks),
     )
-    const shuffled = [...toIds].sort(() => Math.random() - 0.5)
+    const shuffled = [...toIds].sort(() => gameRandom() - 0.5)
     result[`from-${i}`] = shuffled.slice(0, linkCount)
   }
 
@@ -96,6 +110,7 @@ export type GeneratedMap = {
 export function generateMap(
   regionId: string,
   earnedBadges: string[],
+  dailyModifier?: DailyModifier | null,
 ): GeneratedMap {
   const region = getRegion(regionId)
   const contentRows = getContentRows(regionId)
@@ -122,13 +137,13 @@ export function generateMap(
 
   for (let layer = 1; layer <= contentRows; layer++) {
     const count =
-      minNodes + Math.floor(Math.random() * (maxNodes - minNodes + 1))
+      minNodes + Math.floor(gameRandom() * (maxNodes - minNodes + 1))
     const currentRow: string[] = []
     const badgeForRow =
       badgeQueue.length > 0 ? badgeQueue.shift() : undefined
     const leaderColumn =
       badgeForRow !== undefined
-        ? Math.floor(Math.random() * count)
+        ? Math.floor(gameRandom() * count)
         : -1
 
     for (let i = 0; i < count; i++) {
@@ -139,10 +154,10 @@ export function generateMap(
       if (i === leaderColumn && badgeForRow) {
         type = 'gymLeader'
         badgeId = badgeForRow
-      } else if (badgeForRow && Math.random() < 0.35) {
+      } else if (badgeForRow && gameRandom() < 0.35) {
         type = 'gymTrainer'
       } else {
-        type = pickWeightedType(['gymLeader', 'boss'])
+        type = pickWeightedType(['gymLeader', 'boss'], dailyModifier)
       }
 
       nodes.push({
@@ -180,7 +195,7 @@ export function generateMap(
 
   for (const id of topRow) {
     const node = nodes.find((n) => n.id === id)!
-    if (node.connectsTo.length < 3 && Math.random() < 0.65) {
+    if (node.connectsTo.length < 3 && gameRandom() < 0.65) {
       node.connectsTo.push(bossId)
     }
   }
@@ -190,7 +205,7 @@ export function generateMap(
       nodes.find((n) => n.id === id)!.connectsTo.includes(bossId),
     )
   ) {
-    const fallback = topRow[Math.floor(Math.random() * topRow.length)]
+    const fallback = topRow[Math.floor(gameRandom() * topRow.length)]
     nodes.find((n) => n.id === fallback)!.connectsTo.push(bossId)
   }
 

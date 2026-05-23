@@ -91,6 +91,33 @@ export function buildPostBattleQueue(params: {
 }): PostBattleQueueEvent[] {
   const queue: PostBattleQueueEvent[] = []
 
+  for (const entry of params.masteryPerkQueue) {
+    if (entry.creatureId) {
+      queue.push({
+        type: 'abilityMasteryPerk',
+        creatureId: entry.creatureId,
+        abilityId: entry.abilityId,
+        rank: entry.rank,
+      })
+    }
+  }
+
+  for (const entry of params.masteryTransformQueue) {
+    if (entry.creatureId) {
+      queue.push({
+        type: 'abilityTransform',
+        creatureId: entry.creatureId,
+        abilityId: entry.abilityId,
+        previousAbilityId: entry.previousAbilityId,
+        rank: entry.rank,
+        path: entry.path,
+        newAbilityId: entry.newAbilityId,
+        newName: entry.newName,
+        description: entry.description,
+      })
+    }
+  }
+
   for (const p of params.perkDraftQueue) {
     queue.push({ type: 'perkDraft', creatureId: p.creatureId })
   }
@@ -125,33 +152,6 @@ export function buildPostBattleQueue(params: {
       creatureId: e.creatureId,
       threshold: e.threshold,
     })
-  }
-
-  for (const entry of params.masteryPerkQueue) {
-    if (entry.creatureId) {
-      queue.push({
-        type: 'abilityMasteryPerk',
-        creatureId: entry.creatureId,
-        abilityId: entry.abilityId,
-        rank: entry.rank,
-      })
-    }
-  }
-
-  for (const entry of params.masteryTransformQueue) {
-    if (entry.creatureId) {
-      queue.push({
-        type: 'abilityTransform',
-        creatureId: entry.creatureId,
-        abilityId: entry.abilityId,
-        previousAbilityId: entry.previousAbilityId,
-        rank: entry.rank,
-        path: entry.path,
-        newAbilityId: entry.newAbilityId,
-        newName: entry.newName,
-        description: entry.description,
-      })
-    }
   }
 
   return queue

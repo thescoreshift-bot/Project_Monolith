@@ -3,6 +3,7 @@ import type { NodeType } from './nodeMap'
 import { getRegion } from './regions'
 import { rollEnemyLevelForNode } from '../utils/regionRewards'
 import { getCoinReward, getXpReward } from '../utils/rewards'
+import { gameRandom } from '../utils/seededRandom'
 
 export type EnemyStats = {
   atk: number
@@ -49,10 +50,10 @@ export const ENEMY_TEMPLATES: Record<string, EnemyTemplate> = {
     name: 'Bristlebug',
     type: 'Grass',
     kind: 'normal',
-    level: 3,
-    maxHp: 32,
-    stats: { atk: 28, def: 22, spAtk: 24, spDef: 22, spd: 32 },
-    abilityIds: ['tackle', 'sting'],
+    level: 1,
+    maxHp: 26,
+    stats: { atk: 5, def: 6, spAtk: 5, spDef: 5, spd: 11 },
+    abilityIds: ['sting', 'tackle'],
     recruitable: true,
   },
   ashling: {
@@ -60,9 +61,9 @@ export const ENEMY_TEMPLATES: Record<string, EnemyTemplate> = {
     name: 'Ashling',
     type: 'Fire',
     kind: 'normal',
-    level: 5,
-    maxHp: 40,
-    stats: { atk: 42, def: 30, spAtk: 38, spDef: 32, spd: 35 },
+    level: 1,
+    maxHp: 28,
+    stats: { atk: 6, def: 5, spAtk: 6, spDef: 5, spd: 10 },
     abilityIds: ['cinder-bite', 'tackle'],
     recruitable: true,
   },
@@ -71,9 +72,9 @@ export const ENEMY_TEMPLATES: Record<string, EnemyTemplate> = {
     name: 'Pebblemaw',
     type: 'Ground',
     kind: 'normal',
-    level: 6,
-    maxHp: 55,
-    stats: { atk: 35, def: 50, spAtk: 28, spDef: 45, spd: 20 },
+    level: 1,
+    maxHp: 32,
+    stats: { atk: 5, def: 8, spAtk: 4, spDef: 7, spd: 8 },
     abilityIds: ['rock-bump', 'tackle'],
     recruitable: true,
   },
@@ -82,9 +83,9 @@ export const ENEMY_TEMPLATES: Record<string, EnemyTemplate> = {
     name: 'Driftwisp',
     type: 'Water',
     kind: 'normal',
-    level: 4,
-    maxHp: 38,
-    stats: { atk: 32, def: 28, spAtk: 36, spDef: 30, spd: 34 },
+    level: 1,
+    maxHp: 28,
+    stats: { atk: 5, def: 6, spAtk: 7, spDef: 6, spd: 13 },
     abilityIds: ['bubble-hex', 'tackle'],
     recruitable: true,
   },
@@ -93,9 +94,9 @@ export const ENEMY_TEMPLATES: Record<string, EnemyTemplate> = {
     name: 'Voltimp',
     type: 'Electric',
     kind: 'normal',
-    level: 5,
-    maxHp: 36,
-    stats: { atk: 38, def: 26, spAtk: 44, spDef: 28, spd: 48 },
+    level: 1,
+    maxHp: 24,
+    stats: { atk: 5, def: 5, spAtk: 8, spDef: 5, spd: 14 },
     abilityIds: ['static-jolt', 'tackle'],
     recruitable: true,
   },
@@ -327,12 +328,17 @@ function scaleStats(stats: EnemyStats, ratio: number): EnemyStats {
   }
 }
 
-export function spawnEnemy(templateId: string, targetLevel?: number): Enemy {
+export function spawnEnemy(
+  templateId: string,
+  targetLevel?: number,
+  options?: { hpMult?: number },
+): Enemy {
   const template = ENEMY_TEMPLATES[templateId] ?? ENEMY_TEMPLATES.bristlebug
-  const level = targetLevel ?? template.level
+  const level = Math.max(1, targetLevel ?? template.level)
   const ratio = level / Math.max(1, template.level)
   const stats = scaleStats(template.stats, ratio)
-  const maxHp = Math.max(1, Math.round(template.maxHp * ratio))
+  const hpScale = (options?.hpMult ?? 1) * (level <= 3 ? 1.05 : 1)
+  const maxHp = Math.max(1, Math.round(template.maxHp * ratio * hpScale))
   return {
     ...template,
     level,
@@ -345,13 +351,19 @@ export function spawnEnemy(templateId: string, targetLevel?: number): Enemy {
 export function pickRandomNormalEnemy(
   regionId?: string,
   targetLevel?: number,
+  options?: { fireBias?: boolean; hpMult?: number },
 ): Enemy {
   const pool =
     regionId && REGION_NORMAL_POOLS[regionId]
       ? REGION_NORMAL_POOLS[regionId]
       : NORMAL_POOL
-  const id = pool[Math.floor(Math.random() * pool.length)]
-  return spawnEnemy(id, targetLevel)
+  let id: string
+  if (options?.fireBias && pool.includes('ashling') && gameRandom() < 0.55) {
+    id = 'ashling'
+  } else {
+    id = pool[Math.floor(gameRandom() * pool.length)]
+  }
+  return spawnEnemy(id, targetLevel, { hpMult: options?.hpMult })
 }
 
 export function getEncounterKind(nodeType: NodeType): EncounterKind {
@@ -363,33 +375,43 @@ export function getEncounterKind(nodeType: NodeType): EncounterKind {
   return 'battle'
 }
 
+export type EnemySpawnOptions = {
+  fireBias?: boolean
+  hpMult?: number
+}
+
 export function getEnemyForNode(
   node: { type: NodeType; badgeId?: string },
   regionId = 'verdant-circuit',
+  spawnOptions?: EnemySpawnOptions,
 ): Enemy {
   const level = rollEnemyLevelForNode(regionId, node.type)
+  const hpMult = spawnOptions?.hpMult
 
   if (node.type === 'boss') {
     const region = getRegion(regionId)
     const bossId = region.bossEnemyId ?? LEGACY_REGION_BOSS
-    return spawnEnemy(bossId, level)
+    return spawnEnemy(bossId, level, { hpMult })
   }
   if (node.type === 'gymLeader' && node.badgeId) {
     const leaderId = BADGE_LEADER_MAP[node.badgeId] ?? 'gym-leader-ember'
-    return spawnEnemy(leaderId, level)
+    return spawnEnemy(leaderId, level, { hpMult })
   }
   if (node.type === 'gymTrainer') {
-    return spawnEnemy('gym-trainer-nova', level)
+    return spawnEnemy('gym-trainer-nova', level, { hpMult })
   }
   if (node.type === 'alphaNest') {
     const alphas = ['alpha-bristlebug', 'alpha-ashling', 'alpha-pebblemaw']
-    const id = alphas[Math.floor(Math.random() * alphas.length)]
-    return spawnEnemy(id, level)
+    const id = alphas[Math.floor(gameRandom() * alphas.length)]
+    return spawnEnemy(id, level, { hpMult })
   }
   if (node.type === 'elite') {
-    return spawnEnemy('elite-scout', level)
+    return spawnEnemy('elite-scout', level, { hpMult })
   }
-  return pickRandomNormalEnemy(regionId, level)
+  return pickRandomNormalEnemy(regionId, level, {
+    fireBias: spawnOptions?.fireBias,
+    hpMult,
+  })
 }
 
 export function getRewardsForEncounter(

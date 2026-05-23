@@ -1,9 +1,12 @@
 import { useState, type ReactNode } from 'react'
+import { getPerk } from '../data/perks'
+import { EVOLUTION_THRESHOLDS } from '../data/evolutions'
 import { getPartyBadgeBonusLines } from '../utils/badgeBonuses'
 import { getPartyHighestLevel } from '../utils/regionRewards'
 import { AbilityMasteryPanel } from './AbilityMasteryPanel'
 import { STARTER_CREATURE_ID } from '../utils/creatureProgression'
 import { getDominantEvolutionCategory } from '../utils/evolutionSystem'
+import { getPerkEvolutionScoreLabel } from '../utils/progression'
 import type { PartyCreature } from '../utils/party'
 import type { RunCreature } from '../utils/progression'
 import { HpBar } from './HpBar'
@@ -18,6 +21,8 @@ type PartyScreenProps = {
   onViewPerks: (creatureId: string) => void
   onBack: () => void
 }
+
+type CreatureTab = 'overview' | 'stats' | 'perks' | 'abilities' | 'evolution' | 'badges'
 
 function StatGrid({ stats }: { stats: RunCreature['stats'] }) {
   return (
@@ -46,34 +51,31 @@ function StatGrid({ stats }: { stats: RunCreature['stats'] }) {
   )
 }
 
-function EvoSummary({
-  evolutionScores,
-  type,
-  evolutionStage,
-}: {
-  evolutionScores: RunCreature['evolutionScores']
-  type: RunCreature['type']
-  evolutionStage: number
-}) {
-  const dominant = getDominantEvolutionCategory(evolutionScores, type)
-  return (
-    <div className="party-screen__evo-summary">
-      <span className="panel-label">Evolution scores</span>
-      <p>
-        Off {evolutionScores.offense} · Def {evolutionScores.defense} · Spd{' '}
-        {evolutionScores.speed} · Util {evolutionScores.utility} · Evo{' '}
-        {evolutionScores.evolution}
-      </p>
-      <p className="party-screen__dominant">
-        Dominant path:{' '}
-        <strong>
-          {dominant.category.charAt(0).toUpperCase() + dominant.category.slice(1)}
-        </strong>{' '}
-        — {dominant.reason}
-      </p>
-      <p className="party-screen__stage">Evolution stage {evolutionStage} / 3</p>
-    </div>
-  )
+function formatPerkModifiers(perk: ReturnType<typeof getPerk>): string[] {
+  if (!perk.statModifiers) return []
+  const lines: string[] = []
+  const m = perk.statModifiers
+  if (m.atk) lines.push(`ATK ${m.atk > 0 ? '+' : ''}${m.atk}`)
+  if (m.def) lines.push(`DEF ${m.def > 0 ? '+' : ''}${m.def}`)
+  if (m.spAtk) lines.push(`SP.ATK ${m.spAtk > 0 ? '+' : ''}${m.spAtk}`)
+  if (m.spDef) lines.push(`SP.DEF ${m.spDef > 0 ? '+' : ''}${m.spDef}`)
+  if (m.spd) lines.push(`SPD ${m.spd > 0 ? '+' : ''}${m.spd}`)
+  if (m.hp) lines.push(`HP ${m.hp > 0 ? '+' : ''}${m.hp}`)
+  if (m.maxHp) lines.push(`Max HP ${m.maxHp > 0 ? '+' : ''}${m.maxHp}`)
+  return lines
+}
+
+function nextEvolutionLevel(creature: RunCreature | PartyCreature): number | null {
+  for (const threshold of EVOLUTION_THRESHOLDS) {
+    if (
+      creature.level < threshold &&
+      creature.lastEvolutionLevel < threshold &&
+      !creature.evolutionHistory.some((h) => h.level === threshold)
+    ) {
+      return threshold
+    }
+  }
+  return null
 }
 
 function CreatureCard({
@@ -117,7 +119,7 @@ function CreatureCard({
   partyHighestLevel: number
   actions?: ReactNode
 }) {
-  const [abilitiesOpen, setAbilitiesOpen] = useState(false)
+  const [tab, setTab] = useState<CreatureTab>('overview')
   const xpPercent =
     xpToNextLevel > 0 ? Math.round((currentXp / xpToNextLevel) * 100) : 0
   const badgeLines = getPartyBadgeBonusLines(earnedBadges)
@@ -125,6 +127,16 @@ function CreatureCard({
     evolutionScores,
     type as RunCreature['type'],
   )
+  const nextEvo = nextEvolutionLevel(creature)
+
+  const tabs: { id: CreatureTab; label: string }[] = [
+    { id: 'overview', label: 'Overview' },
+    { id: 'stats', label: 'Stats' },
+    { id: 'perks', label: 'Perks' },
+    { id: 'abilities', label: 'Abilities' },
+    { id: 'evolution', label: 'Evolution' },
+    { id: 'badges', label: 'Badges' },
+  ]
 
   return (
     <article
@@ -142,12 +154,8 @@ function CreatureCard({
         </span>
       </header>
 
-      {isActiveHelper && (
-        <p className="party-creature__helper-tag">Active combat helper</p>
-      )}
-
       <p className="party-creature__level">
-        {type} · Lv. {level} · {selectedPerksCount} perk
+        Lv. {level} · Stage {evolutionStage}/3 · {selectedPerksCount} perk
         {selectedPerksCount === 1 ? '' : 's'}
       </p>
       <HpBar label="HP" current={currentHp} max={maxHp} />
@@ -160,30 +168,77 @@ function CreatureCard({
         </div>
       </div>
 
-      <StatGrid stats={stats} />
+      <nav className="party-creature__tabs" aria-label={`${name} details`}>
+        {tabs.map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            className={`party-creature__tab${tab === t.id ? ' party-creature__tab--active' : ''}`}
+            onClick={() => setTab(t.id)}
+          >
+            {t.label}
+          </button>
+        ))}
+      </nav>
 
-      <p className="party-screen__dominant party-screen__dominant--inline">
-        Path:{' '}
-        <strong>
-          {dominant.category.charAt(0).toUpperCase() + dominant.category.slice(1)}
-        </strong>{' '}
-        (stage {evolutionStage}/3)
-      </p>
-      <p className="party-screen__scores-inline">
-        Off {evolutionScores.offense} · Def {evolutionScores.defense} · Spd{' '}
-        {evolutionScores.speed} · Util {evolutionScores.utility}
-      </p>
+      <div className="party-creature__tab-panel">
+        {tab === 'overview' && (
+          <>
+            <p className="party-screen__dominant party-screen__dominant--inline">
+              Path:{' '}
+              <strong>
+                {dominant.category.charAt(0).toUpperCase() + dominant.category.slice(1)}
+              </strong>{' '}
+              — {dominant.reason}
+            </p>
+            {nextEvo !== null && (
+              <p className="party-screen__next-evo">
+                Next evolution available at Lv. {nextEvo}
+              </p>
+            )}
+          </>
+        )}
 
-      <section className="party-creature__ability">
-        <button
-          type="button"
-          className="btn btn--small party-creature__abilities-toggle"
-          onClick={() => setAbilitiesOpen((o) => !o)}
-          aria-expanded={abilitiesOpen}
-        >
-          {abilitiesOpen ? 'Hide Abilities' : 'View Abilities'}
-        </button>
-        {abilitiesOpen && (
+        {tab === 'stats' && <StatGrid stats={stats} />}
+
+        {tab === 'perks' && (
+          <div className="party-creature__perks-tab">
+            {creature.selectedPerks.length === 0 ? (
+              <p className="party-screen__empty">No perks yet — level up to draft perks.</p>
+            ) : (
+              <ul className="party-creature__perk-list">
+                {creature.selectedPerks.map((perkId) => {
+                  const perk = getPerk(perkId)
+                  const modLines = formatPerkModifiers(perk)
+                  return (
+                    <li key={perkId}>
+                      <strong>{perk.name}</strong> ({perk.rarity}) — {perk.description}
+                      {modLines.length > 0 && (
+                        <span className="party-creature__perk-mods">
+                          {' '}
+                          [{modLines.join(', ')}]
+                        </span>
+                      )}
+                      <span className="party-creature__perk-evo">
+                        {' '}
+                        · {getPerkEvolutionScoreLabel(perk)}
+                      </span>
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
+            <button
+              type="button"
+              className="btn btn--small"
+              onClick={() => onViewPerks(creatureId)}
+            >
+              Full perk list
+            </button>
+          </div>
+        )}
+
+        {tab === 'abilities' && (
           <AbilityMasteryPanel
             creature={creature}
             abilityId={creature.abilityId}
@@ -191,26 +246,47 @@ function CreatureCard({
             partyHighestLevel={partyHighestLevel}
           />
         )}
-      </section>
 
-      {badgeLines.length > 0 && (
-        <section className="party-creature__badges">
-          <h3 className="panel-label">Badge bonuses (party-wide)</h3>
-          <ul>
-            {badgeLines.map((line) => (
-              <li key={line}>{line}</li>
-            ))}
-          </ul>
-        </section>
-      )}
+        {tab === 'evolution' && (
+          <div className="party-screen__evo-summary">
+            <p>
+              Off {evolutionScores.offense} · Def {evolutionScores.defense} · Spd{' '}
+              {evolutionScores.speed} · Util {evolutionScores.utility} · Evo{' '}
+              {evolutionScores.evolution}
+            </p>
+            <p className="party-screen__dominant">
+              Dominant:{' '}
+              <strong>
+                {dominant.category.charAt(0).toUpperCase() + dominant.category.slice(1)}
+              </strong>{' '}
+              — {dominant.reason}
+            </p>
+            <p className="party-screen__stage">Evolution stage {evolutionStage} / 3</p>
+            {nextEvo !== null ? (
+              <p>Next evolution at level {nextEvo}</p>
+            ) : (
+              <p>All evolution milestones reached for current level band.</p>
+            )}
+          </div>
+        )}
 
-      <button
-        type="button"
-        className="btn btn--small"
-        onClick={() => onViewPerks(creatureId)}
-      >
-        View Perks
-      </button>
+        {tab === 'badges' && (
+          <div className="party-creature__badges">
+            <p className="party-creature__badge-note">
+              Badge bonuses apply in combat only — they are not added to these base stats.
+            </p>
+            {badgeLines.length === 0 ? (
+              <p className="party-screen__empty">No badges earned in this run yet.</p>
+            ) : (
+              <ul>
+                {badgeLines.map((line) => (
+                  <li key={line}>{line}</li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+      </div>
 
       {actions && <div className="party-creature__actions">{actions}</div>}
     </article>
@@ -237,7 +313,7 @@ export function PartyScreen({
       <header className="screen-header">
         <h1 className="screen-header__title">Party</h1>
         <p className="screen-header__subtitle">
-          Each creature has its own perks and evolution path.
+          Each creature has its own perks, mastery, and evolution path.
         </p>
       </header>
 
@@ -250,7 +326,7 @@ export function PartyScreen({
 
       <section className="party-screen__section" aria-labelledby="starter-heading">
         <h2 id="starter-heading" className="party-screen__section-title">
-          Main starter
+          Main starter · Active
         </h2>
         <CreatureCard
           creatureId={STARTER_CREATURE_ID}
@@ -271,11 +347,6 @@ export function PartyScreen({
           evolutionStage={starter.evolutionStage}
           onViewPerks={onViewPerks}
           partyHighestLevel={partyHighestLevel}
-        />
-        <EvoSummary
-          evolutionScores={starter.evolutionScores}
-          type={starter.type}
-          evolutionStage={starter.evolutionStage}
         />
       </section>
 
@@ -306,7 +377,9 @@ export function PartyScreen({
                   stats={recruit.stats}
                   creature={recruit}
                   role={
-                    isHelper ? 'Active combat helper' : 'Bench — 25% battle XP'
+                    isHelper
+                      ? 'Active combat helper'
+                      : 'Bench — 25% battle XP'
                   }
                   isActiveHelper={isHelper}
                   earnedBadges={earnedBadges}
