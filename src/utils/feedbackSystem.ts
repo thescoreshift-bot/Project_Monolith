@@ -86,7 +86,7 @@ function buildReportData(payload: FeedbackPayload): FeedbackReportData {
   }
 }
 
-function buildSupabaseInsertRow(
+function buildModernInsertRow(
   payload: FeedbackPayload,
   userId: string | null,
 ) {
@@ -104,6 +104,59 @@ function buildSupabaseInsertRow(
     report_data: buildReportData(payload),
     status: 'open',
   }
+}
+
+/** Older table shape (kind / screen / region / what_happened). */
+function buildLegacyInsertRow(
+  payload: FeedbackPayload,
+  userId: string | null,
+) {
+  return {
+    user_id: userId,
+    contact: payload.contact?.trim() || null,
+    kind: payload.kind,
+    what_happened: payload.whatHappened,
+    expected_behavior: payload.expectedBehavior.trim() || null,
+    screen: payload.screen,
+    region: payload.region,
+    save_slot: parseSaveSlotNumber(payload.saveSlot),
+    app_version: payload.appVersion,
+    browser_info: getBrowserInfo(),
+    report_data: buildReportData(payload),
+    status: 'open',
+  }
+}
+
+function isMissingColumnError(message: string): boolean {
+  return (
+    message.includes('schema cache') ||
+    message.includes('PGRST204') ||
+    /could not find the .* column/i.test(message)
+  )
+}
+
+async function insertFeedbackReport(
+  payload: FeedbackPayload,
+  userId: string | null,
+): Promise<{ error: { message: string } | null }> {
+  if (!supabase) return { error: { message: 'Supabase not configured' } }
+
+  const modern = buildModernInsertRow(payload, userId)
+  const variants: Record<string, unknown>[] = [
+    modern,
+    // Both region column names — DBs that kept legacy `region` alongside `current_region`.
+    { ...modern, region: payload.region },
+    buildLegacyInsertRow(payload, userId),
+  ]
+
+  let lastError: { message: string } | null = null
+  for (const row of variants) {
+    const { error } = await supabase.from('feedback_reports').insert(row)
+    if (!error) return { error: null }
+    lastError = error
+    if (!isMissingColumnError(error.message)) break
+  }
+  return { error: lastError }
 }
 
 function appendLocalFeedback(payload: FeedbackPayload): void {
@@ -140,8 +193,10 @@ export async function submitFeedback(
 
   try {
     const { data: userData } = await supabase.auth.getUser()
-    const row = buildSupabaseInsertRow(payload, userData.user?.id ?? null)
-    const { error } = await supabase.from('feedback_reports').insert(row)
+    const { error } = await insertFeedbackReport(
+      payload,
+      userData.user?.id ?? null,
+    )
 
     if (error) {
       return { ok: true, copyText, error: error.message, savedToCloud: false }
