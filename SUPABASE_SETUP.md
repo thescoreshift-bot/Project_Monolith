@@ -305,6 +305,13 @@ on public.feedback_reports
 for select
 to authenticated
 using (user_id is null or (select auth.uid()) = user_id);
+
+-- Offline / logged-out players use the anon key — allow anonymous feedback rows only.
+create policy "Anonymous feedback insert"
+on public.feedback_reports
+for insert
+to anon
+with check (user_id is null);
 ```
 
 If you created an older `feedback_reports` table with columns like `kind`, `what_happened`, or `contact`, either drop and recreate it with the SQL above, or migrate:

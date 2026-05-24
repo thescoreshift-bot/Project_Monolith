@@ -4698,6 +4698,7 @@ function App() {
           onBackToTitle={goToTitle}
           onOpenRecoveryStation={openRecoveryStation}
           onOpenFriendBattle={() => openFriendBattle('runMap')}
+          onOpenFeedback={() => setFeedbackOpen(true)}
         />
         {selectedBadgeId && (
           <BadgeDetailModal
@@ -4706,6 +4707,7 @@ function App() {
           />
         )}
         {renderTutorialOverlay()}
+        {renderFeedbackModal()}
         {renderQuestToasts()}
       </div>
     )
@@ -5127,6 +5129,7 @@ function RunMapScreen({
   onBackToTitle,
   onOpenRecoveryStation,
   onOpenFriendBattle,
+  onOpenFeedback,
 }: {
   creature: RunCreature
   mapNodes: MapNode[]
@@ -5152,6 +5155,7 @@ function RunMapScreen({
   onBackToTitle: () => void
   onOpenRecoveryStation: () => void
   onOpenFriendBattle: () => void
+  onOpenFeedback: () => void
 }) {
   const statusText = saveStatusLabel(saveStatus, saveWarning)
   const helperName =
@@ -5188,6 +5192,9 @@ function RunMapScreen({
           </button>
           <button type="button" className="btn btn--small" onClick={onOpenFriendBattle}>
             Friend Battle
+          </button>
+          <button type="button" className="btn btn--small" onClick={onOpenFeedback}>
+            Feedback
           </button>
           <button type="button" className="btn btn--small" onClick={onBackToTitle}>
             Back to Title

@@ -135,6 +135,17 @@ function isMissingColumnError(message: string): boolean {
   )
 }
 
+function isAuthOrRlsError(message: string): boolean {
+  const lower = message.toLowerCase()
+  return (
+    lower.includes('row-level security') ||
+    lower.includes('permission denied') ||
+    lower.includes('not authorized') ||
+    lower.includes('jwt') ||
+    lower.includes('auth')
+  )
+}
+
 async function insertFeedbackReport(
   payload: FeedbackPayload,
   userId: string | null,
@@ -193,12 +204,14 @@ export async function submitFeedback(
 
   try {
     const { data: userData } = await supabase.auth.getUser()
-    const { error } = await insertFeedbackReport(
-      payload,
-      userData.user?.id ?? null,
-    )
+    const userId = userData.user?.id ?? null
+    const { error } = await insertFeedbackReport(payload, userId)
 
     if (error) {
+      // Offline / logged-out players: local copy still works; don't treat RLS as a hard failure.
+      if (!userId && isAuthOrRlsError(error.message)) {
+        return { ok: true, copyText, savedToCloud: false }
+      }
       return { ok: true, copyText, error: error.message, savedToCloud: false }
     }
 

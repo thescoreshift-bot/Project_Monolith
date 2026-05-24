@@ -53,7 +53,7 @@ export function FeedbackModal({
       } else if (result.error) {
         setStatus(`Cloud save failed — copy the report below. (${result.error})`)
       } else {
-        setStatus('Copy the report below and share it with the team.')
+        setStatus('Report saved on this device — copy below to share with the team.')
       }
     } catch {
       setStatus('Something went wrong — try copying a report manually.')
