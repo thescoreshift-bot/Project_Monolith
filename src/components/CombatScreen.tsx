@@ -2,7 +2,11 @@ import type { Enemy } from '../data/enemies'
 import type { PartyCreature } from '../utils/party'
 import type { RunCreature } from '../utils/progression'
 import { getActiveAbilityIds } from '../utils/creatureAbilities'
-import { getMasteryEntry, getRankLabel } from '../utils/abilityMastery'
+import {
+  getMasteryEntry,
+  getMasteryLevelShort,
+  getRankLabel,
+} from '../utils/abilityMastery'
 import { formatStatStageLine, type CombatStatStages } from '../utils/combatEffects'
 import { AbilityCombatCard } from './AbilityCombatCard'
 import { HpBar } from './HpBar'
@@ -71,7 +75,7 @@ function FighterPanel({
           <span className="fighter-panel__level">Lv. {fighter.level}</span>
           {mastery && (
             <span className="fighter-panel__mastery" title="Primary ability mastery">
-              Mastery R{mastery.rank} ({getRankLabel(mastery.rank)})
+              {getMasteryLevelShort(mastery.rank)} ({getRankLabel(mastery.rank)})
             </span>
           )}
         </div>

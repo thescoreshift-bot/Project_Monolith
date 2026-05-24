@@ -2,14 +2,11 @@ import { getAbility, type Ability } from '../data/abilities'
 import {
   getMasteryPerk,
   getAbilityTransformationPath,
-  pickAbilityMasteryPerkDraft,
+  ensureMasteryPerkDraft,
   type AbilityMasteryPerk,
   type MasteryPathTag,
 } from '../data/abilityMasteryPerks'
-import {
-  getRank5Transformation,
-  getRank10Transformation,
-} from '../data/abilityTransformations'
+import { resolveAbilityTransformation } from '../data/abilityTransformations'
 import { isSuperEffective } from '../data/typeChart'
 import type { ElementType } from '../data/starters'
 import type { CombatStats } from './combat'
@@ -112,7 +109,17 @@ export function getAbilityXpToNextRank(rank: number): number {
 
 export function getRankLabel(rank: number): string {
   if (rank >= MASTERY_MAX_RANK) return 'MAX'
-  return RANK_LABELS[rank] ?? `Rank ${rank}`
+  return `Mastery Lv. ${rank}`
+}
+
+export function getMasteryLevelLabel(level: number): string {
+  if (level >= MASTERY_MAX_RANK) return 'Mastery Lv. 10 — MAX'
+  return `Mastery Lv. ${level}`
+}
+
+export function getMasteryLevelShort(level: number): string {
+  if (level >= MASTERY_MAX_RANK) return 'Lv. 10 MAX'
+  return `Lv. ${level}`
 }
 
 export function createDefaultMasteryEntry(abilityId: string): AbilityMasteryEntry {
@@ -127,19 +134,22 @@ export function createDefaultMasteryEntry(abilityId: string): AbilityMasteryEntr
 }
 
 export function migrateMasteryEntry(raw: AbilityMasteryEntry): AbilityMasteryEntry {
+  const rank = Math.min(MASTERY_MAX_RANK, Math.max(0, raw.rank ?? 0))
   const selectedPerks =
     raw.selectedPerks ?? raw.selectedUpgrades ?? []
+  const claimedPerkRanks = raw.claimedPerkRanks ?? []
   return {
     ...createDefaultMasteryEntry(raw.abilityId),
     ...raw,
+    rank,
     selectedPerks,
-    claimedPerkRanks: raw.claimedPerkRanks ?? [],
+    claimedPerkRanks,
     xpToNextRank:
-      raw.rank >= MASTERY_MAX_RANK
+      rank >= MASTERY_MAX_RANK
         ? 0
-        : raw.xpToNextRank > 0
+        : raw.xpToNextRank > 0 && rank === raw.rank
           ? raw.xpToNextRank
-          : getAbilityXpToNextRank(raw.rank),
+          : getAbilityXpToNextRank(rank),
   }
 }
 
@@ -228,7 +238,7 @@ export function buildAbilityMasteryPerkQueueEntry(
   rank: number,
   selectedPerkIds: string[],
 ): AbilityMasteryPerkQueueEntry {
-  const draft = pickAbilityMasteryPerkDraft(abilityId, rank, selectedPerkIds, 3)
+  const draft = ensureMasteryPerkDraft(abilityId, rank, selectedPerkIds, 3)
   return {
     creatureId,
     abilityId,
@@ -256,14 +266,11 @@ export function buildAbilityTransformQueueEntry(
   baseAbilityId: string,
   entry: AbilityMasteryEntry,
   rank: 5 | 10,
-): AbilityTransformQueueEntry | null {
-  const path = getAbilityTransformationPath(entry.selectedPerks)
+): AbilityTransformQueueEntry {
+  const path = getAbilityTransformationPath(entry.selectedPerks, baseAbilityId)
   const currentId = rank === 10 ? getResolvedAbilityId(entry) : baseAbilityId
-  const transform =
-    rank === 5
-      ? getRank5Transformation(baseAbilityId, path)
-      : getRank10Transformation(currentId, path)
-  if (!transform) return null
+  const fromId = rank === 5 ? baseAbilityId : currentId
+  const transform = resolveAbilityTransformation(fromId, rank, path)
   return {
     creatureId,
     abilityId: baseAbilityId,
@@ -338,21 +345,29 @@ export function grantMasteryXp(
       rankRequiresMasteryPerkChoice(newRank) &&
       !isMasteryPerkRankClaimed(next, newRank)
     ) {
+      const draft = ensureMasteryPerkDraft(
+        next.abilityId,
+        newRank,
+        next.selectedPerks,
+        3,
+      )
       perkQueueEntries.push({
         creatureId: '',
         abilityId: next.abilityId,
         rank: newRank,
-        draftPerkIds: [],
+        draftPerkIds: draft.map((p) => p.id),
       })
     }
 
     if (newRank === 5 && !next.rank5TransformationChosen) {
-      const t = buildAbilityTransformQueueEntry('', next.abilityId, next, 5)
-      if (t) transformQueueEntries.push(t)
+      transformQueueEntries.push(
+        buildAbilityTransformQueueEntry('', next.abilityId, next, 5),
+      )
     }
     if (newRank === MASTERY_MAX_RANK && !next.rank10TransformationChosen) {
-      const t = buildAbilityTransformQueueEntry('', next.abilityId, next, 10)
-      if (t) transformQueueEntries.push(t)
+      transformQueueEntries.push(
+        buildAbilityTransformQueueEntry('', next.abilityId, next, 10),
+      )
     }
   }
 
@@ -396,14 +411,16 @@ export function applyMasteryXpToCreature<T extends CombatFighterWithMastery>(
     ...result.rankUpMessages,
   ]
 
-  const perkQueueEntries = result.perkQueueEntries.map((e) =>
-    buildAbilityMasteryPerkQueueEntry(
-      creatureId,
-      e.abilityId,
-      e.rank,
-      result.entry.selectedPerks,
-    ),
-  )
+  const perkQueueEntries = result.perkQueueEntries
+    .filter((e) => !isMasteryPerkRankClaimed(result.entry, e.rank))
+    .map((e) =>
+      buildAbilityMasteryPerkQueueEntry(
+        creatureId,
+        e.abilityId,
+        e.rank,
+        result.entry.selectedPerks,
+      ),
+    )
 
   const transformQueueEntries = result.transformQueueEntries.map((e) => ({
     ...e,
@@ -487,16 +504,27 @@ export function calcDamageWithMastery(
   badgeMultiplier: number,
   crit: boolean,
   options: DamageCalcOptions = {},
+  debug?: import('./combat').DamageCalcDebugContext,
 ): number {
   if (ability.category === 'status' || ability.power <= 0) return 0
-  const raw = safeCalcDamage(ability, attacker, defender)
+
+  const maxHp = options.defenderMaxHp ?? 9999
+  const raw = safeCalcDamage(
+    ability,
+    attacker,
+    defender,
+    maxHp,
+    typeMultiplier,
+    debug,
+  )
   let damage = raw + modifiers.flatDamage
   const percentMult = 1 + modifiers.bonusDamagePercent / 100
-  damage = Math.floor(damage * percentMult * badgeMultiplier * typeMultiplier)
+  damage = Math.floor(damage * percentMult * badgeMultiplier)
   if (crit) {
     damage = Math.floor(damage * 1.5)
   }
-  const maxHp = options.defenderMaxHp ?? 9999
+  damage = Math.floor(damage * typeMultiplier)
+
   if (options.attackerLevel !== undefined && options.defenderMaxHp !== undefined) {
     damage = applyEarlyGameDamageCap(
       damage,
@@ -506,7 +534,8 @@ export function calcDamageWithMastery(
       options.encounterKind ?? 'normal',
     )
   }
-  return sanitizeDamage(damage, maxHp)
+
+  return sanitizeDamage(damage, maxHp, ability, typeMultiplier)
 }
 
 export function estimateAbilityDamage(
@@ -517,6 +546,7 @@ export function estimateAbilityDamage(
   typeMultiplier: number,
   badgeMultiplier: number,
   options: DamageCalcOptions = {},
+  debug?: import('./combat').DamageCalcDebugContext,
 ): number {
   return calcDamageWithMastery(
     ability,
@@ -527,6 +557,7 @@ export function estimateAbilityDamage(
     badgeMultiplier,
     false,
     options,
+    debug,
   )
 }
 
@@ -626,11 +657,19 @@ export function getDraftPerksForQueueEntry(
   const perks = entry.draftPerkIds
     .map((id) => getMasteryPerk(id))
     .filter((p): p is AbilityMasteryPerk => p !== undefined)
-  if (perks.length > 0) return perks
-  return pickAbilityMasteryPerkDraft(
-    entry.abilityId,
-    entry.rank,
-    [],
-    3,
-  )
+  if (perks.length >= 2) return perks
+  return ensureMasteryPerkDraft(entry.abilityId, entry.rank, [], 3)
+}
+
+export function getNextMasteryRewardLabel(currentRank: number): string {
+  if (currentRank >= MASTERY_MAX_RANK) {
+    return 'Mastery MAX — no further rewards'
+  }
+  const next = currentRank + 1
+  if (next === 5) return 'Mastery Lv. 5: Ability evolution / transformation'
+  if (next === MASTERY_MAX_RANK) return 'Mastery Lv. 10: Final ability evolution'
+  if (rankRequiresMasteryPerkChoice(next)) {
+    return `Rank ${next}: Mastery perk choice`
+  }
+  return `Rank ${next}: Mastery XP`
 }

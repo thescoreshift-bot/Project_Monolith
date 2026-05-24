@@ -4,16 +4,16 @@
  */
 
 /** Target turn count for a level-1 normal battle. */
-export const TARGET_L1_BATTLE_TURNS_MIN = 3
-export const TARGET_L1_BATTLE_TURNS_MAX = 6
+export const TARGET_L1_BATTLE_TURNS_MIN = 4
+export const TARGET_L1_BATTLE_TURNS_MAX = 7
 
 /** Max fraction of defender max HP a single L1–3 normal hit can deal (non-super). */
-export const L1_NORMAL_HIT_CAP_FRACTION = 0.32
-export const L1_SUPER_HIT_CAP_FRACTION = 0.4
+export const L1_NORMAL_HIT_CAP_FRACTION = 0.3
+export const L1_SUPER_HIT_CAP_FRACTION = 0.45
 
 /** Max fraction for L4–5 normals. */
-export const L5_NORMAL_HIT_CAP_FRACTION = 0.35
-export const L5_SUPER_HIT_CAP_FRACTION = 0.42
+export const L5_NORMAL_HIT_CAP_FRACTION = 0.32
+export const L5_SUPER_HIT_CAP_FRACTION = 0.4
 
 /** Enemy ability power caps at low levels (see damageBalance.getEnemyAbilityPowerCap). */
 export const ENEMY_POWER_CAP_L1_3 = 12

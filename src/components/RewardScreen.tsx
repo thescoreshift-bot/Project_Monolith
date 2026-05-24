@@ -16,6 +16,9 @@ export type RewardScreenData = {
   badgeEarned?: string
   bossVictory?: boolean
   recruitmentNote?: string
+  gearFound?: string
+  itemsFound?: string[]
+  materialsFound?: string[]
   pendingChoices: PendingChoiceSummary[]
 }
 
@@ -96,6 +99,35 @@ export function RewardScreen({ reward, onContinue }: RewardScreenProps) {
           <div className="reward-panel__row">
             <span className="panel-label">Reward</span>
             <p className="reward-panel__value">{reward.loot}</p>
+          </div>
+        )}
+
+        {reward.itemsFound && reward.itemsFound.length > 0 && (
+          <div className="reward-panel__row reward-panel__row--highlight">
+            <span className="panel-label">Items found</span>
+            <ul className="reward-panel__xp-list">
+              {reward.itemsFound.map((name) => (
+                <li key={name}>{name}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {reward.gearFound && (
+          <div className="reward-panel__row reward-panel__row--highlight">
+            <span className="panel-label">Gear found</span>
+            <p className="reward-panel__value">{reward.gearFound}</p>
+          </div>
+        )}
+
+        {reward.materialsFound && reward.materialsFound.length > 0 && (
+          <div className="reward-panel__row reward-panel__row--highlight">
+            <span className="panel-label">Materials found</span>
+            <ul className="reward-panel__xp-list">
+              {reward.materialsFound.map((name) => (
+                <li key={`mat-${name}`}>{name}</li>
+              ))}
+            </ul>
           </div>
         )}
 

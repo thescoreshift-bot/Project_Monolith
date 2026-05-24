@@ -1,4 +1,5 @@
 import type { LeaderboardRow } from '../utils/leaderboardSystem'
+import { parseLeaderboardCheckpointMeta } from '../utils/leaderboardSystem'
 
 export function LeaderboardScreen({
   dailySeed,
@@ -68,21 +69,41 @@ export function LeaderboardScreen({
       ) : rows.length === 0 && !errorMessage ? (
         <p className="leaderboard-screen__empty">No scores yet. Be the first!</p>
       ) : (
-        <ol className="leaderboard-list">
-          {rows.map((row, index) => (
-            <li key={row.id} className="leaderboard-row">
-              <span className="leaderboard-row__rank">#{index + 1}</span>
-              <div className="leaderboard-row__body">
-                <strong>{row.display_name}</strong>
-                <span className="leaderboard-row__meta">
-                  {row.score} pts · {row.starter_name ?? 'Unknown'} Lv
-                  {row.highest_level} · {row.badges_earned} badges
-                  {row.completed ? ' · Cleared' : ''}
-                </span>
-              </div>
-            </li>
-          ))}
-        </ol>
+        <div className="leaderboard-table-wrap">
+          <table className="leaderboard-table">
+            <thead>
+              <tr>
+                <th>Rank</th>
+                <th>Player</th>
+                <th>Best Daily Score</th>
+                <th>Region</th>
+                <th>Badges</th>
+                <th>Nodes</th>
+                <th>Highest Lv</th>
+                <th>Evolutions</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row, index) => {
+                const meta = parseLeaderboardCheckpointMeta(row.final_team)
+                return (
+                  <tr key={row.id}>
+                    <td>#{index + 1}</td>
+                    <td>{row.display_name}</td>
+                    <td>{row.score}</td>
+                    <td>{row.region ?? '—'}</td>
+                    <td>{row.badges_earned}</td>
+                    <td>{meta?.nodesCleared ?? '—'}</td>
+                    <td>{row.highest_level}</td>
+                    <td>{row.evolutions_count}</td>
+                    <td>{row.completed ? 'Cleared' : 'Run'}</td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
       )}
 
       <button type="button" className="btn" onClick={onBack}>

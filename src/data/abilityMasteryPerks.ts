@@ -1,6 +1,18 @@
+import { getAbility } from './abilities'
+import type { AbilityDefinition } from './abilityTypes'
 import { SUPPORT_ABILITY_MASTERY_PERKS } from './supportAbilityMasteryPerks'
 
 export type MasteryPathTag = 'damage' | 'status' | 'utility' | 'hybrid'
+
+/** Role used to filter mastery perk drafts for an ability. */
+export type AbilityRole =
+  | 'damage'
+  | 'debuff'
+  | 'buff'
+  | 'status'
+  | 'healing'
+  | 'support'
+  | 'hybrid'
 
 export type MasteryPerkEffects = {
   bonusDamagePercent?: number
@@ -29,7 +41,281 @@ export type AbilityMasteryPerk = {
   description: string
   rankMinimum: number
   pathTag: MasteryPathTag
+  /** Primary role for draft filtering (inferred from pathTag if omitted). */
+  abilityRole?: AbilityRole
   effects: MasteryPerkEffects
+}
+
+export function getAbilityRole(ability: AbilityDefinition): AbilityRole {
+  const hasDamage = ability.category !== 'status' && ability.power > 0
+  const effects = ability.effects ?? []
+  const hasDebuff = effects.some((e) => e.type === 'statDebuff')
+  const hasBuff = effects.some(
+    (e) =>
+      e.type === 'statBuff' &&
+      (e.target === 'self' || e.target === undefined || ability.target === 'self'),
+  )
+  const hasStatus = effects.some((e) => e.type === 'applyStatus')
+  const hasHeal = effects.some((e) => e.type === 'heal')
+
+  if (hasDamage && (hasDebuff || hasBuff || hasStatus || hasHeal)) {
+    return 'hybrid'
+  }
+  if (hasHeal) return 'healing'
+  if (hasDebuff && !hasDamage) return 'debuff'
+  if (hasBuff && !hasDamage) return 'buff'
+  if (hasStatus && !hasDamage) return 'status'
+  if (hasDamage) return 'damage'
+  return 'support'
+}
+
+/** Human-readable category for UI (physical / special / buff / debuff / etc.). */
+export function getAbilityDisplayCategory(ability: AbilityDefinition): string {
+  const role = getAbilityRole(ability)
+  if (ability.category === 'physical') return 'Physical'
+  if (ability.category === 'special') return 'Special'
+  if (role === 'buff') return 'Buff'
+  if (role === 'debuff') return 'Debuff'
+  if (role === 'healing') return 'Healing'
+  if (role === 'status') return 'Status'
+  if (role === 'support') return 'Support'
+  if (role === 'hybrid') return 'Hybrid'
+  if (ability.category === 'status') return 'Status'
+  return 'Damage'
+}
+
+function roleToPathTag(role: AbilityRole): MasteryPathTag {
+  if (role === 'damage') return 'damage'
+  if (role === 'debuff' || role === 'status') return 'status'
+  if (role === 'buff' || role === 'healing' || role === 'support') return 'utility'
+  return 'hybrid'
+}
+
+export function getPerkAbilityRole(perk: AbilityMasteryPerk): AbilityRole {
+  if (perk.abilityRole) return perk.abilityRole
+  switch (perk.pathTag) {
+    case 'damage':
+      return 'damage'
+    case 'status':
+      return 'status'
+    case 'utility':
+      return 'buff'
+    case 'hybrid':
+      return 'hybrid'
+    default:
+      return 'support'
+  }
+}
+
+function perkMatchesAbilityRole(
+  perkRole: AbilityRole,
+  abilityRole: AbilityRole,
+): boolean {
+  if (abilityRole === 'hybrid') {
+    return ['damage', 'debuff', 'buff', 'status', 'healing', 'support', 'hybrid'].includes(
+      perkRole,
+    )
+  }
+  if (abilityRole === 'damage') {
+    return perkRole === 'damage' || perkRole === 'hybrid'
+  }
+  if (abilityRole === 'debuff') {
+    return perkRole === 'debuff' || perkRole === 'status' || perkRole === 'hybrid'
+  }
+  if (abilityRole === 'buff') {
+    return perkRole === 'buff' || perkRole === 'support' || perkRole === 'hybrid'
+  }
+  if (abilityRole === 'status') {
+    return perkRole === 'status' || perkRole === 'debuff' || perkRole === 'hybrid'
+  }
+  if (abilityRole === 'healing' || abilityRole === 'support') {
+    return (
+      perkRole === 'healing' ||
+      perkRole === 'support' ||
+      perkRole === 'buff' ||
+      perkRole === 'hybrid'
+    )
+  }
+  return perkRole === abilityRole
+}
+
+let fallbackIdCounter = 0
+
+function nextFallbackId(prefix: string): string {
+  fallbackIdCounter += 1
+  return `${prefix}-fb-${fallbackIdCounter}`
+}
+
+export function generateFallbackMasteryPerks(
+  abilityId: string,
+  abilityRole: AbilityRole,
+  rank: number,
+  count: number,
+): AbilityMasteryPerk[] {
+  const templates: Record<
+    AbilityRole,
+    { name: string; description: string; effects: MasteryPerkEffects; role: AbilityRole }[]
+  > = {
+    damage: [
+      {
+        name: 'Sharpened Power',
+        description: 'This ability deals 10% more damage.',
+        effects: { bonusDamagePercent: 0.1 },
+        role: 'damage',
+      },
+      {
+        name: 'Focused Strike',
+        description: 'This ability gains +10 accuracy.',
+        effects: { bonusAccuracy: 10 },
+        role: 'damage',
+      },
+      {
+        name: 'Piercing Hit',
+        description: '+4 flat damage for this ability.',
+        effects: { flatDamage: 4 },
+        role: 'damage',
+      },
+    ],
+    debuff: [
+      {
+        name: 'Deeper Pressure',
+        description: 'Debuffs from this ability apply +1 stage.',
+        effects: { statStageBonus: 1 },
+        role: 'debuff',
+      },
+      {
+        name: 'Reliable Pressure',
+        description: 'This debuff gains +10 accuracy.',
+        effects: { bonusAccuracy: 10 },
+        role: 'debuff',
+      },
+      {
+        name: 'Lingering Effect',
+        description: '+10% status chance on this ability.',
+        effects: { bonusStatusChance: 10 },
+        role: 'debuff',
+      },
+    ],
+    buff: [
+      {
+        name: 'Stronger Stance',
+        description: 'Buffs from this ability apply +1 stage.',
+        effects: { statStageBonus: 1 },
+        role: 'buff',
+      },
+      {
+        name: 'Steady Focus',
+        description: '+10 accuracy for this ability.',
+        effects: { bonusAccuracy: 10 },
+        role: 'buff',
+      },
+      {
+        name: 'Shared Momentum',
+        description: 'Minor team buff synergy (planned).',
+        effects: { healOnHitPercent: 0.03 },
+        role: 'buff',
+      },
+    ],
+    status: [
+      {
+        name: 'Higher Chance',
+        description: 'Status effects from this ability gain +15% chance.',
+        effects: { bonusStatusChance: 15 },
+        role: 'status',
+      },
+      {
+        name: 'Reliable Hex',
+        description: '+10 accuracy for this ability.',
+        effects: { bonusAccuracy: 10 },
+        role: 'status',
+      },
+      {
+        name: 'Punishing Status',
+        description: 'On status hit, +8% damage on next use (planned).',
+        effects: { bonusDamagePercent: 0.08 },
+        role: 'status',
+      },
+    ],
+    healing: [
+      {
+        name: 'Stronger Recovery',
+        description: 'Healing from this ability is 20% stronger.',
+        effects: { healBonusPercent: 0.2 },
+        role: 'healing',
+      },
+      {
+        name: 'Gentle Flow',
+        description: 'Also restores a little HP to the user on use.',
+        effects: { healOnHitPercent: 0.05 },
+        role: 'healing',
+      },
+      {
+        name: 'Protective Recovery',
+        description: '+10 accuracy for this ability.',
+        effects: { bonusAccuracy: 10 },
+        role: 'healing',
+      },
+    ],
+    support: [
+      {
+        name: 'Refined Technique',
+        description: '+10 accuracy for this ability.',
+        effects: { bonusAccuracy: 10 },
+        role: 'support',
+      },
+      {
+        name: 'Tactical Edge',
+        description: 'Small damage boost on hybrid/support use.',
+        effects: { bonusDamagePercent: 0.08 },
+        role: 'support',
+      },
+      {
+        name: 'Calm Control',
+        description: 'Support effects +10% stronger.',
+        effects: { healBonusPercent: 0.1 },
+        role: 'support',
+      },
+    ],
+    hybrid: [
+      {
+        name: 'Versatile Power',
+        description: 'This ability deals 8% more damage.',
+        effects: { bonusDamagePercent: 0.08 },
+        role: 'hybrid',
+      },
+      {
+        name: 'Dual Focus',
+        description: '+10 accuracy and +10% status chance.',
+        effects: { bonusAccuracy: 10, bonusStatusChance: 10 },
+        role: 'hybrid',
+      },
+      {
+        name: 'Combo Flow',
+        description: '+3 flat damage and +1 debuff stage.',
+        effects: { flatDamage: 3, statStageBonus: 1 },
+        role: 'hybrid',
+      },
+    ],
+  }
+
+  const pool = templates[abilityRole] ?? templates.support
+  return pool.slice(0, count).map((t) => ({
+    id: nextFallbackId(abilityId),
+    abilityId,
+    name: t.name,
+    description: t.description,
+    rankMinimum: rank,
+    pathTag:
+      abilityRole === 'damage'
+        ? 'damage'
+        : abilityRole === 'status' || abilityRole === 'debuff'
+          ? 'status'
+          : abilityRole === 'buff' || abilityRole === 'healing'
+            ? 'utility'
+            : 'hybrid',
+    abilityRole: t.role,
+    effects: t.effects,
+  }))
 }
 
 function sparkPerks(): AbilityMasteryPerk[] {
@@ -123,6 +409,44 @@ function tacklePerks(): AbilityMasteryPerk[] {
   ]
 }
 
+function enemyMovePerks(
+  abilityId: string,
+  displayName: string,
+): AbilityMasteryPerk[] {
+  return [
+    {
+      id: `${abilityId}-sharp`,
+      abilityId,
+      name: 'Sharpened Power',
+      description: `${displayName} deals 10% more damage.`,
+      rankMinimum: 2,
+      pathTag: 'damage',
+      abilityRole: 'damage',
+      effects: { bonusDamagePercent: 0.1 },
+    },
+    {
+      id: `${abilityId}-focus`,
+      abilityId,
+      name: 'Focused Strike',
+      description: `+10 accuracy for ${displayName}.`,
+      rankMinimum: 2,
+      pathTag: 'damage',
+      abilityRole: 'damage',
+      effects: { bonusAccuracy: 10 },
+    },
+    {
+      id: `${abilityId}-pierce`,
+      abilityId,
+      name: 'Piercing Hit',
+      description: `+4 flat damage for ${displayName}.`,
+      rankMinimum: 3,
+      pathTag: 'damage',
+      abilityRole: 'damage',
+      effects: { flatDamage: 4 },
+    },
+  ]
+}
+
 function stingPerks(): AbilityMasteryPerk[] {
   return [
     { id: 'st-venom', abilityId: 'sting', name: 'Venom', description: '+25% poison chance.', rankMinimum: 2, pathTag: 'status', effects: { poisonChance: 0.25 } },
@@ -141,6 +465,8 @@ export const ABILITY_MASTERY_PERKS: AbilityMasteryPerk[] = [
   ...stonePerks(),
   ...tacklePerks(),
   ...stingPerks(),
+  ...enemyMovePerks('cinder-bite', 'Cinder Bite'),
+  ...enemyMovePerks('rock-bump', 'Rock Bump'),
   ...SUPPORT_ABILITY_MASTERY_PERKS,
 ]
 
@@ -158,21 +484,73 @@ export function pickAbilityMasteryPerkDraft(
   excludeIds: string[],
   count = 3,
 ): AbilityMasteryPerk[] {
+  const ability = getAbility(abilityId)
+  const abilityRole = getAbilityRole(ability)
   const taken = new Set(excludeIds)
+
   let pool = ABILITY_MASTERY_PERKS.filter(
     (p) =>
       p.abilityId === abilityId &&
       p.rankMinimum <= rank &&
-      !taken.has(p.id),
+      !taken.has(p.id) &&
+      perkMatchesAbilityRole(getPerkAbilityRole(p), abilityRole),
   )
+
+  if (pool.length < count) {
+    pool = ABILITY_MASTERY_PERKS.filter(
+      (p) =>
+        p.abilityId === abilityId &&
+        !taken.has(p.id) &&
+        perkMatchesAbilityRole(getPerkAbilityRole(p), abilityRole),
+    )
+  }
+
   if (pool.length < count) {
     pool = ABILITY_MASTERY_PERKS.filter(
       (p) => p.abilityId === abilityId && !taken.has(p.id),
     )
   }
+
   const shuffled = [...pool].sort(() => Math.random() - 0.5)
-  if (shuffled.length === 0) return []
-  return shuffled.slice(0, Math.min(count, shuffled.length))
+  const picked = shuffled.slice(0, Math.min(count, shuffled.length))
+
+  if (picked.length >= Math.min(2, count)) {
+    return picked
+  }
+
+  const fallbacks = generateFallbackMasteryPerks(
+    abilityId,
+    abilityRole,
+    rank,
+    count,
+  ).filter((p) => !taken.has(p.id))
+
+  const merged = [...picked, ...fallbacks]
+  const unique = merged.filter(
+    (p, i, arr) => arr.findIndex((x) => x.id === p.id) === i,
+  )
+  return unique.slice(0, Math.max(2, Math.min(count, unique.length)))
+}
+
+/** Always returns at least 2 valid perk choices for a mastery perk rank. */
+export function ensureMasteryPerkDraft(
+  abilityId: string,
+  rank: number,
+  excludeIds: string[],
+  count = 3,
+): AbilityMasteryPerk[] {
+  const draft = pickAbilityMasteryPerkDraft(abilityId, rank, excludeIds, count)
+  if (draft.length >= 2) return draft
+  const ability = getAbility(abilityId)
+  const role = getAbilityRole(ability)
+  const extra = generateFallbackMasteryPerks(abilityId, role, rank, count)
+  const merged = [...draft, ...extra]
+  const unique = merged.filter(
+    (p, i, arr) => arr.findIndex((x) => x.id === p.id) === i,
+  )
+  return unique.length >= 2
+    ? unique.slice(0, Math.max(2, count))
+    : generateFallbackMasteryPerks(abilityId, 'hybrid', rank, count).slice(0, count)
 }
 
 export function getPathTagCounts(
@@ -193,12 +571,18 @@ export function getPathTagCounts(
 
 export function getAbilityTransformationPath(
   selectedPerkIds: string[],
+  fallbackAbilityId?: string,
 ): MasteryPathTag {
   const counts = getPathTagCounts(selectedPerkIds)
   const entries = (Object.entries(counts) as [MasteryPathTag, number][]).sort(
     (a, b) => b[1] - a[1],
   )
-  if (entries[0][1] === 0) return 'hybrid'
+  if (entries[0][1] === 0) {
+    if (fallbackAbilityId) {
+      return roleToPathTag(getAbilityRole(getAbility(fallbackAbilityId)))
+    }
+    return 'hybrid'
+  }
   if (entries[0][1] === entries[1][1]) return 'hybrid'
   return entries[0][0]
 }

@@ -1,11 +1,17 @@
+import { useState } from 'react'
 import { getAbility } from '../data/abilities'
-import { getMasteryPerk } from '../data/abilityMasteryPerks'
+import {
+  getAbilityDisplayCategory,
+  getAbilityRole,
+  getMasteryPerk,
+} from '../data/abilityMasteryPerks'
 import type { AbilityEffect } from '../data/abilityTypes'
 import { getTypeEffectivenessMultiplier, formatTypeEffectivenessLabel } from '../data/typeChart'
 import {
   estimateAbilityDamage,
   getCombatModifiersFromMastery,
   getMasteryEntry,
+  getNextMasteryRewardLabel,
   getRankLabel,
   getResolvedAbilityId,
   MASTERY_MAX_RANK,
@@ -13,7 +19,7 @@ import {
 import { abilityDealsDamage } from '../utils/combatEffects'
 import {
   getCombatEffectiveStats,
-  getDamageMultiplierForAbility,
+  getAttackerDamageMultiplier,
 } from '../utils/badgeBonuses'
 import { getSupportMasteryModifiers } from '../utils/supportMasteryEffects'
 import type { Enemy } from '../data/enemies'
@@ -44,7 +50,7 @@ function describeEffect(
       return `Raises ${who} ${effect.stat.toUpperCase()} by ${stages}`
     }
     case 'applyStatus':
-      return `${effect.status} ${effect.chance + (effect.type === 'applyStatus' ? 0 : 0)}% chance`
+      return `${effect.status} ${effect.chance}% chance`
     case 'heal':
       return `Heals ${Math.round(effect.percent * 100)}% max HP`
     default:
@@ -60,12 +66,16 @@ export function AbilityMasteryPanel({
   previewDefender,
   compact = false,
 }: AbilityMasteryPanelProps) {
+  const [detailsOpen, setDetailsOpen] = useState(false)
   const entry = getMasteryEntry(
     { abilityMastery: creature.abilityMastery },
     abilityId,
   )
   const resolvedId = getResolvedAbilityId(entry)
   const ability = getAbility(resolvedId)
+  const baseAbility = getAbility(entry.abilityId)
+  const displayCategory = getAbilityDisplayCategory(ability)
+  const abilityRole = getAbilityRole(ability)
   const mods = getCombatModifiersFromMastery(entry)
   const supportMods = getSupportMasteryModifiers(entry)
   const partyLevel = partyHighestLevel ?? creature.level
@@ -73,7 +83,12 @@ export function AbilityMasteryPanel({
   const typeMult = previewDefender
     ? getTypeEffectivenessMultiplier(ability.type, previewDefender.type)
     : 1
-  const badgeMult = getDamageMultiplierForAbility(ability, earnedBadges)
+  const badgeMult = getAttackerDamageMultiplier(
+    ability,
+    earnedBadges,
+    creature.selectedPerks,
+    creature,
+  )
   const showsDamage = abilityDealsDamage(ability)
   const estimated =
     showsDamage && previewDefender
@@ -117,6 +132,13 @@ export function AbilityMasteryPanel({
   const accuracyDisplay =
     ability.accuracy + mods.bonusAccuracy + supportMods.bonusAccuracy
 
+  const transformNote =
+    entry.rank5TransformationChosen && resolvedId !== entry.abilityId
+      ? entry.rank10TransformationChosen
+        ? 'Final transformed form'
+        : 'Mastery Lv. 5 transformed form'
+      : null
+
   return (
     <div
       className={`ability-mastery-panel${compact ? ' ability-mastery-panel--compact' : ''}`}
@@ -131,7 +153,7 @@ export function AbilityMasteryPanel({
         ) : null}
       </h4>
       <p className="ability-mastery-panel__meta">
-        {ability.type} / {ability.category} · Target {ability.target}
+        {ability.type} · {displayCategory} · Role {abilityRole} · Target {ability.target}
         {showsDamage ? ` · Power ${ability.power}` : ''} · Accuracy {accuracyDisplay}%
       </p>
       <p className="ability-mastery-panel__desc">{ability.description}</p>
@@ -141,7 +163,7 @@ export function AbilityMasteryPanel({
         </p>
       )}
       <p className="ability-mastery-panel__rank">
-        Mastery: {getRankLabel(entry.rank)}
+        Mastery Level {entry.rank} ({getRankLabel(entry.rank)})
         {entry.rank < MASTERY_MAX_RANK ? (
           <>
             {' '}
@@ -157,9 +179,23 @@ export function AbilityMasteryPanel({
         </div>
       )}
       {perkDetails.length > 0 && (
-        <p className="ability-mastery-panel__upgrades">
-          Mastery perks:{' '}
-          {perkDetails.map((p) => p.name).join(', ')}
+        <div className="ability-mastery-panel__upgrades">
+          <span className="panel-label">Mastery perks</span>
+          <ul>
+            {perkDetails.map((p) => (
+              <li key={p.id}>
+                <strong>{p.name}</strong> — {p.description}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {transformNote && (
+        <p className="ability-mastery-panel__transform-note">{transformNote}</p>
+      )}
+      {entry.rank < MASTERY_MAX_RANK && (
+        <p className="ability-mastery-panel__next">
+          Next reward: {getNextMasteryRewardLabel(entry.rank)}
         </p>
       )}
       {estimated !== null && estimated > 0 && (
@@ -169,6 +205,52 @@ export function AbilityMasteryPanel({
             <> · {formatTypeEffectivenessLabel(typeMult)}</>
           )}
         </p>
+      )}
+      <button
+        type="button"
+        className="btn btn--small"
+        onClick={() => setDetailsOpen((o) => !o)}
+      >
+        {detailsOpen ? 'Hide Details' : 'View Details'}
+      </button>
+      {detailsOpen && (
+        <div className="ability-mastery-panel__details">
+          <p>
+            <strong>Base ability:</strong> {baseAbility.name}
+          </p>
+          <p>
+            <strong>Current form:</strong> {ability.name}
+            {resolvedId !== entry.abilityId ? ` (evolved from ${baseAbility.name})` : ''}
+          </p>
+          <p>
+            <strong>Mastery Lv. 5 evolution:</strong>{' '}
+            {entry.rank5TransformationChosen
+              ? 'Complete'
+              : entry.rank >= 5
+                ? 'Pending choice'
+                : 'Unlocks at Mastery Lv. 5'}
+          </p>
+          <p>
+            <strong>Mastery Lv. 10 evolution:</strong>{' '}
+            {entry.rank10TransformationChosen
+              ? 'Complete — Mastery MAX'
+              : entry.rank >= MASTERY_MAX_RANK
+                ? 'Pending choice'
+                : 'Unlocks at Mastery Lv. 10'}
+          </p>
+          {perkDetails.length > 0 && (
+            <>
+              <span className="panel-label">Selected perk bonuses</span>
+              <ul>
+                {perkDetails.map((p) => (
+                  <li key={p.id}>
+                    {p.name}: {p.description}
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+        </div>
       )}
     </div>
   )

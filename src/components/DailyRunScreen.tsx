@@ -1,5 +1,3 @@
-import type { DailyModifier } from '../utils/dailyRun'
-
 export function DailyRunScreen({
   dailySeed,
   displayDate,
@@ -7,36 +5,61 @@ export function DailyRunScreen({
   modifier,
   loggedIn,
   hasProfile,
-  inProgress,
-  onStart,
-  onContinue,
+  hasActiveAttempt,
+  hasDayRecord,
+  currentAttemptScore,
+  bestScore,
+  currentCheckpointLabel,
+  bestCheckpointLabel,
+  totalAttempts,
+  deathsThisAttempt,
+  playerRank,
+  onStartAttempt,
+  onContinueAttempt,
+  onRestartAttempt,
+  onSubmitBest,
   onLeaderboard,
   onBack,
+  submitBusy,
+  submitMessage,
 }: {
   dailySeed: string
   displayDate: string
   regionName: string
-  modifier: DailyModifier
+  modifier: import('../utils/dailyRun').DailyModifier
   loggedIn: boolean
   hasProfile: boolean
-  inProgress: boolean
-  onStart: () => void
-  onContinue: () => void
+  hasActiveAttempt: boolean
+  hasDayRecord: boolean
+  currentAttemptScore: number
+  bestScore: number
+  currentCheckpointLabel: string
+  bestCheckpointLabel: string
+  totalAttempts: number
+  deathsThisAttempt: number
+  playerRank: number | null
+  onStartAttempt: () => void
+  onContinueAttempt: () => void
+  onRestartAttempt: () => void
+  onSubmitBest: () => void
   onLeaderboard: () => void
   onBack: () => void
+  submitBusy?: boolean
+  submitMessage?: string | null
 }) {
   return (
     <main className="daily-run-screen">
       <header className="screen-header">
         <h1 className="screen-header__title">Daily Run</h1>
         <p className="screen-header__subtitle">
-          Everyone plays the same route today. Compete on the leaderboard.
+          Best survival record for today&apos;s seed. Current attempts reset on death;
+          your best score is kept.
         </p>
       </header>
 
       <section className="daily-run-screen__card">
         <p>
-          <span className="panel-label">Today&apos;s seed</span>
+          <span className="panel-label">Daily seed</span>
           <strong>{dailySeed}</strong>
         </p>
         <p>
@@ -53,10 +76,41 @@ export function DailyRunScreen({
         </p>
       </section>
 
+      <section className="daily-run-screen__scores">
+        <p>
+          <span className="panel-label">Current attempt score</span>
+          <strong>{currentAttemptScore}</strong>
+        </p>
+        <p>
+          <span className="panel-label">Best score</span>
+          <strong>{bestScore}</strong>
+        </p>
+        <p>
+          <span className="panel-label">Current checkpoint</span>
+          {currentCheckpointLabel}
+        </p>
+        <p>
+          <span className="panel-label">Best checkpoint</span>
+          {bestCheckpointLabel}
+        </p>
+        <p>
+          <span className="panel-label">Attempts today</span>
+          {totalAttempts}
+        </p>
+        <p>
+          <span className="panel-label">Deaths this attempt</span>
+          {deathsThisAttempt}
+        </p>
+        {playerRank !== null && (
+          <p className="daily-run-screen__rank" role="status">
+            Your leaderboard rank: <strong>#{playerRank}</strong>
+          </p>
+        )}
+      </section>
+
       {!loggedIn && (
         <p className="daily-run-screen__note">
-          Offline mode: play the daily route locally. Login to submit scores to the
-          leaderboard.
+          Offline mode: track your best run locally. Login to submit to the leaderboard.
         </p>
       )}
       {loggedIn && !hasProfile && (
@@ -65,14 +119,35 @@ export function DailyRunScreen({
         </p>
       )}
 
+      {submitMessage && (
+        <p className="daily-run-screen__note" role="status">
+          {submitMessage}
+        </p>
+      )}
+
       <div className="daily-run-screen__actions">
-        {inProgress ? (
-          <button type="button" className="btn btn--primary" onClick={onContinue}>
-            Continue Daily Run
+        {hasActiveAttempt ? (
+          <button type="button" className="btn btn--primary" onClick={onContinueAttempt}>
+            Continue Current Attempt
           </button>
         ) : (
-          <button type="button" className="btn btn--primary" onClick={onStart}>
-            Start Daily Run
+          <button type="button" className="btn btn--primary" onClick={onStartAttempt}>
+            {hasDayRecord ? 'Start New Attempt' : 'Start Daily Run'}
+          </button>
+        )}
+        {hasActiveAttempt && (
+          <button type="button" className="btn" onClick={onRestartAttempt}>
+            Restart Attempt
+          </button>
+        )}
+        {loggedIn && hasProfile && bestScore > 0 && (
+          <button
+            type="button"
+            className="btn"
+            disabled={submitBusy}
+            onClick={onSubmitBest}
+          >
+            {submitBusy ? 'Submitting…' : 'Submit Best Score'}
           </button>
         )}
         <button type="button" className="btn" onClick={onLeaderboard}>

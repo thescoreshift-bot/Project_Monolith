@@ -1,4 +1,5 @@
 import type { MasteryPathTag } from './abilityMasteryPerks'
+import { buildFallbackTransformation } from '../utils/abilityTransformFallback'
 
 export type AbilityTransformation = {
   id: string
@@ -41,6 +42,26 @@ export const ABILITY_TRANSFORMATIONS: AbilityTransformation[] = [
   { id: 'sn-r5-status', fromAbilityId: 'stone-nudge', requiredRank: 5, pathTag: 'status', newAbilityId: 'stun-nudge', newName: 'Stun Nudge', description: 'Stunning stone impact.' },
   { id: 'sn-r5-utility', fromAbilityId: 'stone-nudge', requiredRank: 5, pathTag: 'utility', newAbilityId: 'stone-ward', newName: 'Stone Ward', description: 'Damage plus DEF buff.' },
   { id: 'sn-r5-hybrid', fromAbilityId: 'stone-nudge', requiredRank: 5, pathTag: 'hybrid', newAbilityId: 'quake-nudge', newName: 'Quake Nudge', description: 'Damage and armor break.' },
+  // Bubble Hex Rank 10
+  { id: 'bh-r10-damage', fromAbilityId: 'tide-lance', requiredRank: 10, pathTag: 'damage', newAbilityId: 'abyssal-tide-spear', newName: 'Abyssal Tide Spear', description: 'Master form — crushing water lance.' },
+  { id: 'bh-r10-status', fromAbilityId: 'binding-mist', requiredRank: 10, pathTag: 'status', newAbilityId: 'eternal-binding-mist', newName: 'Eternal Binding Mist', description: 'Master form — eternal binding mist.' },
+  { id: 'bh-r10-utility', fromAbilityId: 'healing-rain', requiredRank: 10, pathTag: 'utility', newAbilityId: 'oceanic-healing-rain', newName: 'Oceanic Healing Rain', description: 'Master form — oceanic healing rain.' },
+  { id: 'bh-r10-hybrid', fromAbilityId: 'riptide-hex', requiredRank: 10, pathTag: 'hybrid', newAbilityId: 'maelstrom-hex', newName: 'Maelstrom Hex', description: 'Master form — maelstrom hex.' },
+  // Vine Lash Rank 10
+  { id: 'vl-r10-damage', fromAbilityId: 'thorn-whip', requiredRank: 10, pathTag: 'damage', newAbilityId: 'ancient-thorn-whip', newName: 'Ancient Thorn Whip', description: 'Master form — ancient thorn whip.' },
+  { id: 'vl-r10-status', fromAbilityId: 'bind-lash', requiredRank: 10, pathTag: 'status', newAbilityId: 'eternal-bind-lash', newName: 'Eternal Bind Lash', description: 'Master form — eternal bind lash.' },
+  { id: 'vl-r10-utility', fromAbilityId: 'sap-lash', requiredRank: 10, pathTag: 'utility', newAbilityId: 'lifeblood-sap-lash', newName: 'Lifeblood Sap Lash', description: 'Master form — lifeblood sap lash.' },
+  { id: 'vl-r10-hybrid', fromAbilityId: 'wild-lash', requiredRank: 10, pathTag: 'hybrid', newAbilityId: 'overgrowth-wild-lash', newName: 'Overgrowth Wild Lash', description: 'Master form — overgrowth wild lash.' },
+  // Static Jolt Rank 10
+  { id: 'sj-r10-damage', fromAbilityId: 'bolt-lance', requiredRank: 10, pathTag: 'damage', newAbilityId: 'storm-bolt-lance', newName: 'Storm Bolt Lance', description: 'Master form — storm bolt lance.' },
+  { id: 'sj-r10-status', fromAbilityId: 'paralyze-bolt', requiredRank: 10, pathTag: 'status', newAbilityId: 'eternal-paralyze-bolt', newName: 'Eternal Paralyze Bolt', description: 'Master form — eternal paralyze bolt.' },
+  { id: 'sj-r10-utility', fromAbilityId: 'charge-jolt', requiredRank: 10, pathTag: 'utility', newAbilityId: 'overcharge-jolt', newName: 'Overcharge Jolt', description: 'Master form — overcharge jolt.' },
+  { id: 'sj-r10-hybrid', fromAbilityId: 'chain-jolt', requiredRank: 10, pathTag: 'hybrid', newAbilityId: 'tempest-chain-jolt', newName: 'Tempest Chain Jolt', description: 'Master form — tempest chain jolt.' },
+  // Stone Nudge Rank 10
+  { id: 'sn-r10-damage', fromAbilityId: 'boulder-ram', requiredRank: 10, pathTag: 'damage', newAbilityId: 'colossal-boulder-ram', newName: 'Colossal Boulder Ram', description: 'Master form — colossal boulder ram.' },
+  { id: 'sn-r10-status', fromAbilityId: 'stun-nudge', requiredRank: 10, pathTag: 'status', newAbilityId: 'ruinous-stun-nudge', newName: 'Ruinous Stun Nudge', description: 'Master form — ruinous stun nudge.' },
+  { id: 'sn-r10-utility', fromAbilityId: 'stone-ward', requiredRank: 10, pathTag: 'utility', newAbilityId: 'fortress-stone-ward', newName: 'Fortress Stone Ward', description: 'Master form — fortress stone ward.' },
+  { id: 'sn-r10-hybrid', fromAbilityId: 'quake-nudge', requiredRank: 10, pathTag: 'hybrid', newAbilityId: 'cataclysm-quake-nudge', newName: 'Cataclysm Quake Nudge', description: 'Master form — cataclysm quake nudge.' },
 ]
 
 export function getRank5Transformation(
@@ -65,4 +86,17 @@ export function getRank10Transformation(
       t.requiredRank === 10 &&
       t.pathTag === path,
   )
+}
+
+/** Resolve a transformation, using curated data first then role-based fallback. */
+export function resolveAbilityTransformation(
+  fromAbilityId: string,
+  requiredRank: 5 | 10,
+  path: MasteryPathTag,
+): AbilityTransformation {
+  const curated =
+    requiredRank === 5
+      ? getRank5Transformation(fromAbilityId, path)
+      : getRank10Transformation(fromAbilityId, path)
+  return curated ?? buildFallbackTransformation(fromAbilityId, requiredRank, path)
 }

@@ -65,6 +65,7 @@ export function CharacterSelectScreen({
   onUploadLocal,
   uploadBusy,
   uploadMessage,
+  statusMessage,
 }: {
   mode: 'cloud' | 'offline'
   slots: { 1: SaveSlotSummary; 2: SaveSlotSummary }
@@ -79,6 +80,7 @@ export function CharacterSelectScreen({
   onUploadLocal: (localSlot: SaveSlotId, cloudSlot: SaveSlotId) => void
   uploadBusy: boolean
   uploadMessage: string | null
+  statusMessage?: string | null
 }) {
   const selected = selectedSlotId ? slots[selectedSlotId] : null
   const canContinue = selected && !selected.isEmpty
@@ -93,6 +95,12 @@ export function CharacterSelectScreen({
             : 'Offline saves stay on this browser only.'}
         </p>
       </header>
+
+      {statusMessage && (
+        <p className="character-select-screen__upload-msg" role="status">
+          {statusMessage}
+        </p>
+      )}
 
       <div className="character-select-screen__slots">
         <SlotCard

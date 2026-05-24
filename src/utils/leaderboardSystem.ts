@@ -9,6 +9,49 @@ import type { RunCreature } from './progression'
 import type { PartyCreature } from './party'
 import { buildFinalTeamJson } from './runScore'
 import { getPartyHighestLevel } from './regionRewards'
+import type { DailyCheckpoint } from './dailyRunScoring'
+import { formatCheckpointLabel, compareCheckpoints } from './dailyRunScoring'
+
+export type LeaderboardCheckpointMeta = {
+  nodesCleared: number
+  bossesDefeated: number
+  checkpointLabel: string
+}
+
+export function buildLeaderboardTeamPayload(
+  starter: RunCreature,
+  recruits: PartyCreature[],
+  checkpoint?: DailyCheckpoint | null,
+): { name: string; type: string; level: number }[] {
+  const team = buildFinalTeamJson(starter, recruits)
+  if (!checkpoint) return team
+  const meta: LeaderboardCheckpointMeta = {
+    nodesCleared: checkpoint.nodesCleared,
+    bossesDefeated: checkpoint.bossesDefeated,
+    checkpointLabel: formatCheckpointLabel(checkpoint),
+  }
+  return [
+    ...team,
+    {
+      name: '__meta__',
+      type: JSON.stringify(meta),
+      level: checkpoint.highestLevel,
+    },
+  ]
+}
+
+export function parseLeaderboardCheckpointMeta(
+  finalTeam: LeaderboardRow['final_team'],
+): LeaderboardCheckpointMeta | null {
+  if (!finalTeam) return null
+  const meta = finalTeam.find((m) => m.name === '__meta__')
+  if (!meta) return null
+  try {
+    return JSON.parse(meta.type) as LeaderboardCheckpointMeta
+  } catch {
+    return null
+  }
+}
 
 export type LeaderboardRow = {
   id: string
@@ -115,7 +158,9 @@ export async function submitDailyLeaderboardScore(params: {
   recruits: PartyCreature[]
   badgesEarned: number
   evolutionsCount: number
-  /** Optional override; otherwise loaded from player profile. */
+  checkpoint?: DailyCheckpoint | null
+  /** Submit this score even if lower (must still beat existing on score or checkpoint). */
+  forceBestScore?: number
   displayName?: string
 }): Promise<SubmitLeaderboardResult> {
   if (!isSupabaseConfigured() || !supabase) {
@@ -150,23 +195,57 @@ export async function submitDailyLeaderboardScore(params: {
     }
   }
 
-  const newScore = params.scoreSnapshot.total
+  const newScore = params.forceBestScore ?? params.scoreSnapshot.total
   const existing = await fetchPlayerLeaderboardEntry(params.dailySeed)
-  if (existing && existing.score >= newScore) {
-    return { ok: true, keptPrevious: true }
+  if (existing) {
+    const existingMeta = parseLeaderboardCheckpointMeta(existing.final_team)
+    const existingCheckpoint: DailyCheckpoint | null = existingMeta
+      ? {
+          region: existing.region ?? params.regionId,
+          regionNumber: 1,
+          badgesEarned: existing.badges_earned,
+          nodesCleared: existingMeta.nodesCleared,
+          bossesDefeated: existingMeta.bossesDefeated,
+          highestLevel: existing.highest_level,
+          evolutionsCount: existing.evolutions_count,
+        }
+      : null
+    const newCheckpoint = params.checkpoint ?? null
+    const scoreWorse = newScore < existing.score
+    const checkpointWorse =
+      newCheckpoint && existingCheckpoint
+        ? compareCheckpoints(newCheckpoint, existingCheckpoint) <= 0
+        : scoreWorse
+    if (scoreWorse && checkpointWorse) {
+      return { ok: true, keptPrevious: true }
+    }
+    if (newScore <= existing.score && newCheckpoint && existingCheckpoint) {
+      if (compareCheckpoints(newCheckpoint, existingCheckpoint) <= 0) {
+        return { ok: true, keptPrevious: true }
+      }
+    } else if (newScore < existing.score) {
+      return { ok: true, keptPrevious: true }
+    }
   }
 
   const payload = {
     user_id: userData.user.id,
     display_name: displayName,
     daily_seed: params.dailySeed,
-    score: newScore,
-    region: params.regionId,
+    score: Math.max(newScore, existing?.score ?? 0),
+    region: params.checkpoint?.region ?? params.regionId,
     starter_name: params.starter.name,
-    final_team: buildFinalTeamJson(params.starter, params.recruits),
-    badges_earned: params.badgesEarned,
-    highest_level: getPartyHighestLevel(params.starter, params.recruits),
-    evolutions_count: params.evolutionsCount,
+    final_team: buildLeaderboardTeamPayload(
+      params.starter,
+      params.recruits,
+      params.checkpoint,
+    ),
+    badges_earned: params.checkpoint?.badgesEarned ?? params.badgesEarned,
+    highest_level:
+      params.checkpoint?.highestLevel ??
+      getPartyHighestLevel(params.starter, params.recruits),
+    evolutions_count:
+      params.checkpoint?.evolutionsCount ?? params.evolutionsCount,
     completed: params.scoreSnapshot.completed,
     updated_at: new Date().toISOString(),
   }

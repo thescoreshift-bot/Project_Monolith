@@ -240,11 +240,64 @@ const ABILITY_LIST: AbilityDefinition[] = [
   dmg('quake-nudge', 'Quake Nudge', 'Ground', 'physical', 44, 95, 'Damage and armor break.', [
     { type: 'statDebuff', stat: 'def', stages: 1 },
   ]),
+  // Rank 10 — Water line
+  dmg('abyssal-tide-spear', 'Abyssal Tide Spear', 'Water', 'special', 78, 100, 'Master water lance — crushing pressure.'),
+  stat('eternal-binding-mist', 'Eternal Binding Mist', 'Water', 95, 'Master mist — heavy bind and SPD crush.', [
+    { type: 'applyStatus', status: 'bind', chance: 45 },
+    { type: 'statDebuff', stat: 'spd', stages: 2 },
+  ]),
+  dmg('oceanic-healing-rain', 'Oceanic Healing Rain', 'Water', 'special', 58, 100, 'Master rain — damages and restores heavily.', [
+    { type: 'heal', percent: 0.18 },
+  ]),
+  dmg('maelstrom-hex', 'Maelstrom Hex', 'Water', 'special', 68, 100, 'Master riptide hex with binding surge.', [
+    { type: 'applyStatus', status: 'bind', chance: 30 },
+  ]),
+  // Rank 10 — Grass line
+  dmg('ancient-thorn-whip', 'Ancient Thorn Whip', 'Grass', 'physical', 82, 95, 'Master thorn whip — devastating lash.'),
+  dmg('eternal-bind-lash', 'Eternal Bind Lash', 'Grass', 'physical', 58, 95, 'Master bind lash — vines lock foes.', [
+    { type: 'applyStatus', status: 'bind', chance: 45 },
+  ]),
+  dmg('lifeblood-sap-lash', 'Lifeblood Sap Lash', 'Grass', 'physical', 60, 95, 'Master sap lash — heals user heavily.', [
+    { type: 'heal', percent: 0.16 },
+  ]),
+  dmg('overgrowth-wild-lash', 'Overgrowth Wild Lash', 'Grass', 'physical', 66, 95, 'Master wild lash — poison and bind storm.', [
+    { type: 'applyStatus', status: 'poison', chance: 30 },
+    { type: 'applyStatus', status: 'bind', chance: 25 },
+  ]),
+  // Rank 10 — Electric line
+  dmg('storm-bolt-lance', 'Storm Bolt Lance', 'Electric', 'special', 80, 100, 'Master lightning lance.'),
+  dmg('eternal-paralyze-bolt', 'Eternal Paralyze Bolt', 'Electric', 'special', 52, 100, 'Master paralyzing bolt.', [
+    { type: 'applyStatus', status: 'paralyze', chance: 50 },
+  ]),
+  dmg('overcharge-jolt', 'Overcharge Jolt', 'Electric', 'special', 56, 100, 'Master charge jolt — speed surge.', [
+    { type: 'statBuff', stat: 'spd', stages: 2, target: 'self' },
+  ]),
+  dmg('tempest-chain-jolt', 'Tempest Chain Jolt', 'Electric', 'special', 64, 100, 'Master chain jolt.', [
+    { type: 'applyStatus', status: 'paralyze', chance: 35 },
+  ]),
+  // Rank 10 — Ground line
+  dmg('colossal-boulder-ram', 'Colossal Boulder Ram', 'Ground', 'physical', 78, 95, 'Master stone ram.'),
+  dmg('ruinous-stun-nudge', 'Ruinous Stun Nudge', 'Ground', 'physical', 52, 95, 'Master stunning impact.', [
+    { type: 'applyStatus', status: 'paralyze', chance: 40 },
+  ]),
+  dmg('fortress-stone-ward', 'Fortress Stone Ward', 'Ground', 'physical', 54, 100, 'Master stone ward — DEF surge.', [
+    { type: 'statBuff', stat: 'def', stages: 2, target: 'self' },
+  ]),
+  dmg('cataclysm-quake-nudge', 'Cataclysm Quake Nudge', 'Ground', 'physical', 62, 95, 'Master quake — armor shatter.', [
+    { type: 'statDebuff', stat: 'def', stages: 2 },
+  ]),
 ]
 
 export const ABILITIES: Record<string, Ability> = Object.fromEntries(
   ABILITY_LIST.map((a) => [a.id, a]),
 )
+
+const RUNTIME_ABILITIES: Record<string, AbilityDefinition> = {}
+
+/** Register dynamically generated transformed abilities (fallback transforms). */
+export function registerRuntimeAbility(ability: AbilityDefinition): void {
+  RUNTIME_ABILITIES[ability.id] = ability
+}
 
 export const STARTER_ABILITY_IDS: Record<ElementType, string> = {
   Fire: 'spark-ember',
@@ -256,7 +309,8 @@ export const STARTER_ABILITY_IDS: Record<ElementType, string> = {
 
 export function getAbility(id: string): Ability {
   return (
-    ABILITIES[id] ?? {
+    ABILITIES[id] ??
+    RUNTIME_ABILITIES[id] ?? {
       id,
       name: id,
       type: 'Ground',

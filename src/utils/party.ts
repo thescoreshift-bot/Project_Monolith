@@ -6,6 +6,7 @@ import type { TemporaryBattleBuff } from './battleBuffs'
 import type { BattleBuffs } from './badgeBonuses'
 import { ensureAbilityMastery, type AbilityMasteryMap } from './abilityMastery'
 import { normalizeCreatureAbilities } from './creatureAbilities'
+import { normalizeEquippedGearId } from './gearSystem'
 import {
   applyLevelUpHealing,
   getXpToNextLevel,
@@ -35,6 +36,7 @@ export type PartyCreature = {
   battleBuffs: BattleBuffs
   temporaryBattleBuffs?: TemporaryBattleBuff[]
   abilityMastery: AbilityMasteryMap
+  equippedGearId?: string | null
 } & CreaturePerkFields
 
 export type PartyXpResult = {
@@ -53,7 +55,7 @@ export function normalizePartyCreature(
   const selectedPerks = perks.selectedPerks
   const stats = recalculateStats(baseStats, selectedPerks)
   const maxHp = stats.hp
-  const battleBuffs = raw.battleBuffs ?? { atk: 0, spAtk: 0 }
+  const battleBuffs = raw.battleBuffs ?? { atk: 0, spAtk: 0, def: 0, spd: 0 }
   const baseStatsSafe = {
     hp: baseStats.hp ?? maxHp,
     atk: baseStats.atk ?? 1,
@@ -84,6 +86,7 @@ export function normalizePartyCreature(
     battleBuffs,
     temporaryBattleBuffs: raw.temporaryBattleBuffs ?? [],
     abilityMastery: raw.abilityMastery ?? {},
+    equippedGearId: normalizeEquippedGearId(raw.equippedGearId),
   }),
   )
 }
@@ -154,33 +157,47 @@ export const MAX_RECRUITS = 2
 export const MAX_PARTY_SIZE = 3
 export const RECRUITMENT_CHANCE = 0.2
 
-export function createRecruitFromEnemy(enemy: Enemy): PartyCreature {
-  const baseStats = { ...enemy.stats, hp: enemy.maxHp }
+/** Convert a defeated enemy into a valid party recruit with full stats and abilities. */
+export function convertEnemyToRecruit(enemy: Enemy): PartyCreature {
+  const baseStats = {
+    hp: enemy.maxHp,
+    atk: enemy.stats.atk ?? 1,
+    def: enemy.stats.def ?? 1,
+    spAtk: enemy.stats.spAtk ?? 1,
+    spDef: enemy.stats.spDef ?? 1,
+    spd: enemy.stats.spd ?? 1,
+  }
   const perks = withDefaultCreaturePerks({})
   const stats = recalculateStats(baseStats, perks.selectedPerks)
   const firstAbility = enemy.abilityIds[0] ?? 'tackle'
-  return ensureAbilityMastery(
+  const recruit = normalizePartyCreature(
     normalizeCreatureAbilities({
-    id: `recruit-${enemy.id}-${Date.now()}`,
-    name: enemy.name,
-    type: enemy.type,
-    level: enemy.level,
-    currentXp: 0,
-    xpToNextLevel: getXpToNextLevel(enemy.level),
-    maxHp: enemy.maxHp,
-    currentHp: enemy.maxHp,
-    baseStats,
-    stats,
-    abilityId: firstAbility,
-    abilityIds: [...enemy.abilityIds],
-    source: 'recruited',
-    templateId: enemy.id,
-    battleBuffs: { atk: 0, spAtk: 0 },
-    temporaryBattleBuffs: [],
-    abilityMastery: {},
-    ...perks,
-  }),
+      id: `recruit-${enemy.id}-${Date.now()}`,
+      name: enemy.name,
+      type: enemy.type,
+      level: enemy.level,
+      currentXp: 0,
+      xpToNextLevel: getXpToNextLevel(enemy.level),
+      maxHp: stats.hp,
+      currentHp: stats.hp,
+      baseStats,
+      stats,
+      abilityId: firstAbility,
+      abilityIds: [...enemy.abilityIds],
+      source: 'recruited',
+      templateId: enemy.id,
+      battleBuffs: { atk: 0, spAtk: 0, def: 0, spd: 0 },
+      temporaryBattleBuffs: [],
+      abilityMastery: {},
+      ...perks,
+    }) as PartyCreature,
+    enemy.level,
   )
+  return recruit
+}
+
+export function createRecruitFromEnemy(enemy: Enemy): PartyCreature {
+  return convertEnemyToRecruit(enemy)
 }
 
 export function partyCreatureFromTemplate(
@@ -211,7 +228,7 @@ export function partyCreatureFromTemplate(
     abilityId: template.abilityId,
     source: 'recruited',
     templateId: template.id,
-    battleBuffs: { atk: 0, spAtk: 0 },
+    battleBuffs: { atk: 0, spAtk: 0, def: 0, spd: 0 },
     temporaryBattleBuffs: [],
     abilityMastery: {},
     ...perks,

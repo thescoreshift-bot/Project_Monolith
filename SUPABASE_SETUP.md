@@ -213,6 +213,57 @@ for each row
 execute function public.update_updated_at_column();
 ```
 
+### PvP friend challenges
+
+Run this after `daily_leaderboards` if you want Friend Battle codes to sync via Supabase.
+
+```sql
+create table if not exists public.pvp_challenges (
+  id uuid primary key default gen_random_uuid(),
+  code text unique not null,
+  creator_user_id uuid not null references auth.users(id) on delete cascade,
+  creator_display_name text not null,
+  team_snapshot jsonb not null,
+  team_power integer default 0,
+  region text,
+  highest_level integer default 1,
+  badges_count integer default 0,
+  wins integer default 0,
+  losses integer default 0,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now(),
+  expires_at timestamptz
+);
+
+alter table public.pvp_challenges enable row level security;
+
+create policy "Authenticated users can read pvp challenges"
+on public.pvp_challenges
+for select
+to authenticated
+using (true);
+
+create policy "Users can insert their own pvp challenges"
+on public.pvp_challenges
+for insert
+to authenticated
+with check ((select auth.uid()) = creator_user_id);
+
+create policy "Users can update their own pvp challenges"
+on public.pvp_challenges
+for update
+to authenticated
+using ((select auth.uid()) = creator_user_id)
+with check ((select auth.uid()) = creator_user_id);
+
+drop trigger if exists update_pvp_challenges_updated_at on public.pvp_challenges;
+
+create trigger update_pvp_challenges_updated_at
+before update on public.pvp_challenges
+for each row
+execute function public.update_updated_at_column();
+```
+
 ### Optional extras
 
 ```sql
@@ -221,17 +272,23 @@ alter table public.player_profiles
 add column if not exists tutorial_completed boolean default false;
 
 -- Tester feedback (optional — form still works offline via copyable report)
+-- Stable columns only; extra fields (kind alias, contact, user_agent, save slot label, etc.) live in report_data jsonb.
+-- save_slot: integer 1 or 2 when in a character slot; null on title / daily run / no active save.
+-- Full label (e.g. "Cloud 1", "Daily run", "None") is stored in report_data.save_slot_label.
 create table if not exists public.feedback_reports (
   id uuid primary key default gen_random_uuid(),
   user_id uuid references auth.users(id) on delete set null,
-  kind text not null,
-  what_happened text not null,
+  display_name text,
+  report_type text not null,
+  message text not null,
   expected_behavior text,
-  contact text,
-  screen text,
-  region text,
-  save_slot text,
+  current_screen text,
+  current_region text,
+  save_slot integer,
   app_version text,
+  browser_info text,
+  report_data jsonb not null default '{}'::jsonb,
+  status text not null default 'open',
   created_at timestamptz default now()
 );
 
@@ -248,6 +305,55 @@ on public.feedback_reports
 for select
 to authenticated
 using (user_id is null or (select auth.uid()) = user_id);
+```
+
+If you created an older `feedback_reports` table with columns like `kind`, `what_happened`, or `contact`, either drop and recreate it with the SQL above, or migrate:
+
+```sql
+-- Optional migration from legacy feedback_reports shape
+alter table public.feedback_reports
+  add column if not exists display_name text,
+  add column if not exists report_type text,
+  add column if not exists message text,
+  add column if not exists current_screen text,
+  add column if not exists current_region text,
+  add column if not exists browser_info text,
+  add column if not exists report_data jsonb default '{}'::jsonb,
+  add column if not exists status text default 'open';
+
+update public.feedback_reports
+set
+  report_type = coalesce(report_type, kind, 'feedback'),
+  message = coalesce(message, what_happened, ''),
+  current_screen = coalesce(current_screen, screen),
+  current_region = coalesce(current_region, region),
+  display_name = coalesce(display_name, contact),
+  report_data = coalesce(report_data, '{}'::jsonb) || jsonb_strip_nulls(jsonb_build_object(
+    'kind', kind,
+    'contact', contact,
+    'legacy_what_happened', what_happened
+  )),
+  status = coalesce(status, 'open')
+where report_type is null or message is null;
+
+-- save_slot must be integer (1 or 2) or null — not text labels like "None"
+alter table public.feedback_reports
+  alter column save_slot type integer using (
+    case
+      when save_slot is null then null
+      when save_slot::text ~ '^\d+$' then save_slot::integer
+      when save_slot::text ~ '1' then 1
+      when save_slot::text ~ '2' then 2
+      else null
+    end
+  );
+
+alter table public.feedback_reports
+  drop column if exists kind,
+  drop column if exists what_happened,
+  drop column if exists contact,
+  drop column if exists screen,
+  drop column if exists region;
 ```
 
 3. If policies already exist from an older run, drop them first or skip duplicate-policy errors.

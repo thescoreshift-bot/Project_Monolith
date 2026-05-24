@@ -1,8 +1,13 @@
 import { useState, type ReactNode } from 'react'
 import { getPerk } from '../data/perks'
 import { EVOLUTION_THRESHOLDS } from '../data/evolutions'
-import { getPartyBadgeBonusLines } from '../utils/badgeBonuses'
+import {
+  getCombatEffectiveStats,
+  getPartyBadgeBonusLines,
+} from '../utils/badgeBonuses'
+import { getEquippedGear } from '../utils/gearSystem'
 import { getPartyHighestLevel } from '../utils/regionRewards'
+import { getActiveAbilityIds } from '../utils/creatureAbilities'
 import { AbilityMasteryPanel } from './AbilityMasteryPanel'
 import { STARTER_CREATURE_ID } from '../utils/creatureProgression'
 import { getDominantEvolutionCategory } from '../utils/evolutionSystem'
@@ -19,14 +24,25 @@ type PartyScreenProps = {
   onSetHelper: (recruitId: string) => void
   onDismissRecruit: (recruitId: string) => void
   onViewPerks: (creatureId: string) => void
+  onEquipGear: (creatureId: string) => void
+  onUnequipGear: (creatureId: string) => void
+  onOpenInventory: () => void
   onBack: () => void
 }
 
 type CreatureTab = 'overview' | 'stats' | 'perks' | 'abilities' | 'evolution' | 'badges'
 
-function StatGrid({ stats }: { stats: RunCreature['stats'] }) {
+function StatGrid({
+  stats,
+  label,
+}: {
+  stats: RunCreature['stats']
+  label?: string
+}) {
   return (
-    <dl className="party-creature__stats">
+    <>
+      {label && <p className="party-creature__stats-note">{label}</p>}
+      <dl className="party-creature__stats">
       <div>
         <dt>ATK</dt>
         <dd>{stats.atk}</dd>
@@ -48,6 +64,43 @@ function StatGrid({ stats }: { stats: RunCreature['stats'] }) {
         <dd>{stats.spd}</dd>
       </div>
     </dl>
+    </>
+  )
+}
+
+function GearSection({
+  creature,
+  onEquipGear,
+  onUnequipGear,
+}: {
+  creature: RunCreature | PartyCreature
+  onEquipGear: () => void
+  onUnequipGear: () => void
+}) {
+  const gear = getEquippedGear(creature)
+  return (
+    <div className="party-creature__gear">
+      <p className="panel-label">Equipped gear</p>
+      {gear ? (
+        <>
+          <p className="party-creature__gear-name">
+            <span className={`party-creature__gear-rarity party-creature__gear-rarity--${gear.rarity}`}>
+              {gear.rarity}
+            </span>{' '}
+            {gear.name}
+          </p>
+          <p className="party-creature__gear-desc">{gear.description}</p>
+          <button type="button" className="btn btn--small" onClick={onUnequipGear}>
+            Unequip
+          </button>
+        </>
+      ) : (
+        <p className="party-creature__gear-empty">Empty</p>
+      )}
+      <button type="button" className="btn btn--small btn--primary" onClick={onEquipGear}>
+        Equip Gear
+      </button>
+    </div>
   )
 }
 
@@ -86,8 +139,6 @@ function CreatureCard({
   currentXp,
   xpToNextLevel,
   currentHp,
-  maxHp,
-  stats,
   creature,
   role,
   isActiveHelper,
@@ -96,6 +147,8 @@ function CreatureCard({
   evolutionScores,
   evolutionStage,
   onViewPerks,
+  onEquipGear,
+  onUnequipGear,
   partyHighestLevel,
   actions,
 }: {
@@ -106,8 +159,6 @@ function CreatureCard({
   currentXp: number
   xpToNextLevel: number
   currentHp: number
-  maxHp: number
-  stats: RunCreature['stats']
   creature: RunCreature | PartyCreature
   role: string
   isActiveHelper: boolean
@@ -116,6 +167,8 @@ function CreatureCard({
   evolutionScores: RunCreature['evolutionScores']
   evolutionStage: number
   onViewPerks: (id: string) => void
+  onEquipGear: () => void
+  onUnequipGear: () => void
   partyHighestLevel: number
   actions?: ReactNode
 }) {
@@ -128,6 +181,11 @@ function CreatureCard({
     type as RunCreature['type'],
   )
   const nextEvo = nextEvolutionLevel(creature)
+  const effectiveMaxHp = getCombatEffectiveStats(
+    creature,
+    earnedBadges,
+    partyHighestLevel,
+  ).hp
 
   const tabs: { id: CreatureTab; label: string }[] = [
     { id: 'overview', label: 'Overview' },
@@ -158,7 +216,7 @@ function CreatureCard({
         Lv. {level} · Stage {evolutionStage}/3 · {selectedPerksCount} perk
         {selectedPerksCount === 1 ? '' : 's'}
       </p>
-      <HpBar label="HP" current={currentHp} max={maxHp} />
+      <HpBar label="HP" current={currentHp} max={effectiveMaxHp} />
       <div className="xp-bar">
         <span className="xp-bar__label">
           XP {currentXp} / {xpToNextLevel}
@@ -184,6 +242,11 @@ function CreatureCard({
       <div className="party-creature__tab-panel">
         {tab === 'overview' && (
           <>
+            <GearSection
+              creature={creature}
+              onEquipGear={onEquipGear}
+              onUnequipGear={onUnequipGear}
+            />
             <p className="party-screen__dominant party-screen__dominant--inline">
               Path:{' '}
               <strong>
@@ -199,7 +262,12 @@ function CreatureCard({
           </>
         )}
 
-        {tab === 'stats' && <StatGrid stats={stats} />}
+        {tab === 'stats' && (
+          <StatGrid
+            stats={getCombatEffectiveStats(creature, earnedBadges, partyHighestLevel)}
+            label="Effective stats in combat (perks, badges, gear — not stat stages)."
+          />
+        )}
 
         {tab === 'perks' && (
           <div className="party-creature__perks-tab">
@@ -239,12 +307,18 @@ function CreatureCard({
         )}
 
         {tab === 'abilities' && (
-          <AbilityMasteryPanel
-            creature={creature}
-            abilityId={creature.abilityId}
-            earnedBadges={earnedBadges}
-            partyHighestLevel={partyHighestLevel}
-          />
+          <div className="party-screen__abilities">
+            {getActiveAbilityIds(creature).map((aid) => (
+              <AbilityMasteryPanel
+                key={aid}
+                creature={creature}
+                abilityId={aid}
+                earnedBadges={earnedBadges}
+                partyHighestLevel={partyHighestLevel}
+                compact={getActiveAbilityIds(creature).length > 1}
+              />
+            ))}
+          </div>
         )}
 
         {tab === 'evolution' && (
@@ -301,6 +375,9 @@ export function PartyScreen({
   onSetHelper,
   onDismissRecruit,
   onViewPerks,
+  onEquipGear,
+  onUnequipGear,
+  onOpenInventory,
   onBack,
 }: PartyScreenProps) {
   const activeHelper = recruits.find((r) => r.id === activeHelperId) ?? null
@@ -336,8 +413,6 @@ export function PartyScreen({
           currentXp={starter.currentXp}
           xpToNextLevel={starter.xpToNextLevel}
           currentHp={starter.currentHp}
-          maxHp={starter.maxHp}
-          stats={starter.stats}
           creature={starter}
           role="Always active in combat"
           isActiveHelper={false}
@@ -346,6 +421,8 @@ export function PartyScreen({
           evolutionScores={starter.evolutionScores}
           evolutionStage={starter.evolutionStage}
           onViewPerks={onViewPerks}
+          onEquipGear={() => onEquipGear(STARTER_CREATURE_ID)}
+          onUnequipGear={() => onUnequipGear(STARTER_CREATURE_ID)}
           partyHighestLevel={partyHighestLevel}
         />
       </section>
@@ -373,8 +450,6 @@ export function PartyScreen({
                   currentXp={recruit.currentXp}
                   xpToNextLevel={recruit.xpToNextLevel}
                   currentHp={recruit.currentHp}
-                  maxHp={recruit.maxHp}
-                  stats={recruit.stats}
                   creature={recruit}
                   role={
                     isHelper
@@ -387,6 +462,8 @@ export function PartyScreen({
                   evolutionScores={recruit.evolutionScores}
                   evolutionStage={recruit.evolutionStage}
                   onViewPerks={onViewPerks}
+                  onEquipGear={() => onEquipGear(recruit.id)}
+                  onUnequipGear={() => onUnequipGear(recruit.id)}
                   partyHighestLevel={partyHighestLevel}
                   actions={
                     <>
@@ -416,6 +493,9 @@ export function PartyScreen({
       </section>
 
       <footer className="party-screen__footer">
+        <button type="button" className="btn" onClick={onOpenInventory}>
+          Inventory
+        </button>
         <button type="button" className="btn btn--primary" onClick={onBack}>
           Back to Map
         </button>

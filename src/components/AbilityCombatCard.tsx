@@ -3,20 +3,23 @@ import {
   NOT_VERY_EFFECTIVE_MULTIPLIER,
   SUPER_EFFECTIVE_MULTIPLIER,
 } from '../data/typeChart'
+import { getAbilityDisplayCategory } from '../data/abilityMasteryPerks'
 import {
   estimateAbilityDamage,
   getCombatModifiersFromMastery,
   getMasteryEntry,
+  getMasteryLevelShort,
   getRankLabel,
   getResolvedAbilityId,
+  MASTERY_MAX_RANK,
 } from '../utils/abilityMastery'
 import {
   abilityDealsDamage,
   formatAbilityEffectPreview,
 } from '../utils/combatEffects'
 import {
+  getAttackerDamageMultiplier,
   getCombatEffectiveStats,
-  getDamageMultiplierForAbility,
 } from '../utils/badgeBonuses'
 import { getTypeEffectivenessMultiplier } from '../data/typeChart'
 import type { Enemy } from '../data/enemies'
@@ -45,13 +48,19 @@ export function AbilityCombatCard({
   const entry = getMasteryEntry({ abilityMastery: creature.abilityMastery }, abilityId)
   const resolvedId = getResolvedAbilityId(entry)
   const ability = getAbility(resolvedId)
+  const displayCategory = getAbilityDisplayCategory(ability)
   const mods = getCombatModifiersFromMastery(entry)
   const partyLevel = partyHighestLevel ?? creature.level
   const effective = getCombatEffectiveStats(creature, earnedBadges, partyLevel)
   const typeMult = previewDefender
     ? getTypeEffectivenessMultiplier(ability.type, previewDefender.type)
     : 1
-  const badgeMult = getDamageMultiplierForAbility(ability, earnedBadges)
+  const badgeMult = getAttackerDamageMultiplier(
+    ability,
+    earnedBadges,
+    creature.selectedPerks,
+    creature,
+  )
   const showsDamage = abilityDealsDamage(ability)
   const effectPreview = formatAbilityEffectPreview(ability)
   const estimated =
@@ -80,12 +89,18 @@ export function AbilityCombatCard({
     }
   }
 
+  const rankLabel =
+    entry.rank >= MASTERY_MAX_RANK
+      ? 'Mastery Lv. 10 — MAX'
+      : `${getMasteryLevelShort(entry.rank)} — ${entry.xp}/${entry.xpToNextRank} XP`
+
   const detailTitle =
     title ??
     [
       ability.name,
-      `${ability.type} / ${ability.category}`,
-      `Rank ${entry.rank} (${getRankLabel(entry.rank)})`,
+      `${ability.type} · ${displayCategory}`,
+      rankLabel,
+      `Mastery: ${getRankLabel(entry.rank)}`,
       showsDamage ? `Power ${ability.power}` : effectPreview,
       `Accuracy ${ability.accuracy + mods.bonusAccuracy}%`,
       ability.description,
@@ -101,22 +116,33 @@ export function AbilityCombatCard({
       className={`ability-card__inner${disabled ? ' ability-card__inner--disabled' : ''}`}
       title={detailTitle}
     >
-      <span className={`ability-card__type ability-card__type--${ability.type.toLowerCase()}`}>
-        {ability.type}
+      <span className="ability-card__header-row">
+        <span className="ability-card__name">{ability.name}</span>
+        <span className="ability-card__rank" title={`${getRankLabel(entry.rank)}`}>
+          {getMasteryLevelShort(entry.rank)}
+          {entry.rank >= MASTERY_MAX_RANK ? ' MAX' : ''}
+        </span>
       </span>
-      <span className="ability-card__name">{ability.name}</span>
-      <span className="ability-card__rank" title={`Mastery ${getRankLabel(entry.rank)}`}>
-        R{entry.rank}
+      <span className="ability-card__meta">
+        {ability.type} · {displayCategory}
       </span>
+      {entry.rank < MASTERY_MAX_RANK && (
+        <span className="ability-card__xp">
+          {entry.xp}/{entry.xpToNextRank} XP
+        </span>
+      )}
       {showsDamage && estimated !== null && estimated > 0 ? (
         <span className="ability-card__damage">
-          ~{estimated}
+          Est. Dmg: {estimated}
+          {typeMult !== 1 && (
+            <span className="ability-card__mult"> x{typeMult.toFixed(1)}</span>
+          )}
           {effectivenessLabel && (
-            <span className="ability-card__effectiveness">{effectivenessLabel}</span>
+            <span className="ability-card__effectiveness"> · {effectivenessLabel}</span>
           )}
         </span>
       ) : (
-        <span className="ability-card__effect">{effectPreview}</span>
+        <span className="ability-card__effect">Effect: {effectPreview}</span>
       )}
     </span>
   )

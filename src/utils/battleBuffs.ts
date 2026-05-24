@@ -3,7 +3,7 @@ import { getActiveCombatHelper } from './party'
 import type { RunCreature } from './progression'
 import type { BattleBuffs } from './badgeBonuses'
 
-export type BattleBuffStat = 'atk' | 'spAtk'
+export type BattleBuffStat = 'atk' | 'spAtk' | 'def' | 'spd'
 
 export type TemporaryBattleBuff = {
   id: string
@@ -19,7 +19,7 @@ export type CreatureWithBattleBuffs = {
 }
 
 export function defaultBattleBuffs(): BattleBuffs {
-  return { atk: 0, spAtk: 0 }
+  return { atk: 0, spAtk: 0, def: 0, spd: 0 }
 }
 
 export function addTemporaryBattleBuff<T extends CreatureWithBattleBuffs>(
@@ -41,7 +41,10 @@ export function getTemporaryBuffTotals(
   const totals = defaultBattleBuffs()
   for (const buff of creature.temporaryBattleBuffs ?? []) {
     if (buff.duration !== 'nextBattle') continue
-    totals[buff.stat] += buff.amount
+    if (buff.stat === 'atk') totals.atk += buff.amount
+    else if (buff.stat === 'spAtk') totals.spAtk += buff.amount
+    else if (buff.stat === 'def') totals.def += buff.amount
+    else if (buff.stat === 'spd') totals.spd += buff.amount
   }
   return totals
 }
@@ -54,6 +57,8 @@ export function getCombinedBattleBuffs(
   return {
     atk: stored.atk + temp.atk,
     spAtk: stored.spAtk + temp.spAtk,
+    def: stored.def + temp.def,
+    spd: stored.spd + temp.spd,
   }
 }
 
@@ -85,6 +90,50 @@ export function applyBattleTonicToActiveParty(
   const buff: TemporaryBattleBuff = {
     id: 'battle-tonic',
     stat: 'atk',
+    amount: 5,
+    target: 'activeParty',
+    duration: 'nextBattle',
+  }
+  let nextStarter = addTemporaryBattleBuff(starter, buff)
+  const helper = getActiveCombatHelper(recruits, activeHelperId)
+  const nextRecruits = helper
+    ? recruits.map((r) =>
+        r.id === helper.id ? addTemporaryBattleBuff(r, buff) : r,
+      )
+    : recruits
+  return { starter: nextStarter, recruits: nextRecruits }
+}
+
+export function applyGuardDustToActiveParty(
+  starter: RunCreature,
+  recruits: PartyCreature[],
+  activeHelperId: string | null,
+): { starter: RunCreature; recruits: PartyCreature[] } {
+  const buff: TemporaryBattleBuff = {
+    id: 'guard-dust',
+    stat: 'def',
+    amount: 5,
+    target: 'activeParty',
+    duration: 'nextBattle',
+  }
+  let nextStarter = addTemporaryBattleBuff(starter, buff)
+  const helper = getActiveCombatHelper(recruits, activeHelperId)
+  const nextRecruits = helper
+    ? recruits.map((r) =>
+        r.id === helper.id ? addTemporaryBattleBuff(r, buff) : r,
+      )
+    : recruits
+  return { starter: nextStarter, recruits: nextRecruits }
+}
+
+export function applySpeedMintToActiveParty(
+  starter: RunCreature,
+  recruits: PartyCreature[],
+  activeHelperId: string | null,
+): { starter: RunCreature; recruits: PartyCreature[] } {
+  const buff: TemporaryBattleBuff = {
+    id: 'speed-mint',
+    stat: 'spd',
     amount: 5,
     target: 'activeParty',
     duration: 'nextBattle',

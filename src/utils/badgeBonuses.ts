@@ -12,14 +12,16 @@ import {
   type CombatStatStages,
 } from './combatEffects'
 import {
-  recalculateStats,
-  scaleBaseStatsToLevel,
-  type RunCreature,
-} from './progression'
+  applyGearStatModifiers,
+  getEquippedGear,
+  getGearDamageMultiplier,
+  type CreatureWithGear,
+} from './gearSystem'
+import { recalculateStats, type RunCreature } from './progression'
 
 export type CombatFighter = RunCreature | PartyCreature
 
-export type BattleBuffs = { atk: number; spAtk: number }
+export type BattleBuffs = { atk: number; spAtk: number; def: number; spd: number }
 
 export type CombatStatContext = {
   earnedBadges: string[]
@@ -116,9 +118,9 @@ export function getEffectiveStatsWithBadges(
     ...withBadges.stats,
     atk: safeCombatStat(withBadges.stats.atk) + buffs.atk,
     spAtk: safeCombatStat(withBadges.stats.spAtk) + buffs.spAtk,
-    def: safeCombatStat(withBadges.stats.def),
+    def: safeCombatStat(withBadges.stats.def) + buffs.def,
     spDef: safeCombatStat(withBadges.stats.spDef),
-    spd: safeCombatStat(withBadges.stats.spd),
+    spd: safeCombatStat(withBadges.stats.spd) + buffs.spd,
     hp: safeCombatStat(withBadges.stats.hp, withBadges.maxHp),
   }
 }
@@ -139,11 +141,15 @@ export function getEffectiveStats(
   creature: CombatFighter,
   context: CombatStatContext,
 ): StarterStats {
-  const partyLevel = context.partyHighestLevel ?? creature.level
-  const baseStats =
-    partyLevel > creature.level
-      ? scaleBaseStatsToLevel(creature.baseStats, creature.level, partyLevel)
-      : creature.baseStats
+  const baseStats = {
+    ...creature.baseStats,
+    hp: creature.baseStats.hp ?? creature.maxHp,
+    atk: creature.baseStats.atk ?? creature.stats?.atk ?? 1,
+    def: creature.baseStats.def ?? creature.stats?.def ?? 1,
+    spAtk: creature.baseStats.spAtk ?? creature.stats?.spAtk ?? 1,
+    spDef: creature.baseStats.spDef ?? creature.stats?.spDef ?? 1,
+    spd: creature.baseStats.spd ?? creature.stats?.spd ?? 1,
+  }
   const statsFromPerks = recalculateStats(baseStats, creature.selectedPerks)
   const withPerks = {
     ...creature,
@@ -152,15 +158,17 @@ export function getEffectiveStats(
     currentHp: creature.currentHp,
   }
   const withBadges = getEffectiveStatsWithBadges(withPerks, context.earnedBadges)
+  const gear = getEquippedGear(creature as CreatureWithGear)
+  const withGear = applyGearStatModifiers(withBadges, gear)
   const stages = context.statStages ?? {}
 
   return {
-    ...withBadges,
-    atk: applyStatStage(withBadges.atk, stages.atk),
-    def: applyStatStage(withBadges.def, stages.def),
-    spAtk: applyStatStage(withBadges.spAtk, stages.spAtk),
-    spDef: applyStatStage(withBadges.spDef, stages.spDef),
-    spd: applyStatStage(withBadges.spd, stages.spd),
+    ...withGear,
+    atk: applyStatStage(withGear.atk, stages.atk),
+    def: applyStatStage(withGear.def, stages.def),
+    spAtk: applyStatStage(withGear.spAtk, stages.spAtk),
+    spDef: applyStatStage(withGear.spDef, stages.spDef),
+    spd: applyStatStage(withGear.spd, stages.spd),
   }
 }
 
@@ -185,6 +193,7 @@ export function getAttackerDamageMultiplier(
   ability: Ability,
   earnedBadges: string[],
   selectedPerks: string[],
+  attacker?: CombatFighter | null,
 ): number {
   let mult = getDamageMultiplierForAbility(ability, earnedBadges)
 
@@ -192,6 +201,14 @@ export function getAttackerDamageMultiplier(
     if (perkId === 'ember-blood' && ability.type === 'Fire') {
       mult += 0.1
     }
+  }
+
+  if (attacker) {
+    const gearMult = getGearDamageMultiplier(
+      getEquippedGear(attacker as CreatureWithGear),
+      ability,
+    )
+    mult *= gearMult
   }
 
   return mult

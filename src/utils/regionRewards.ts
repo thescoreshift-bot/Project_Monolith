@@ -33,21 +33,35 @@ function randomInRange(min: number, max: number): number {
 export function rollEnemyLevelForNode(
   regionId: string,
   nodeType: NodeType,
+  partyHighestLevel?: number,
 ): number {
   const { min, max } = getRegionEnemyLevelRange(regionId)
   const span = max - min
 
+  let level: number
+
   if (nodeType === 'boss' || nodeType === 'gymLeader') {
-    return max
-  }
-  if (nodeType === 'gymTrainer') {
-    return randomInRange(Math.max(min, max - 2), max)
-  }
-  if (nodeType === 'elite' || nodeType === 'alphaNest') {
+    level = max
+  } else if (nodeType === 'gymTrainer') {
+    level = randomInRange(Math.max(min, max - 2), max)
+  } else if (nodeType === 'elite' || nodeType === 'alphaNest') {
     const highMin = min + Math.floor(span * 0.55)
-    return randomInRange(highMin, max)
+    level = randomInRange(highMin, max)
+  } else {
+    level = randomInRange(min, max)
   }
-  return randomInRange(min, max)
+
+  // Early-run cap: fresh starters should not face end-of-region levels.
+  if (
+    partyHighestLevel !== undefined &&
+    partyHighestLevel <= 5 &&
+    (nodeType === 'battle' || nodeType === 'rest' || nodeType === 'shop' || nodeType === 'event')
+  ) {
+    const earlyCap = Math.max(1, Math.min(3, partyHighestLevel + 2))
+    level = Math.min(level, earlyCap)
+  }
+
+  return level
 }
 
 export function formatRewardMultiplier(regionId: string): string {

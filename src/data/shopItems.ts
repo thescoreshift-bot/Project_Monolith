@@ -1,29 +1,39 @@
-export type ShopItemId = 'small-potion' | 'battle-tonic' | 'focus-charm'
+/** @deprecated Shop catalog lives in items.ts — re-exports for compatibility. */
+import { SHOP_CONSUMABLE_ITEMS, type ItemDefinition } from './items'
+
+export type ShopItemId =
+  | 'small-potion'
+  | 'battle-tonic'
+  | 'focus-charm'
+  | 'medium-potion'
+  | 'revival-herb'
+  | 'guard-dust'
+  | 'speed-mint'
 
 export type ShopItem = {
   id: ShopItemId
   name: string
   cost: number
   description: string
+  category: 'consumable'
+  rarity: ItemDefinition['rarity']
 }
 
-export const SHOP_ITEMS: ShopItem[] = [
-  {
-    id: 'small-potion',
-    name: 'Small Potion',
-    cost: 20,
-    description: 'Heals all party creatures for 25 HP.',
-  },
-  {
-    id: 'battle-tonic',
-    name: 'Battle Tonic',
-    cost: 35,
-    description: '+5 ATK to all active battle creatures in the next combat.',
-  },
-  {
-    id: 'focus-charm',
-    name: 'Focus Charm',
-    cost: 40,
-    description: '+5 SP.ATK to all active battle creatures in the next combat.',
-  },
-]
+export const SHOP_ITEMS: ShopItem[] = SHOP_CONSUMABLE_ITEMS.filter((i) =>
+  [
+    'small-potion',
+    'battle-tonic',
+    'focus-charm',
+    'medium-potion',
+    'revival-herb',
+    'guard-dust',
+    'speed-mint',
+  ].includes(i.id),
+).map((i) => ({
+  id: i.id as ShopItemId,
+  name: i.name,
+  cost: i.price ?? 0,
+  description: i.description,
+  category: 'consumable' as const,
+  rarity: i.rarity,
+}))

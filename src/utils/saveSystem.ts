@@ -13,11 +13,20 @@ import type { AbilityMasteryPerkQueueEntry } from './abilityMastery'
 export type AbilityUpgradeQueueEntry = AbilityMasteryPerkQueueEntry
 import { ensureAbilityMastery } from './abilityMastery'
 import { normalizeRunCreature } from './evolutionSystem'
+import {
+  migrateLegacyGearInventory,
+  normalizeTrainerInventory,
+  type TrainerInventory,
+} from './inventorySystem'
 import { normalizePartyCreature, type PartyCreature } from './party'
 import type { RunCreature } from './progression'
+import {
+  normalizeQuestState,
+  type QuestState,
+} from './questSystem'
 
 const LEGACY_SAVE_KEY = 'project-monolith-run'
-export const SAVE_VERSION = 4
+export const SAVE_VERSION = 7
 
 export type SaveSlotId = 1 | 2
 
@@ -83,6 +92,7 @@ export type SavableScreen =
   | 'abilityUpgrade'
   | 'moveLearn'
   | 'abilityTransform'
+  | 'inventory'
 
 export type SavedXpLine = {
   name: string
@@ -105,6 +115,9 @@ export type SavedRewardInfo = {
   hasPerkDrafts?: boolean
   badgeEarned?: string
   bossVictory?: boolean
+  gearFound?: string
+  itemsFound?: string[]
+  materialsFound?: string[]
 }
 
 export type SavedRegionCompleteInfo = {
@@ -152,6 +165,10 @@ export type RunSaveData = {
   pendingTransformQueue?: import('./abilityMastery').AbilityTransformQueueEntry[]
   pendingPostBattleQueue?: import('./postBattleQueue').PostBattleQueueEvent[]
   draftingCreatureId: string | null
+  /** @deprecated migrated to trainerInventory.gear */
+  gearInventory?: string[]
+  trainerInventory?: TrainerInventory
+  questState?: QuestState
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -277,6 +294,7 @@ const SAVABLE_SCREENS: SavableScreen[] = [
   'abilityUpgrade',
   'moveLearn',
   'abilityTransform',
+  'inventory',
 ]
 
 function isSavableScreen(value: unknown): value is SavableScreen {
@@ -289,7 +307,9 @@ function validateRunSaveData(value: unknown): value is RunSaveData {
     value.version !== SAVE_VERSION &&
     value.version !== 1 &&
     value.version !== 2 &&
-    value.version !== 3
+    value.version !== 3 &&
+    value.version !== 4 &&
+    value.version !== 5
   ) {
     return false
   }
@@ -493,6 +513,11 @@ export function normalizeLoadedSaveData(
     pendingTransformQueue: parsed.pendingTransformQueue ?? [],
     pendingPostBattleQueue: parsed.pendingPostBattleQueue ?? [],
     draftingCreatureId: parsed.draftingCreatureId ?? null,
+    trainerInventory: migrateLegacyGearInventory(
+      normalizeTrainerInventory(parsed.trainerInventory),
+      parsed.gearInventory,
+    ),
+    questState: normalizeQuestState(parsed.questState),
     version: SAVE_VERSION,
   }
 }

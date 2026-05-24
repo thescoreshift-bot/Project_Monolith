@@ -3,6 +3,7 @@ import type { User } from '@supabase/supabase-js'
 import { AccountScreen, LoginScreen, RegisterScreen } from './components/AuthScreens'
 import { CharacterSelectScreen } from './components/CharacterSelectScreen'
 import { DailyRunScreen } from './components/DailyRunScreen'
+import { DailyDefeatScreen } from './components/DailyDefeatScreen'
 import { LeaderboardScreen } from './components/LeaderboardScreen'
 import { ProfileSetupScreen } from './components/ProfileSetupScreen'
 import { FeedbackModal } from './components/FeedbackModal'
@@ -23,6 +24,8 @@ import {
 } from './components/EvolutionScreen'
 import { CreaturePerksModal } from './components/CreaturePerksModal'
 import { MapBoard } from './components/MapBoard'
+import { GearEquipModal } from './components/GearEquipModal'
+import { InventoryScreen } from './components/InventoryScreen'
 import { PartyScreen } from './components/PartyScreen'
 import {
   RegionCompleteScreen,
@@ -31,6 +34,10 @@ import {
 import { RegionSelectScreen } from './components/RegionSelectScreen'
 import { RecruitmentScreen } from './components/RecruitmentScreen'
 import { RestScreen } from './components/RestScreen'
+import { RecoveryStationScreen } from './components/RecoveryStationScreen'
+import { QuestCompleteToastStack } from './components/QuestCompleteToast'
+import { FriendBattleScreen } from './components/FriendBattleScreen'
+import { PvpResultScreen } from './components/PvpResultScreen'
 import { ShopScreen } from './components/ShopScreen'
 import { getAbility } from './data/abilities'
 import { BADGES_IN_REGION, getBadge } from './data/badges'
@@ -47,11 +54,21 @@ import {
   type DailyModifier,
 } from './utils/dailyRun'
 import {
-  clearDailyRunState,
+  getDailyRunDayStateForToday,
+  hasDailyRunForToday,
   hasDailyRunInProgress,
-  loadDailyRunState,
-  saveDailyRunState,
+  loadDailyRunDayState,
+  resetCurrentDailyAttempt,
+  saveDailyRunDayState,
+  type DailyRunDayState,
 } from './utils/dailyRunState'
+import {
+  calculateCheckpoint,
+  calculateCurrentAttemptScore,
+  formatCheckpointLabel,
+  updateBestDailyScore,
+  type DailyRunScoreInput,
+} from './utils/dailyRunScoring'
 import {
   fetchLeaderboard,
   getPlayerRank,
@@ -72,6 +89,38 @@ import {
   type PendingChoiceSummary,
 } from './utils/rewardSummary'
 import { submitFeedback } from './utils/feedbackSystem'
+import {
+  createPvpChallenge,
+  fetchMyActivePvpChallenge,
+  fetchPvpChallengeByCode,
+  buildGauntletEnemies,
+  type PvpChallenge,
+} from './utils/pvpSystem'
+import {
+  fullPartyRecovery,
+  fullRecoveryCost,
+  getFaintedMembers,
+  hasHealableNonFainted,
+  healEntirePartyCost,
+  healNonFaintedParty,
+  isPartyFullyHealthy,
+  listPartyMembers,
+  revivePartyMember,
+  REVIVE_FAINTED_COST,
+  spendCoins,
+  type PartyMemberRef,
+} from './utils/recoveryStation'
+import {
+  acceptQuest,
+  claimQuestReward,
+  createDefaultQuestState,
+  normalizeQuestState,
+  updateQuestProgress,
+  type QuestEventPayload,
+  type QuestEventType,
+  type QuestRunContext,
+  type QuestState,
+} from './utils/questSystem'
 import {
   getPlayerPrefs,
   isTutorialCompleted,
@@ -116,6 +165,7 @@ import {
   type NodeVisitState,
 } from './data/nodeMap'
 import { getPerk, pickRandomPerks, type Perk } from './data/perks'
+import { getGearItem } from './data/gearItems'
 import { SHOP_ITEMS, type ShopItemId } from './data/shopItems'
 import { STARTERS, type Starter } from './data/starters'
 import {
@@ -128,6 +178,7 @@ import {
   getCombatModifiersFromMastery,
   getMasteryEntry,
   getResolvedAbilityId,
+  isMasteryPerkRankClaimed,
   rollCrit,
   rollHitsWithMastery,
   type AbilityMasteryPerkQueueEntry,
@@ -159,12 +210,7 @@ import {
   getFirstStrikeBonus,
   getPostVictoryHealFromBadges,
 } from './utils/badgeBonuses'
-import {
-  applyBattleTonicToActiveParty,
-  applyFocusCharmToActiveParty,
-  clearPartyBattleBuffs,
-  healAllPartyBy,
-} from './utils/battleBuffs'
+import { clearPartyBattleBuffs } from './utils/battleBuffs'
 import {
   getTypeEffectivenessMultiplier,
   SUPER_EFFECTIVE_MULTIPLIER,
@@ -187,13 +233,24 @@ import {
 } from './utils/defeatRecovery'
 import { applyEventChoice } from './utils/eventHandlers'
 import {
-  generateMap,
-  getInitialNodeStates,
   getMapNodeFromList,
   unlockBossIfReady,
 } from './utils/mapGenerator'
+import { rollBattleGearDrop, rollShopGearOffers } from './utils/gearSystem'
 import {
-  createRecruitFromEnemy,
+  addGearIdToTrainerInventory,
+  addItemToTrainerInventory,
+  applyBattleDropsToInventory,
+  emptyTrainerInventory,
+  equipGearFromTrainerInventory,
+  migrateLegacyGearInventory,
+  removeInventoryItemByInstanceId,
+  unequipGearToTrainerInventory,
+  type TrainerInventory,
+} from './utils/inventorySystem'
+import { useInventoryItem } from './utils/itemUse'
+import {
+  convertEnemyToRecruit,
   getActiveCombatHelper,
   isPartyDefeated,
   resolveActiveHelperId,
@@ -233,6 +290,11 @@ import {
   getRegionEnemyLevelRange,
 } from './utils/regionRewards'
 import {
+  createFreshMapState,
+  createFreshSaveData,
+  logNewGameCreated,
+} from './utils/runState'
+import {
   countBadgesInRegion,
   createRegionMap,
   getAllTravelRegions,
@@ -269,7 +331,7 @@ import {
 import './App.css'
 
 type PlayMode = 'offline' | 'cloud'
-type RunMode = 'normal' | 'daily'
+type RunMode = 'normal' | 'daily' | 'pvp'
 
 type SaveStatusKind = 'idle' | 'saving' | 'cloud' | 'local' | 'failed' | 'warning'
 
@@ -298,9 +360,15 @@ type Screen =
   | 'abilityTransform'
   | 'profileSetup'
   | 'dailyRun'
+  | 'dailyDefeat'
   | 'leaderboard'
   | 'runSummary'
   | 'settings'
+  | 'inventory'
+  | 'recoveryStation'
+  | 'pvp'
+  | 'pvpVictory'
+  | 'pvpDefeat'
 
 type CombatPhase = 'starter' | 'recruit' | 'enemy'
 
@@ -327,6 +395,9 @@ type RewardInfo = {
   badgeEarned?: string
   bossVictory?: boolean
   recruitmentNote?: string
+  gearFound?: string
+  itemsFound?: string[]
+  materialsFound?: string[]
 }
 
 type DefeatInfo = {
@@ -354,25 +425,6 @@ function completeNodeOnMap(
 
 function formatCategory(category: string): string {
   return category.charAt(0).toUpperCase() + category.slice(1)
-}
-
-function initMapState(
-  earnedBadges: string[],
-  regionId: string = DEFAULT_REGION_ID,
-  dailyModifier?: DailyModifier | null,
-) {
-  const { nodes, startNodeId } = generateMap(
-    regionId,
-    earnedBadges,
-    dailyModifier,
-  )
-  const nodeStates = getInitialNodeStates(
-    nodes,
-    startNodeId,
-    earnedBadges,
-    regionId,
-  )
-  return { mapNodes: nodes, nodeStates, startNodeId }
 }
 
 function App() {
@@ -409,6 +461,14 @@ function App() {
   )
   const [draftOptions, setDraftOptions] = useState<Perk[]>([])
   const [shopLog, setShopLog] = useState<string[]>([])
+  const [trainerInventory, setTrainerInventory] = useState<TrainerInventory>(
+    emptyTrainerInventory(),
+  )
+  const [inventoryMessage, setInventoryMessage] = useState<string | null>(null)
+  const [shopGearOffers, setShopGearOffers] = useState<string[]>([])
+  const [gearEquipCreatureId, setGearEquipCreatureId] = useState<string | null>(
+    null,
+  )
   const [restChoiceMade, setRestChoiceMade] = useState(false)
   const [currentEvent, setCurrentEvent] = useState<GameEvent | null>(null)
   const [mapMessage, setMapMessage] = useState<string | null>(null)
@@ -437,6 +497,7 @@ function App() {
   const [saveWarning, setSaveWarning] = useState<string | null>(null)
   const [uploadMessage, setUploadMessage] = useState<string | null>(null)
   const [uploadBusy, setUploadBusy] = useState(false)
+  const [slotActionMessage, setSlotActionMessage] = useState<string | null>(null)
   const authUserRef = useRef<User | null>(null)
   const playModeRef = useRef<PlayMode | null>(null)
   const activeSlotIdRef = useRef<SaveSlotId | null>(null)
@@ -499,8 +560,34 @@ function App() {
   )
   const [submitBusy, setSubmitBusy] = useState(false)
   const [submitMessage, setSubmitMessage] = useState<string | null>(null)
+  const [dailyMenuSubmitMessage, setDailyMenuSubmitMessage] = useState<string | null>(null)
+  const [dailyDefeatNewBest, setDailyDefeatNewBest] = useState(false)
+  const [dailyDefeatAttemptScore, setDailyDefeatAttemptScore] = useState(0)
+  const [dailyDefeatBestScore, setDailyDefeatBestScore] = useState(0)
+  const [dailyDefeatBestCheckpoint, setDailyDefeatBestCheckpoint] = useState('None')
+  const [dailyMenuRank, setDailyMenuRank] = useState<number | null>(null)
+  const [recoveryLogMessage, setRecoveryLogMessage] = useState<string | null>(null)
+  const [selectedReviveTarget, setSelectedReviveTarget] =
+    useState<PartyMemberRef | null>(null)
+  const [pvpLookupCode, setPvpLookupCode] = useState('')
+  const [pvpLookupChallenge, setPvpLookupChallenge] = useState<PvpChallenge | null>(
+    null,
+  )
+  const [myPvpChallenge, setMyPvpChallenge] = useState<PvpChallenge | null>(null)
+  const [pvpMessage, setPvpMessage] = useState<string | null>(null)
+  const [pvpBusy, setPvpBusy] = useState(false)
+  const [pvpResultMessage, setPvpResultMessage] = useState<string | null>(null)
+  const [pvpResultDetail, setPvpResultDetail] = useState('')
+  const [pvpResultCoins, setPvpResultCoins] = useState(0)
+  const [pvpOpponentName, setPvpOpponentName] = useState('Friend')
+  const [questState, setQuestState] = useState<QuestState>(createDefaultQuestState)
+  const [questBoardMessage, setQuestBoardMessage] = useState<string | null>(null)
+  const [questCompleteToasts, setQuestCompleteToasts] = useState<
+    { id: string; title: string; rewardPreview: string }[]
+  >([])
 
   const screenRef = useRef<Screen>('title')
+  const inventoryReturnScreenRef = useRef<'runMap' | 'party' | 'shop'>('runMap')
   const runModeRef = useRef<RunMode>('normal')
   const dailySeedRef = useRef(getDailySeed())
   const dailyModifierRef = useRef<DailyModifier>(
@@ -518,6 +605,15 @@ function App() {
   const enemyStatStagesRef = useRef<CombatStatStages>({})
   const playerStatStagesRef = useRef<Record<string, CombatStatStages>>({})
   const enemyTurnLockRef = useRef(false)
+  const pvpReturnScreenRef = useRef<'title' | 'runMap'>('title')
+  const pvpGauntletRef = useRef<Enemy[]>([])
+  const pvpGauntletIndexRef = useRef(0)
+  const prePvpPartyRef = useRef<{
+    starter: RunCreature
+    recruits: PartyCreature[]
+    activeHelperId: string | null
+  } | null>(null)
+  const pvpOpponentNameRef = useRef('Friend')
 
   useEffect(() => {
     runCreatureRef.current = runCreature
@@ -793,6 +889,77 @@ function App() {
     }, delayMs)
   }
 
+  function buildQuestCtx(): QuestRunContext | null {
+    if (!runCreature) return null
+    return {
+      starter: runCreature,
+      recruits: partyRecruits,
+      currentRegionId,
+      earnedBadges,
+    }
+  }
+
+  function dismissQuestToast(id: string) {
+    setQuestCompleteToasts((prev) => prev.filter((t) => t.id !== id))
+  }
+
+  function renderQuestToasts() {
+    return (
+      <QuestCompleteToastStack
+        toasts={questCompleteToasts}
+        onDismiss={dismissQuestToast}
+      />
+    )
+  }
+
+  function dispatchQuestEvent(
+    event: QuestEventType,
+    payload: QuestEventPayload = {},
+  ) {
+    if (!runCreature || runModeRef.current === 'pvp' || runModeRef.current === 'daily') {
+      return
+    }
+    const ctx = buildQuestCtx()
+    if (!ctx) return
+    setQuestState((prev) => {
+      const result = updateQuestProgress(prev, event, payload, ctx)
+      if (result.newlyCompleted.length > 0) {
+        setQuestCompleteToasts((toasts) => [
+          ...toasts,
+          ...result.newlyCompleted.map((q) => ({
+            id: `${q.id}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+            title: q.title,
+            rewardPreview: q.rewardPreview,
+          })),
+        ])
+      }
+      return result.state
+    })
+  }
+
+  function handleAcceptQuest(questId: string) {
+    setQuestState((s) => acceptQuest(s, questId))
+    setQuestBoardMessage('Quest accepted.')
+  }
+
+  function handleClaimQuest(questId: string) {
+    const ctx = buildQuestCtx()
+    if (!ctx || !runCreature) return
+    const result = claimQuestReward(questState, questId, ctx, trainerInventory)
+    if (!result) {
+      setQuestBoardMessage('Could not claim this quest.')
+      return
+    }
+    setQuestState(result.state)
+    setRunCreature(result.starter)
+    setPartyRecruits(result.recruits)
+    runCreatureRef.current = result.starter
+    partyRecruitsRef.current = result.recruits
+    setTrainerInventory(result.inventory)
+    setQuestBoardMessage(`Rewards claimed: ${result.rewardSummary}`)
+    void persistRun()
+  }
+
   function buildSaveData(): RunSaveData | null {
     if (!selectedStarter || !runCreature) return null
 
@@ -824,6 +991,8 @@ function App() {
       pendingAbilityUpgradeQueue,
       pendingTransformQueue,
       pendingPostBattleQueue,
+      trainerInventory,
+      questState,
     }
   }
 
@@ -836,18 +1005,29 @@ function App() {
     }
   }
 
-  function saveDailyRunProgress() {
-    if (
-      runModeRef.current !== 'daily' ||
-      !dailySeedRef.current ||
-      !selectedStarter ||
-      !runCreature
-    ) {
-      return
+  function buildDailyScoreInput(completed = false): DailyRunScoreInput | null {
+    if (!runCreature || !selectedStarter) return null
+    return {
+      starter: runCreature,
+      recruits: partyRecruits,
+      earnedBadges,
+      currentRegionId,
+      nodeStates,
+      scoreTracker: scoreTrackerRef.current,
+      completed,
     }
-    saveDailyRunState({
-      dailySeed: dailySeedRef.current,
-      modifierId: dailyModifierRef.current.id,
+  }
+
+  function syncDailyDayStateFromGame(completed = false): DailyRunDayState | null {
+    if (!dailySeedRef.current || !selectedStarter || !runCreature) return null
+    const input = buildDailyScoreInput(completed)
+    if (!input) return null
+
+    const day = getDailyRunDayStateForToday(
+      dailySeedRef.current,
+      dailyModifierRef.current.id,
+    )
+    day.currentAttemptRunState = {
       starterId: selectedStarter.id,
       runCreature,
       partyRecruits,
@@ -857,9 +1037,26 @@ function App() {
       earnedBadges,
       currentRegion: currentRegionId,
       scoreTracker: scoreTrackerRef.current,
-      runCompleted: false,
-      leaderboardSubmitted: scoreTrackerRef.current.submittedToLeaderboard,
-    })
+      trainerInventory,
+    }
+    day.currentAttemptScore = calculateCurrentAttemptScore(input)
+    day.currentCheckpoint = calculateCheckpoint(input)
+    day.leaderboardSubmitted =
+      scoreTrackerRef.current.submittedToLeaderboard || day.leaderboardSubmitted
+    saveDailyRunDayState(day)
+    return day
+  }
+
+  function saveDailyRunProgress() {
+    if (
+      runModeRef.current !== 'daily' ||
+      !dailySeedRef.current ||
+      !selectedStarter ||
+      !runCreature
+    ) {
+      return
+    }
+    syncDailyDayStateFromGame(false)
   }
 
   function refreshDailyMenu() {
@@ -869,6 +1066,13 @@ function App() {
     const mod = getDailyModifierForSeed(seed)
     setDailyModifier(mod)
     dailyModifierRef.current = mod
+    if (authUserRef.current) {
+      void loadLeaderboardForSeed(seed).then((rows) => {
+        setDailyMenuRank(getPlayerRank(rows, authUserRef.current?.id))
+      })
+    } else {
+      setDailyMenuRank(null)
+    }
   }
 
   function goToProfileSetup(
@@ -952,13 +1156,24 @@ function App() {
     setRunMode('normal')
     runModeRef.current = 'normal'
     setGameRngOverride(null)
-    clearDailyRunState()
   }
 
   function openRunSummary(completed: boolean) {
     const starter = runCreatureRef.current ?? runCreature
     if (!starter || !dailySeedRef.current) return
     const recruits = partyRecruitsRef.current ?? partyRecruits
+    if (runModeRef.current === 'daily') {
+      syncDailyDayStateFromGame(completed)
+      const input = buildDailyScoreInput(completed)
+      if (input) {
+        let day = getDailyRunDayStateForToday(
+          dailySeedRef.current,
+          dailyModifierRef.current.id,
+        )
+        const result = updateBestDailyScore(day, input)
+        saveDailyRunDayState(result.dayState)
+      }
+    }
     const snapshot = buildRunScore(
       scoreTrackerRef.current,
       starter,
@@ -970,7 +1185,7 @@ function App() {
     setScreen('runSummary')
   }
 
-  async function loadLeaderboardForSeed(seed: string) {
+  async function loadLeaderboardForSeed(seed: string): Promise<LeaderboardRow[]> {
     setLeaderboardLoading(true)
     setLeaderboardError(null)
     const result = await fetchLeaderboard(seed, 50)
@@ -979,6 +1194,7 @@ function App() {
       setLeaderboardError(result.error)
     }
     setLeaderboardLoading(false)
+    return result.rows
   }
 
   function openLeaderboard() {
@@ -987,33 +1203,57 @@ function App() {
     })
   }
 
-  function startDailyRunNew() {
+  function beginDailyAttempt() {
     const seed = getDailySeed()
     const modifier = getDailyModifierForSeed(seed)
     if (authUserRef.current && !playerProfile) {
-      goToProfileSetup('dailyRun', { callback: () => startDailyRunNew() })
+      goToProfileSetup('dailyRun', { callback: () => beginDailyAttempt() })
       return
     }
-    clearDailyRunState()
+    let day = getDailyRunDayStateForToday(seed, modifier.id)
+    day.totalAttempts += 1
+    day.currentAttemptDeaths = 0
+    day = resetCurrentDailyAttempt(day)
+    saveDailyRunDayState(day)
     setupDailyRunSession(seed, modifier)
     scoreTrackerRef.current = createScoreTracker(1)
-    resetRun()
+    resetRunMemory()
     partyOpenedThisRunRef.current = false
     beginTutorialIfNeeded()
     setScreen('starterSelect')
   }
 
+  function restartDailyAttempt() {
+    const ok = window.confirm(
+      'Restart this daily attempt? Your current attempt progress will reset, but your best score will be kept.',
+    )
+    if (!ok) return
+    const seed = getDailySeed()
+    const modifier = getDailyModifierForSeed(seed)
+    let day = getDailyRunDayStateForToday(seed, modifier.id)
+    day.totalAttempts += 1
+    day.currentAttemptDeaths = 0
+    day = resetCurrentDailyAttempt(day)
+    saveDailyRunDayState(day)
+    setupDailyRunSession(seed, modifier)
+    scoreTrackerRef.current = createScoreTracker(1)
+    resetRunMemory()
+    partyOpenedThisRunRef.current = false
+    setScreen('starterSelect')
+  }
+
   function continueDailyRunSaved() {
-    const saved = loadDailyRunState()
-    if (!saved || saved.dailySeed !== getDailySeed()) {
+    const day = loadDailyRunDayState()
+    const saved = day?.currentAttemptRunState
+    if (!day || !saved || day.dailySeed !== getDailySeed()) {
       window.alert('No daily run in progress for today.')
       return
     }
     const modifier =
-      saved.modifierId === dailyModifierRef.current.id
+      day.modifierId === dailyModifierRef.current.id
         ? dailyModifierRef.current
-        : getDailyModifierForSeed(saved.dailySeed)
-    setupDailyRunSession(saved.dailySeed, modifier)
+        : getDailyModifierForSeed(day.dailySeed)
+    setupDailyRunSession(day.dailySeed, modifier)
     scoreTrackerRef.current = saved.scoreTracker
     const starter = STARTERS.find((s) => s.id === saved.starterId)
     if (!starter) return
@@ -1025,7 +1265,107 @@ function App() {
     setNodeStates(saved.nodeStates)
     setEarnedBadges(saved.earnedBadges)
     setCurrentRegionId(saved.currentRegion)
+    setTrainerInventory(
+      saved.trainerInventory ??
+        migrateLegacyGearInventory(emptyTrainerInventory(), undefined),
+    )
     setScreen('runMap')
+  }
+
+  function handleDailyDefeatAfterDeath() {
+    const input = buildDailyScoreInput(false)
+    const seed = getDailySeed()
+    const modifier = getDailyModifierForSeed(seed)
+    let day = getDailyRunDayStateForToday(seed, modifier.id)
+    let newBest = false
+    let attemptScoreAtDeath = 0
+
+    if (input) {
+      attemptScoreAtDeath = calculateCurrentAttemptScore(input)
+      const result = updateBestDailyScore(day, input)
+      day = result.dayState
+      newBest = result.newBest
+    }
+
+    day.currentAttemptDeaths += 1
+    day = resetCurrentDailyAttempt(day)
+    saveDailyRunDayState(day)
+
+    setDailyDefeatNewBest(newBest)
+    setDailyDefeatAttemptScore(attemptScoreAtDeath)
+    setDailyDefeatBestScore(day.bestScore)
+    setDailyDefeatBestCheckpoint(formatCheckpointLabel(day.bestCheckpoint))
+    resetRunMemory()
+    setRunMode('normal')
+    runModeRef.current = 'normal'
+    setGameRngOverride(null)
+    setScreen('dailyDefeat')
+  }
+
+  async function handleSubmitBestDailyScore(fromMenu = false) {
+    const day = loadDailyRunDayState()
+    if (!day || day.bestScore <= 0) {
+      if (fromMenu) setDailyMenuSubmitMessage('No best score to submit yet.')
+      return
+    }
+    if (!authUser) {
+      if (fromMenu) setDailyMenuSubmitMessage('Login required to submit.')
+      return
+    }
+    if (!playerProfile) {
+      goToProfileSetup('dailyRun', {
+        callback: () => void handleSubmitBestDailyScore(fromMenu),
+      })
+      return
+    }
+
+    const summary = day.bestRunSummary
+    const checkpoint = summary?.checkpoint ?? day.bestCheckpoint
+    const attempt = day.currentAttemptRunState
+    const starter = attempt?.runCreature ?? runCreature
+    if (!starter || !checkpoint) return
+
+    if (fromMenu) setDailyMenuSubmitMessage(null)
+    else setSubmitMessage(null)
+    setSubmitBusy(true)
+
+    const scoreSnapshot: RunScoreSnapshot = {
+      total: day.bestScore,
+      breakdown: [{ label: 'Best daily score', points: day.bestScore }],
+      completed: summary?.completed ?? false,
+    }
+
+    const result = await submitDailyLeaderboardScore({
+      dailySeed: day.dailySeed,
+      scoreSnapshot,
+      regionId: checkpoint.region,
+      starter,
+      recruits: attempt?.partyRecruits ?? partyRecruits,
+      badgesEarned: checkpoint.badgesEarned,
+      evolutionsCount: checkpoint.evolutionsCount,
+      checkpoint,
+      forceBestScore: day.bestScore,
+    })
+
+    setSubmitBusy(false)
+
+    if (!result.ok) {
+      const msg = result.error ?? 'Submit failed.'
+      if (fromMenu) setDailyMenuSubmitMessage(msg)
+      else setSubmitMessage(msg)
+      return
+    }
+
+    day.leaderboardSubmitted = true
+    saveDailyRunDayState(day)
+    scoreTrackerRef.current.submittedToLeaderboard = true
+
+    const successMsg = result.keptPrevious
+      ? 'Your previous higher score was kept on the leaderboard.'
+      : 'Best score submitted to leaderboard!'
+
+    if (fromMenu) setDailyMenuSubmitMessage(successMsg)
+    else setSubmitMessage(successMsg)
   }
 
   async function persistRun() {
@@ -1073,6 +1413,45 @@ function App() {
     persistInFlightRef.current = false
   }
 
+  async function persistSaveData(data: RunSaveData) {
+    const slotId = activeSlotIdRef.current
+    if (!slotId || persistInFlightRef.current) return
+
+    persistInFlightRef.current = true
+    setSaveStatus('saving')
+    setSaveWarning(null)
+
+    const envelope = buildSaveEnvelope(slotId, data)
+    const mode = playModeRef.current
+
+    if (mode === 'cloud' && authUserRef.current && isSupabaseConfigured()) {
+      const localOk = saveRunToSlot(slotId, data)
+      const cloudResult = await saveToCloudSlot(slotId, envelope)
+      if (cloudResult.ok) {
+        setSaveStatus('cloud')
+        await refreshCloudSlots()
+      } else if (localOk) {
+        setSaveStatus('warning')
+        setSaveWarning('Cloud save failed. Local backup saved.')
+        refreshLocalSlots()
+      } else {
+        setSaveStatus('failed')
+      }
+    } else if (saveRunToSlot(slotId, data)) {
+      setSaveStatus('local')
+      refreshLocalSlots()
+    } else {
+      setSaveStatus('failed')
+    }
+
+    persistInFlightRef.current = false
+  }
+
+  function haltActiveSlotAutosave() {
+    activeSlotIdRef.current = null
+    setActiveSlotId(null)
+  }
+
   function applySaveToState(saved: RunSaveData, forceRunMap: boolean): boolean {
     const starter = STARTERS.find((s) => s.id === saved.starterId)
     if (!starter) {
@@ -1109,6 +1488,14 @@ function App() {
     setRegionCompleteInfo(saved.regionCompleteInfo ?? null)
 
     setShopLog(saved.shopLog)
+    setTrainerInventory(
+      saved.trainerInventory ??
+        migrateLegacyGearInventory(
+          emptyTrainerInventory(),
+          saved.gearInventory,
+        ),
+    )
+    setQuestState(normalizeQuestState(saved.questState))
     setRestChoiceMade(saved.restChoiceMade)
     setEnemy(null)
     setBattleLog([])
@@ -1288,6 +1675,9 @@ function App() {
     setDraftingCreatureId(null)
     setDraftOptions([])
     setShopLog([])
+    setTrainerInventory(emptyTrainerInventory())
+    setShopGearOffers([])
+    setGearEquipCreatureId(null)
     setRestChoiceMade(false)
     setCurrentEvent(null)
     setMapMessage(null)
@@ -1298,12 +1688,32 @@ function App() {
     setLastCombatNode(null)
     setPendingEvolutionQueue([])
     setEvolutionScreenData(null)
+    setPendingAbilityUpgradeQueue([])
+    setPendingTransformQueue([])
+    setPendingPostBattleQueue([])
+    setMoveLearnContext(null)
+    setActiveTransformEntry(null)
+    setInventoryMessage(null)
     resetCombatSession()
   }
 
-  function goToTitle() {
+  /** Clear all run state in React and refs (prevents stale region/enemy data after delete/new game). */
+  function resetRunMemory() {
     resetRun()
+    runCreatureRef.current = null
+    partyRecruitsRef.current = []
+    pendingAbilityUpgradeQueueRef.current = []
+    pendingTransformQueueRef.current = []
+    pendingPostBattleQueueRef.current = []
+    scoreTrackerRef.current = createScoreTracker()
+    preCombatMasteryRef.current = null
+    partyOpenedThisRunRef.current = false
+  }
+
+  function goToTitle() {
+    resetRunMemory()
     setActiveSlotId(null)
+    activeSlotIdRef.current = null
     setSelectedCharSlot(null)
     setPlayMode(null)
     setSaveStatus('idle')
@@ -1340,45 +1750,7 @@ function App() {
   }
 
   async function handleSubmitDailyScore() {
-    if (!runSummaryScore || !runCreature || !dailySeed) return
-    if (!authUser) {
-      setSubmitMessage('Login required to submit to leaderboard.')
-      return
-    }
-    if (!playerProfile) {
-      goToProfileSetup('runSummary', {
-        callback: () => void handleSubmitDailyScore(),
-      })
-      return
-    }
-    setSubmitBusy(true)
-    const result = await submitDailyLeaderboardScore({
-      dailySeed,
-      scoreSnapshot: runSummaryScore,
-      regionId: currentRegionId,
-      starter: runCreature,
-      recruits: partyRecruits,
-      badgesEarned: earnedBadges.length,
-      evolutionsCount: scoreTrackerRef.current.evolutionsReached,
-    })
-    setSubmitBusy(false)
-    if (!result.ok) {
-      if (result.needsProfile) {
-        goToProfileSetup('runSummary', {
-          callback: () => void handleSubmitDailyScore(),
-        })
-        return
-      }
-      setSubmitMessage(result.error ?? 'Submit failed.')
-      return
-    }
-    scoreTrackerRef.current.submittedToLeaderboard = true
-    setSubmitMessage(
-      result.keptPrevious
-        ? 'Your previous higher score was kept on the leaderboard.'
-        : 'Score submitted to leaderboard!',
-    )
-    clearDailyRunState()
+    await handleSubmitBestDailyScore(false)
   }
 
   function openCharacterSelect(mode: PlayMode) {
@@ -1386,6 +1758,10 @@ function App() {
       goToProfileSetup('characterSelect', { playMode: 'cloud' })
       return
     }
+    haltActiveSlotAutosave()
+    resetRunMemory()
+    teardownDailyRunSession()
+    setSlotActionMessage(null)
     setPlayMode(mode)
     playModeRef.current = mode
     setSelectedCharSlot(null)
@@ -1397,6 +1773,9 @@ function App() {
   }
 
   async function loadSlotAndContinue(slotId: SaveSlotId, mode: PlayMode) {
+    teardownDailyRunSession()
+    setRunMode('normal')
+    runModeRef.current = 'normal'
     let saved: RunSaveData | null = null
     if (mode === 'cloud') {
       const envelope = await loadFromCloudSlot(slotId)
@@ -1413,6 +1792,7 @@ function App() {
       window.alert('Save data is missing or corrupted.')
       return
     }
+    resetRunMemory()
     setActiveSlotId(slotId)
     activeSlotIdRef.current = slotId
     if (!applySaveToState(saved, true)) {
@@ -1449,10 +1829,14 @@ function App() {
       )
       if (!ok) return
     }
-    void clearSlotData(selectedCharSlot, playMode).then(() => {
-      setActiveSlotId(selectedCharSlot)
-      activeSlotIdRef.current = selectedCharSlot
-      resetRun()
+    const slotId = selectedCharSlot
+    haltActiveSlotAutosave()
+    void clearSlotData(slotId, playMode).then(() => {
+      teardownDailyRunSession()
+      resetRunMemory()
+      setActiveSlotId(slotId)
+      activeSlotIdRef.current = slotId
+      setSlotActionMessage(null)
       partyOpenedThisRunRef.current = false
       beginTutorialIfNeeded()
       setScreen('starterSelect')
@@ -1466,15 +1850,18 @@ function App() {
     if (summary.isEmpty) return
     const ok = window.confirm(`Delete save in Slot ${selectedCharSlot}?`)
     if (!ok) return
-    void clearSlotData(selectedCharSlot, playMode).then(() => {
-      if (activeSlotId === selectedCharSlot) {
-        setActiveSlotId(null)
-        activeSlotIdRef.current = null
-        resetRun()
+    const slotId = selectedCharSlot
+    const wasActive = activeSlotIdRef.current === slotId
+    if (wasActive) haltActiveSlotAutosave()
+    void clearSlotData(slotId, playMode).then(() => {
+      if (wasActive || runCreatureRef.current) {
+        resetRunMemory()
+        teardownDailyRunSession()
       }
       setSelectedCharSlot(null)
       refreshLocalSlots()
       if (playMode === 'cloud') void refreshCloudSlots()
+      setSlotActionMessage('Save deleted.')
     })
   }
 
@@ -1534,6 +1921,13 @@ function App() {
 
   function confirmStarter() {
     if (!pendingStarter) return
+    const isDaily = runModeRef.current === 'daily'
+    if (!isDaily) {
+      teardownDailyRunSession()
+      setRunMode('normal')
+      runModeRef.current = 'normal'
+    }
+
     setSelectedStarter(pendingStarter)
     setEarnedBadges([])
     setPartyRecruits([])
@@ -1541,32 +1935,78 @@ function App() {
     setCompletedRegionIds([])
     setPendingBossVictory(false)
     setRegionCompleteInfo(null)
-    const regionId =
-      runModeRef.current === 'daily' ? getDailyRunRegionId() : DEFAULT_REGION_ID
+    setPendingPerkDraftQueue([])
+    setPendingEvolutionQueue([])
+    setPendingAbilityUpgradeQueue([])
+    setPendingTransformQueue([])
+    setPendingPostBattleQueue([])
+    setPendingRecruit(null)
+    setEnemy(null)
+    setBattleLog([])
+    setRewardInfo(null)
+    setDefeatInfo(null)
+    setActiveNodeId(null)
+    setCurrentNode(null)
+    setLastCombatNode(null)
+    resetCombatSession()
+
+    const regionId = isDaily ? getDailyRunRegionId() : DEFAULT_REGION_ID
     setCurrentRegionId(regionId)
     const creature = createRunCreature(pendingStarter)
     setRunCreature(creature)
+    runCreatureRef.current = creature
+    partyRecruitsRef.current = []
+    const freshInventory = emptyTrainerInventory()
+    setTrainerInventory(freshInventory)
+    setQuestState(createDefaultQuestState())
+    setShopGearOffers([])
     scoreTrackerRef.current = createScoreTracker(creature.level)
-    const { mapNodes: nodes, nodeStates: states } = initMapState(
-      [],
+
+    const { mapNodes: nodes, nodeStates: states } = createFreshMapState(
       regionId,
-      runModeRef.current === 'daily' ? dailyModifierRef.current : null,
+      [],
+      isDaily ? dailyModifierRef.current : null,
     )
     setMapNodes(nodes)
     setNodeStates(states)
-    if (runModeRef.current === 'daily') {
+
+    logNewGameCreated({
+      slotId: activeSlotIdRef.current,
+      currentRegion: regionId,
+      starterLevel: creature.level,
+      mapNodeCount: nodes.length,
+      mode: isDaily ? 'daily' : 'normal',
+    })
+
+    if (isDaily) {
       saveDailyRunProgress()
+    } else if (activeSlotIdRef.current) {
+      const freshSave = createFreshSaveData({
+        starterId: pendingStarter.id,
+        runCreature: creature,
+        mapNodes: nodes,
+        nodeStates: states,
+        regionId,
+        trainerInventory: freshInventory,
+      })
+      void persistSaveData(freshSave)
     }
+
+    setMapMessage('New run created.')
     maybeAdvanceTutorial('chooseStarter', 'clickBattleNode')
     setScreen('runMap')
   }
 
   function markNodeComplete(nodeId: string) {
+    const node = getMapNodeFromList(mapNodes, nodeId)
     setNodeStates((s) =>
       completeNodeOnMap(nodeId, mapNodes, s, earnedBadges),
     )
     setActiveNodeId(null)
     setCurrentNode(null)
+    if (node) {
+      dispatchQuestEvent('nodeCleared', { nodeType: node.type })
+    }
   }
 
   function startCombat(node: MapNode) {
@@ -1574,10 +2014,12 @@ function App() {
     if (getNodeState(nodeStates, node.id) !== 'available') return
 
     const kind = getEncounterKind(node.type)
+    const partyLevel = getPartyHighestLevel(runCreature, partyRecruits)
     const spawned = getEnemyForNode(
       node,
       currentRegionId,
       getDailyEnemySpawnOptions(),
+      partyLevel,
     )
 
     setActiveNodeId(node.id)
@@ -1643,6 +2085,7 @@ function App() {
         break
       case 'shop':
         setShopLog([])
+        setShopGearOffers(rollShopGearOffers(currentRegionId))
         setScreen('shop')
         break
       case 'rest':
@@ -1851,6 +2294,7 @@ function App() {
       ability,
       earnedBadges,
       attacker.selectedPerks,
+      attacker,
     )
     const typeMult = getTypeEffectivenessMultiplier(ability.type, enemy.type)
     const masteryMods = getCombatModifiersFromMastery(masteryEntry)
@@ -1921,6 +2365,13 @@ function App() {
       }
     } else {
       const crit = rollCrit(masteryMods.bonusCritChance)
+      const damageDebug = {
+        attackerName,
+        attackerId: attackerKey,
+        abilityId: resolvedId,
+        abilityName: ability.name,
+        defenderName: enemy.name,
+      }
       let damage = calcDamageWithMastery(
         ability,
         effectiveStats,
@@ -1932,12 +2383,13 @@ function App() {
         {
           defenderMaxHp: enemy.maxHp,
           attackerLevel: attacker.level,
-          encounterKind: 'normal',
+          encounterKind: enemy.kind,
         },
+        damageDebug,
       )
-      damage = sanitizeDamage(damage, enemy.maxHp)
-      if (damage > 0) {
-        damage = Math.max(1, damage + firstStrikeBonus)
+      damage = sanitizeDamage(damage, enemy.maxHp, ability, typeMult)
+      if (damage > 0 && firstStrikeBonus > 0) {
+        damage += firstStrikeBonus
       }
 
       nextEnemy = {
@@ -2030,6 +2482,11 @@ function App() {
     setCombatLocked(true)
     console.log('Defeat detected')
 
+    if (runModeRef.current === 'pvp') {
+      finishPvpDefeat()
+      return
+    }
+
     const penalized = applyDefeatPenalties(starterSnapshot, recruitsSnapshot)
     const cleared = clearPartyBattleBuffs(
       penalized.starter,
@@ -2052,7 +2509,7 @@ function App() {
       scoreTrackerRef.current.defeats += 1
       runCreatureRef.current = cleared.starter
       partyRecruitsRef.current = cleared.recruits
-      openRunSummary(false)
+      handleDailyDefeatAfterDeath()
       return
     }
 
@@ -2164,7 +2621,12 @@ function App() {
         typeMult,
         currentEnemy.kind,
       )
-      damage = sanitizeDamage(damage, target.maxHp)
+      damage = sanitizeDamage(
+        damage,
+        target.maxHp,
+        abilityForDamage,
+        typeMult,
+      )
       const seNote =
         typeMult >= SUPER_EFFECTIVE_MULTIPLIER ? ' (super effective)' : ''
       if (target.key === 'starter') {
@@ -2253,14 +2715,29 @@ function App() {
     const starterSnapshot = runCreatureRef.current ?? runCreature
     const recruitsSnapshot = partyRecruitsRef.current ?? partyRecruits
 
-    if (!activeNodeId || !starterSnapshot || !lastCombatNode) return
     if (screenRef.current !== 'combat') return
 
     clearCombatTimeout()
     combatEndedRef.current = true
     setCombatLocked(true)
 
+    if (runModeRef.current === 'pvp') {
+      handlePvpVictory()
+      return
+    }
+
+    if (!activeNodeId || !starterSnapshot || !lastCombatNode) return
+
     markNodeComplete(activeNodeId)
+
+    dispatchQuestEvent('battleWon', {
+      encounterKind: activeEncounterKind,
+      nodeType: lastCombatNode.type,
+    })
+    dispatchQuestEvent('enemyDefeated', {
+      encounterKind: activeEncounterKind,
+      enemyKind: defeatedEnemy.kind,
+    })
 
     recordBattleVictory(scoreTrackerRef.current, activeEncounterKind)
 
@@ -2299,6 +2776,9 @@ function App() {
 
     let nextStarter = addCoins(xpResult.starter, rewards.coins)
     let nextRecruits = xpResult.recruits
+    if (rewards.coins > 0) {
+      dispatchQuestEvent('coinsCollected', { amount: rewards.coins })
+    }
 
     const revived = reviveFaintedToOne(nextStarter, nextRecruits)
     nextStarter = revived.starter
@@ -2395,6 +2875,14 @@ function App() {
       setPendingBossVictory(true)
     }
 
+    const droppedGear = rollBattleGearDrop(activeEncounterKind)
+    const dropResult = applyBattleDropsToInventory(
+      trainerInventory,
+      activeEncounterKind,
+      droppedGear,
+    )
+    setTrainerInventory(dropResult.inventory)
+
     const rewardPayload: RewardInfo = {
       coinsGained: rewards.coins,
       xpLines: xpResult.xpLines,
@@ -2406,6 +2894,10 @@ function App() {
       hasPerkDrafts: xpResult.perkDraftQueue.length > 0,
       badgeEarned,
       bossVictory: isBossVictory ? true : undefined,
+      gearFound: dropResult.gearFound,
+      itemsFound: dropResult.itemsFound.length > 0 ? dropResult.itemsFound : undefined,
+      materialsFound:
+        dropResult.materialsFound.length > 0 ? dropResult.materialsFound : undefined,
     }
 
     const recruitChance =
@@ -2416,7 +2908,7 @@ function App() {
       Math.random() < recruitChance
 
     if (recruitRoll) {
-      setPendingRecruit(createRecruitFromEnemy(defeatedEnemy))
+      setPendingRecruit(convertEnemyToRecruit(defeatedEnemy))
       setRewardInfo({
         ...rewardPayload,
         recruitmentNote: `Recruitment available — ${defeatedEnemy.name} wants to join!`,
@@ -2459,6 +2951,11 @@ function App() {
 
     setCombatLocked(true)
     maybeAdvanceTutorial('useAbility', 'winBattle')
+
+    const questAbility = getAbility(abilityId)
+    if (questAbility) {
+      dispatchQuestEvent('abilityUsed', { abilityType: questAbility.type })
+    }
 
     const starterSnapshot = runCreatureRef.current ?? runCreature
     const recruitsSnapshot = partyRecruitsRef.current ?? partyRecruits
@@ -2639,14 +3136,17 @@ function App() {
           return
         }
         const masteryEntry = getMasteryEntry(masteryCreature, event.abilityId)
-        beginAbilityUpgradeFor(
-          buildAbilityMasteryPerkQueueEntry(
-            event.creatureId,
-            event.abilityId,
-            event.rank,
-            masteryEntry.selectedPerks,
-          ),
+        if (isMasteryPerkRankClaimed(masteryEntry, event.rank)) {
+          consumePostBattleQueueAndContinue(starter, recruits)
+          return
+        }
+        const draftEntry = buildAbilityMasteryPerkQueueEntry(
+          event.creatureId,
+          event.abilityId,
+          event.rank,
+          masteryEntry.selectedPerks,
         )
+        beginAbilityUpgradeFor(draftEntry)
         return
       }
       case 'abilityTransform':
@@ -2964,6 +3464,7 @@ function App() {
     setPartyRecruits(nextRecruits)
     scoreTrackerRef.current.recruitsAdded += 1
     setPendingRecruit(null)
+    dispatchQuestEvent('creatureRecruited', {})
     setScreen('reward')
   }
 
@@ -2982,6 +3483,7 @@ function App() {
     )
     setPartyRecruits(nextRecruits)
     scoreTrackerRef.current.recruitsAdded += 1
+    dispatchQuestEvent('creatureRecruited', {})
     if (activeHelperId === replaceId) {
       setActiveHelperId(pendingRecruit.id)
     }
@@ -3010,13 +3512,26 @@ function App() {
   }
 
   function handleSetPartyHelper(recruitId: string) {
-    if (!partyRecruits.some((r) => r.id === recruitId)) return
+    if (!runCreature || !partyRecruits.some((r) => r.id === recruitId)) return
+    const targetLevel = getPartyHighestLevel(runCreature, partyRecruits)
+    const synced = partyRecruits.map((r) =>
+      r.id === recruitId ? partyCreatureAtLevel(r, targetLevel) : r,
+    )
+    setPartyRecruits(synced)
+    partyRecruitsRef.current = synced
     setActiveHelperId(recruitId)
   }
 
   function handleDismissRecruit(recruitId: string) {
+    const dismissed = partyRecruits.find((r) => r.id === recruitId)
+    if (dismissed?.equippedGearId) {
+      setTrainerInventory((prev) =>
+        addGearIdToTrainerInventory(prev, dismissed.equippedGearId!),
+      )
+    }
     const nextRecruits = partyRecruits.filter((r) => r.id !== recruitId)
     setPartyRecruits(nextRecruits)
+    partyRecruitsRef.current = nextRecruits
     if (activeHelperId === recruitId) {
       setActiveHelperId(null)
     }
@@ -3065,7 +3580,7 @@ function App() {
     setScreen('runMap')
   }
 
-  function handleBuyItem(itemId: ShopItemId) {
+  function handleBuyConsumable(itemId: ShopItemId) {
     if (!runCreature) return
 
     const item = SHOP_ITEMS.find((i) => i.id === itemId)
@@ -3079,54 +3594,144 @@ function App() {
       return
     }
 
-    let next: RunCreature = {
+    const next: RunCreature = {
       ...runCreature,
       coins: runCreature.coins - item.cost,
     }
-
-    if (itemId === 'small-potion') {
-      const healed = healAllPartyBy(
-        next,
-        partyRecruitsRef.current ?? partyRecruits,
-        25,
-      )
-      next = healed.starter
-      setPartyRecruits(healed.recruits)
-      partyRecruitsRef.current = healed.recruits
-      setShopLog((prev) => [
-        ...prev,
-        'Small Potion used. All party creatures healed for 25 HP.',
-      ])
-    } else if (itemId === 'battle-tonic') {
-      const buffed = applyBattleTonicToActiveParty(
-        next,
-        partyRecruitsRef.current ?? partyRecruits,
-        activeHelperId,
-      )
-      next = buffed.starter
-      setPartyRecruits(buffed.recruits)
-      partyRecruitsRef.current = buffed.recruits
-      setShopLog((prev) => [
-        ...prev,
-        'Battle Tonic purchased. Your active battle creatures will gain +5 ATK next combat.',
-      ])
-    } else if (itemId === 'focus-charm') {
-      const buffed = applyFocusCharmToActiveParty(
-        next,
-        partyRecruitsRef.current ?? partyRecruits,
-        activeHelperId,
-      )
-      next = buffed.starter
-      setPartyRecruits(buffed.recruits)
-      partyRecruitsRef.current = buffed.recruits
-      setShopLog((prev) => [
-        ...prev,
-        'Focus Charm purchased. Your active battle creatures will gain +5 SP.ATK next combat.',
-      ])
-    }
-
+    setTrainerInventory((prev) => addItemToTrainerInventory(prev, itemId, 1))
+    setShopLog((prev) => [...prev, `Bought ${item.name} x1.`])
     runCreatureRef.current = next
     setRunCreature(next)
+  }
+
+  function handleBuyGear(gearId: string) {
+    if (!runCreature) return
+    const gear = getGearItem(gearId)
+    if (!gear) return
+    if (!shopGearOffers.includes(gearId)) return
+
+    if (runCreature.coins < gear.price) {
+      setShopLog((prev) => [
+        ...prev,
+        `Not enough coins for ${gear.name} (need ${gear.price}).`,
+      ])
+      return
+    }
+
+    const next: RunCreature = {
+      ...runCreature,
+      coins: runCreature.coins - gear.price,
+    }
+    setTrainerInventory((prev) => addGearIdToTrainerInventory(prev, gearId))
+    setShopLog((prev) => [...prev, `Bought ${gear.name} x1.`])
+    runCreatureRef.current = next
+    setRunCreature(next)
+  }
+
+  function handleEquipGear(creatureId: string, gearInstanceId: string) {
+    if (!runCreature) return
+
+    if (creatureId === STARTER_CREATURE_ID) {
+      const result = equipGearFromTrainerInventory(
+        runCreature,
+        trainerInventory,
+        gearInstanceId,
+      )
+      if (!result) return
+      setRunCreature(result.creature)
+      runCreatureRef.current = result.creature
+      setTrainerInventory(result.inventory)
+      setGearEquipCreatureId(null)
+      setInventoryMessage(`Equipped gear on ${runCreature.name}.`)
+      dispatchQuestEvent('gearEquipped', {})
+      return
+    }
+
+    const recruit = partyRecruits.find((r) => r.id === creatureId)
+    if (!recruit) return
+    const result = equipGearFromTrainerInventory(
+      recruit,
+      trainerInventory,
+      gearInstanceId,
+    )
+    if (!result) return
+    const nextRecruits = partyRecruits.map((r) =>
+      r.id === creatureId ? result.creature : r,
+    )
+    setPartyRecruits(nextRecruits)
+    partyRecruitsRef.current = nextRecruits
+    setTrainerInventory(result.inventory)
+    setGearEquipCreatureId(null)
+    setInventoryMessage(`Equipped gear on ${recruit.name}.`)
+    dispatchQuestEvent('gearEquipped', {})
+  }
+
+  function handleUnequipGear(creatureId: string) {
+    if (!runCreature) return
+
+    if (creatureId === STARTER_CREATURE_ID) {
+      const result = unequipGearToTrainerInventory(runCreature, trainerInventory)
+      if (result.creature.equippedGearId === runCreature.equippedGearId) return
+      setRunCreature(result.creature)
+      runCreatureRef.current = result.creature
+      setTrainerInventory(result.inventory)
+      return
+    }
+
+    const recruit = partyRecruits.find((r) => r.id === creatureId)
+    if (!recruit) return
+    const result = unequipGearToTrainerInventory(recruit, trainerInventory)
+    if (result.creature.equippedGearId === recruit.equippedGearId) return
+    const nextRecruits = partyRecruits.map((r) =>
+      r.id === creatureId ? result.creature : r,
+    )
+    setPartyRecruits(nextRecruits)
+    partyRecruitsRef.current = nextRecruits
+    setTrainerInventory(result.inventory)
+  }
+
+  function openInventory(from: 'runMap' | 'party' | 'shop') {
+    inventoryReturnScreenRef.current = from
+    setScreen('inventory')
+  }
+
+  function handleInventoryBack() {
+    setScreen(inventoryReturnScreenRef.current)
+  }
+
+  function handleUseInventoryItem(instanceId: string, targetCreatureId?: string) {
+    if (!runCreature) return
+    const result = useInventoryItem({
+      instanceId,
+      inventory: trainerInventory,
+      starter: runCreature,
+      recruits: partyRecruits,
+      activeHelperId,
+      targetCreatureId,
+    })
+    if (!result.ok) {
+      setInventoryMessage(result.message)
+      return
+    }
+    if (result.starter) {
+      setRunCreature(result.starter)
+      runCreatureRef.current = result.starter
+    }
+    if (result.recruits) {
+      setPartyRecruits(result.recruits)
+      partyRecruitsRef.current = result.recruits
+    }
+    if (result.inventory) {
+      setTrainerInventory(result.inventory)
+    }
+    setInventoryMessage(result.message)
+  }
+
+  function handleDropInventoryItem(instanceId: string) {
+    setTrainerInventory((prev) =>
+      removeInventoryItemByInstanceId(prev, instanceId, 1),
+    )
+    setInventoryMessage('Item dropped.')
   }
 
   function handleRestChoice(type: 'rest' | 'train') {
@@ -3159,6 +3764,264 @@ function App() {
     setScreen('runMap')
   }
 
+  async function refreshMyPvpChallenge() {
+    const result = await fetchMyActivePvpChallenge()
+    if (result.ok && result.challenge) {
+      setMyPvpChallenge(result.challenge)
+    } else {
+      setMyPvpChallenge(null)
+    }
+  }
+
+  function openFriendBattle(from: 'title' | 'runMap' = 'title') {
+    pvpReturnScreenRef.current = from
+    setPvpMessage(null)
+    setPvpResultMessage(null)
+    setPvpLookupChallenge(null)
+    void refreshMyPvpChallenge()
+    setScreen('pvp')
+  }
+
+  function openRecoveryStation() {
+    if (!runCreature) return
+    setRecoveryLogMessage(null)
+    const fainted = getFaintedMembers(runCreature, partyRecruits)
+    setSelectedReviveTarget(fainted[0]?.ref ?? null)
+    setScreen('recoveryStation')
+  }
+
+  function handleRecoveryBack() {
+    setScreen('runMap')
+  }
+
+  function handleRecoveryHealParty() {
+    if (!runCreature) return
+    if (isPartyFullyHealthy(runCreature, partyRecruits)) {
+      setRecoveryLogMessage('Your party is already healthy.')
+      return
+    }
+    if (!hasHealableNonFainted(runCreature, partyRecruits)) {
+      setRecoveryLogMessage('No living creatures need healing. Try revive or full recovery.')
+      return
+    }
+    const cost = healEntirePartyCost(partyRecruits)
+    if (runCreature.coins < cost) {
+      setRecoveryLogMessage('Not enough coins.')
+      return
+    }
+    const healed = healNonFaintedParty(runCreature, partyRecruits)
+    const nextStarter = spendCoins(healed.starter, cost)
+    setRunCreature(nextStarter)
+    setPartyRecruits(healed.recruits)
+    runCreatureRef.current = nextStarter
+    partyRecruitsRef.current = healed.recruits
+    setRecoveryLogMessage(`Your party was healed for ${cost} coins.`)
+    dispatchQuestEvent('recoveryUsed', {})
+    void persistRun()
+  }
+
+  function handleRecoveryReviveSelected() {
+    if (!runCreature || !selectedReviveTarget) return
+    const fainted = getFaintedMembers(runCreature, partyRecruits)
+    const targetStillFainted = fainted.some(
+      (m) =>
+        (m.ref.kind === 'starter' && selectedReviveTarget.kind === 'starter') ||
+        (m.ref.kind === 'recruit' &&
+          selectedReviveTarget.kind === 'recruit' &&
+          m.ref.id === selectedReviveTarget.id),
+    )
+    if (!targetStillFainted) {
+      setRecoveryLogMessage('Select a fainted creature to revive.')
+      return
+    }
+    if (runCreature.coins < REVIVE_FAINTED_COST) {
+      setRecoveryLogMessage('Not enough coins.')
+      return
+    }
+    const revived = revivePartyMember(
+      runCreature,
+      partyRecruits,
+      selectedReviveTarget,
+    )
+    const nextStarter = spendCoins(revived.starter, REVIVE_FAINTED_COST)
+    const revivedName =
+      selectedReviveTarget.kind === 'starter'
+        ? nextStarter.name
+        : revived.recruits.find((r) => r.id === selectedReviveTarget.id)?.name ??
+          'Creature'
+    setRunCreature(nextStarter)
+    setPartyRecruits(revived.recruits)
+    runCreatureRef.current = nextStarter
+    partyRecruitsRef.current = revived.recruits
+    setRecoveryLogMessage(`${revivedName} was revived for ${REVIVE_FAINTED_COST} coins.`)
+    dispatchQuestEvent('recoveryUsed', {})
+    void persistRun()
+  }
+
+  function handleRecoveryFullRecovery() {
+    if (!runCreature) return
+    if (isPartyFullyHealthy(runCreature, partyRecruits)) {
+      setRecoveryLogMessage('Your party is already healthy.')
+      return
+    }
+    const cost = fullRecoveryCost(partyRecruits)
+    if (runCreature.coins < cost) {
+      setRecoveryLogMessage('Not enough coins.')
+      return
+    }
+    const recovered = fullPartyRecovery(runCreature, partyRecruits)
+    const nextStarter = spendCoins(recovered.starter, cost)
+    setRunCreature(nextStarter)
+    setPartyRecruits(recovered.recruits)
+    runCreatureRef.current = nextStarter
+    partyRecruitsRef.current = recovered.recruits
+    setRecoveryLogMessage(`Full recovery complete for ${cost} coins.`)
+    dispatchQuestEvent('recoveryUsed', {})
+    void persistRun()
+  }
+
+  async function handleGenerateFriendCode() {
+    if (!runCreature) {
+      setPvpMessage('Continue a run to generate a friend code.')
+      return
+    }
+    setPvpBusy(true)
+    setPvpMessage(null)
+    const result = await createPvpChallenge({
+      starter: runCreature,
+      recruits: partyRecruits,
+      activeHelperId,
+      regionId: currentRegionId,
+      badgesCount: earnedBadges.length,
+    })
+    setPvpBusy(false)
+    if (!result.ok || !result.challenge) {
+      setPvpMessage(result.error ?? 'Could not generate friend code.')
+      return
+    }
+    setMyPvpChallenge(result.challenge)
+    setPvpMessage(`Friend code ${result.challenge.code} created. Share it with a friend!`)
+  }
+
+  async function handleFindFriendChallenge() {
+    setPvpBusy(true)
+    setPvpMessage(null)
+    setPvpLookupChallenge(null)
+    const result = await fetchPvpChallengeByCode(pvpLookupCode)
+    setPvpBusy(false)
+    if (!result.ok || !result.challenge) {
+      setPvpMessage(result.error ?? 'Friend code not found.')
+      return
+    }
+    setPvpLookupChallenge(result.challenge)
+    setPvpMessage(null)
+  }
+
+  function startPvpChallenge(challenge: PvpChallenge) {
+    if (!runCreature) return
+    prePvpPartyRef.current = {
+      starter: structuredClone(runCreature),
+      recruits: structuredClone(partyRecruits),
+      activeHelperId,
+    }
+    pvpOpponentNameRef.current = challenge.creator_display_name
+    setPvpOpponentName(challenge.creator_display_name)
+    pvpGauntletRef.current = buildGauntletEnemies(challenge.team_snapshot)
+    pvpGauntletIndexRef.current = 0
+
+    setRunMode('pvp')
+    runModeRef.current = 'pvp'
+    setActiveNodeId(null)
+    setCurrentNode(null)
+    setLastCombatNode(null)
+    setActiveEncounterKind('gymTrainer')
+    const firstEnemy = pvpGauntletRef.current[0]
+    if (!firstEnemy) return
+    setEnemy(firstEnemy)
+    resetCombatSession()
+    setPendingAbilityUpgradeQueue([])
+    setCombatPhase('starter')
+    preCombatMasteryRef.current = {
+      starter: structuredClone(runCreature.abilityMastery),
+      recruits: Object.fromEntries(
+        partyRecruits.map((r) => [r.id, structuredClone(r.abilityMastery)]),
+      ),
+    }
+    setBattleLog([
+      `Friend Battle vs ${challenge.creator_display_name}!`,
+      `${firstEnemy.name} enters the battle!`,
+    ])
+    setCombatLocked(false)
+    setScreen('combat')
+  }
+
+  function handlePvpVictory() {
+    const nextIndex = pvpGauntletIndexRef.current + 1
+    if (nextIndex < pvpGauntletRef.current.length) {
+      pvpGauntletIndexRef.current = nextIndex
+      const nextEnemy = pvpGauntletRef.current[nextIndex]
+      combatEndedRef.current = false
+      setCombatLocked(false)
+      setEnemy(nextEnemy)
+      setCombatPhase('starter')
+      setBattleLog([`${nextEnemy.name} enters the battle!`])
+      return
+    }
+
+    let nextStarter = runCreatureRef.current ?? runCreature
+    if (nextStarter) {
+      nextStarter = addCoins(nextStarter, 20)
+      setRunCreature(nextStarter)
+      runCreatureRef.current = nextStarter
+    }
+
+    setRunMode('normal')
+    runModeRef.current = 'normal'
+    pvpGauntletRef.current = []
+    prePvpPartyRef.current = null
+    setEnemy(null)
+    setBattleLog([])
+    setPvpResultDetail('You cleared the friend team gauntlet.')
+    setPvpResultCoins(20)
+    setPvpResultMessage('Friend Battle victory!')
+    setScreen('pvpVictory')
+    void persistRun()
+  }
+
+  function finishPvpDefeat() {
+    const pre = prePvpPartyRef.current
+    if (pre) {
+      setRunCreature(pre.starter)
+      setPartyRecruits(pre.recruits)
+      setActiveHelperId(pre.activeHelperId)
+      runCreatureRef.current = pre.starter
+      partyRecruitsRef.current = pre.recruits
+    }
+    setRunMode('normal')
+    runModeRef.current = 'normal'
+    pvpGauntletRef.current = []
+    prePvpPartyRef.current = null
+    setEnemy(null)
+    setBattleLog([])
+    setPvpResultDetail('Your party was restored to pre-battle condition.')
+    setPvpResultCoins(0)
+    setPvpResultMessage(null)
+    setScreen('pvpDefeat')
+  }
+
+  function handlePvpContinue() {
+    setPvpResultMessage(null)
+    if (pvpReturnScreenRef.current === 'runMap' && runCreature) {
+      setScreen('runMap')
+      return
+    }
+    openFriendBattle(pvpReturnScreenRef.current)
+  }
+
+  function handleCopyFriendCode(code: string) {
+    void navigator.clipboard.writeText(code)
+  }
+
   function handleEventChoice(choice: EventChoiceId) {
     if (!runCreature || !currentEvent || !activeNodeId) return
 
@@ -3172,9 +4035,19 @@ function App() {
     setRunCreature(result.starter)
     setPartyRecruits(result.recruits)
     setEarnedBadges(result.earnedBadges)
+    if (result.inventoryAdds?.length) {
+      setTrainerInventory((prev) => {
+        let next = prev
+        for (const add of result.inventoryAdds!) {
+          next = addItemToTrainerInventory(next, add.itemId, add.quantity ?? 1)
+        }
+        return next
+      })
+    }
     if (result.message) {
       setMapMessage(result.message)
     }
+    dispatchQuestEvent('eventCompleted', {})
     markNodeComplete(activeNodeId)
     setCurrentEvent(null)
     setScreen('runMap')
@@ -3255,9 +4128,8 @@ function App() {
 
   if (screen === 'dailyRun') {
     const region = getRegion(getDailyRunRegionId())
-    const todayProgress =
-      hasDailyRunInProgress() &&
-      loadDailyRunState()?.dailySeed === getDailySeed()
+    const day = getDailyRunDayStateForToday(dailySeed, dailyModifier.id)
+    const hasActiveAttempt = hasDailyRunInProgress()
     return (
       <div className="app">
         <DailyRunScreen
@@ -3267,11 +4139,42 @@ function App() {
           modifier={dailyModifier}
           loggedIn={Boolean(authUser)}
           hasProfile={Boolean(playerProfile)}
-          inProgress={todayProgress}
-          onStart={startDailyRunNew}
-          onContinue={continueDailyRunSaved}
+          hasActiveAttempt={hasActiveAttempt}
+          hasDayRecord={hasDailyRunForToday()}
+          currentAttemptScore={day.currentAttemptScore}
+          bestScore={day.bestScore}
+          currentCheckpointLabel={formatCheckpointLabel(day.currentCheckpoint)}
+          bestCheckpointLabel={formatCheckpointLabel(day.bestCheckpoint)}
+          totalAttempts={day.totalAttempts}
+          deathsThisAttempt={day.currentAttemptDeaths}
+          playerRank={dailyMenuRank}
+          onStartAttempt={beginDailyAttempt}
+          onContinueAttempt={continueDailyRunSaved}
+          onRestartAttempt={restartDailyAttempt}
+          onSubmitBest={() => void handleSubmitBestDailyScore(true)}
           onLeaderboard={openLeaderboard}
           onBack={goToTitle}
+          submitBusy={submitBusy}
+          submitMessage={dailyMenuSubmitMessage}
+        />
+      </div>
+    )
+  }
+
+  if (screen === 'dailyDefeat') {
+    return (
+      <div className="app">
+        <DailyDefeatScreen
+          attemptScore={dailyDefeatAttemptScore}
+          bestScore={dailyDefeatBestScore}
+          bestCheckpointLabel={dailyDefeatBestCheckpoint}
+          newBestSaved={dailyDefeatNewBest}
+          onRestart={beginDailyAttempt}
+          onLeaderboard={openLeaderboard}
+          onMenu={() => {
+            refreshDailyMenu()
+            setScreen('dailyRun')
+          }}
         />
       </div>
     )
@@ -3338,6 +4241,7 @@ function App() {
           onUploadLocal={(localSlot, cloudSlot) => void handleUploadLocal(localSlot, cloudSlot)}
           uploadBusy={uploadBusy}
           uploadMessage={uploadMessage}
+          statusMessage={slotActionMessage}
         />
       </div>
     )
@@ -3368,7 +4272,7 @@ function App() {
           onSelect={setPendingStarterId}
           onConfirm={confirmStarter}
           onBack={() => {
-            resetRun()
+            resetRunMemory()
             if (runModeRef.current === 'daily') setScreen('dailyRun')
             else if (playMode) setScreen('characterSelect')
             else goToTitle()
@@ -3385,9 +4289,13 @@ function App() {
         <ShopScreen
           creature={runCreature}
           shopLog={shopLog}
-          onBuy={handleBuyItem}
+          gearOffers={shopGearOffers}
+          onBuyConsumable={handleBuyConsumable}
+          onBuyGear={handleBuyGear}
+          onOpenInventory={() => openInventory('shop')}
           onLeave={handleLeaveShop}
         />
+        {renderQuestToasts()}
       </div>
     )
   }
@@ -3402,6 +4310,7 @@ function App() {
           onTrain={() => handleRestChoice('train')}
           onContinue={handleRestContinue}
         />
+        {renderQuestToasts()}
       </div>
     )
   }
@@ -3410,6 +4319,7 @@ function App() {
     return (
       <div className="app">
         <EventScreen event={currentEvent} onChoose={handleEventChoice} />
+        {renderQuestToasts()}
       </div>
     )
   }
@@ -3435,6 +4345,7 @@ function App() {
         />
         {renderTutorialOverlay()}
         {renderFeedbackModal()}
+        {renderQuestToasts()}
       </div>
     )
   }
@@ -3462,6 +4373,7 @@ function App() {
           defeat={defeatInfo}
           onBeginNewRoute={handleBeginNewRoute}
         />
+        {renderQuestToasts()}
       </div>
     )
   }
@@ -3472,6 +4384,7 @@ function App() {
         <RewardScreen reward={rewardInfo} onContinue={handleRewardContinue} />
         {renderTutorialOverlay()}
         {renderFeedbackModal()}
+        {renderQuestToasts()}
       </div>
     )
   }
@@ -3574,6 +4487,29 @@ function App() {
     )
   }
 
+  if (screen === 'inventory' && runCreature) {
+    return (
+      <div className="app">
+        <InventoryScreen
+          inventory={trainerInventory}
+          starter={runCreature}
+          recruits={partyRecruits}
+          onUseItem={handleUseInventoryItem}
+          onEquipGear={handleEquipGear}
+          onDropItem={handleDropInventoryItem}
+          onBack={handleInventoryBack}
+        />
+        {inventoryMessage && (
+          <p className="inventory-toast" role="status">
+            {inventoryMessage}
+          </p>
+        )}
+        {renderTutorialOverlay()}
+        {renderFeedbackModal()}
+      </div>
+    )
+  }
+
   if (screen === 'party' && runCreature) {
     return (
       <div className="app">
@@ -3585,10 +4521,29 @@ function App() {
           onSetHelper={handleSetPartyHelper}
           onDismissRecruit={handleDismissRecruit}
           onViewPerks={setPerksModalCreatureId}
+          onEquipGear={setGearEquipCreatureId}
+          onUnequipGear={handleUnequipGear}
+          onOpenInventory={() => openInventory('party')}
           onBack={handlePartyBack}
         />
+        {gearEquipCreatureId && (
+          <GearEquipModal
+            creatureName={
+              gearEquipCreatureId === STARTER_CREATURE_ID
+                ? runCreature.name
+                : (partyRecruits.find((r) => r.id === gearEquipCreatureId)
+                    ?.name ?? 'Creature')
+            }
+            gearEntries={trainerInventory.gear}
+            onEquip={(instanceId) =>
+              handleEquipGear(gearEquipCreatureId, instanceId)
+            }
+            onClose={() => setGearEquipCreatureId(null)}
+          />
+        )}
         {renderTutorialOverlay()}
         {renderFeedbackModal()}
+        {renderQuestToasts()}
         {perksModalCreatureId && (
           <CreaturePerksModal
             creatureName={
@@ -3630,6 +4585,96 @@ function App() {
     )
   }
 
+  if (screen === 'recoveryStation' && runCreature) {
+    return (
+      <div className="app">
+        <RecoveryStationScreen
+          creature={runCreature}
+          recruits={partyRecruits}
+          partyMembers={listPartyMembers(runCreature, partyRecruits, activeHelperId)}
+          questState={questState}
+          questCtx={{
+            starter: runCreature,
+            recruits: partyRecruits,
+            currentRegionId,
+            earnedBadges,
+          }}
+          questMessage={questBoardMessage}
+          logMessage={recoveryLogMessage}
+          selectedReviveTarget={selectedReviveTarget}
+          onSelectReviveTarget={setSelectedReviveTarget}
+          onHealParty={handleRecoveryHealParty}
+          onReviveSelected={handleRecoveryReviveSelected}
+          onFullRecovery={handleRecoveryFullRecovery}
+          onAcceptQuest={handleAcceptQuest}
+          onClaimQuest={handleClaimQuest}
+          onBack={handleRecoveryBack}
+        />
+        {renderQuestToasts()}
+      </div>
+    )
+  }
+
+  if (screen === 'pvp') {
+    const hasActiveRun = Boolean(runCreature) && runMode === 'normal'
+    return (
+      <div className="app">
+        <FriendBattleScreen
+          loggedIn={Boolean(authUser)}
+          hasActiveRun={hasActiveRun}
+          myChallenge={myPvpChallenge}
+          lookupChallenge={pvpLookupChallenge}
+          lookupCode={pvpLookupCode}
+          onLookupCodeChange={setPvpLookupCode}
+          onGenerateCode={() => void handleGenerateFriendCode()}
+          onFindChallenge={() => void handleFindFriendChallenge()}
+          onChallengeTeam={() => {
+            if (pvpLookupChallenge) startPvpChallenge(pvpLookupChallenge)
+          }}
+          onCopyCode={handleCopyFriendCode}
+          busy={pvpBusy}
+          message={pvpMessage}
+          resultMessage={pvpResultMessage}
+          onBack={() => {
+            if (pvpReturnScreenRef.current === 'runMap' && runCreature) {
+              setScreen('runMap')
+            } else {
+              setScreen('title')
+            }
+          }}
+        />
+      </div>
+    )
+  }
+
+  if (screen === 'pvpVictory') {
+    return (
+      <div className="app">
+        <PvpResultScreen
+          victory
+          opponentName={pvpOpponentName}
+          coinsEarned={pvpResultCoins}
+          detail={pvpResultDetail}
+          onContinue={handlePvpContinue}
+        />
+      </div>
+    )
+  }
+
+  if (screen === 'pvpDefeat') {
+    return (
+      <div className="app">
+        <PvpResultScreen
+          victory={false}
+          opponentName={pvpOpponentName}
+          coinsEarned={0}
+          detail={pvpResultDetail}
+          onContinue={handlePvpContinue}
+        />
+      </div>
+    )
+  }
+
   if (screen === 'runMap' && selectedStarter && runCreature && mapNodes.length > 0) {
     return (
       <div className="app">
@@ -3648,13 +4693,11 @@ function App() {
           saveWarning={saveWarning}
           onNodeClick={handleMapNodeClick}
           onOpenParty={handleOpenParty}
+          onOpenInventory={() => openInventory('runMap')}
           onBadgeClick={setSelectedBadgeId}
           onBackToTitle={goToTitle}
-          onFeedback={() => setFeedbackOpen(true)}
-          onSettings={() => {
-            settingsReturnScreenRef.current = 'runMap'
-            setScreen('settings')
-          }}
+          onOpenRecoveryStation={openRecoveryStation}
+          onOpenFriendBattle={() => openFriendBattle('runMap')}
         />
         {selectedBadgeId && (
           <BadgeDetailModal
@@ -3663,7 +4706,7 @@ function App() {
           />
         )}
         {renderTutorialOverlay()}
-        {renderFeedbackModal()}
+        {renderQuestToasts()}
       </div>
     )
   }
@@ -3678,6 +4721,7 @@ function App() {
         onRegister={() => setScreen('register')}
         onPlay={() => openCharacterSelect('cloud')}
         onDailyRun={openDailyRunMenu}
+        onFriendBattle={() => openFriendBattle('title')}
         onAccount={() => setScreen('account')}
         onLogout={() => void handleLogout()}
         onPlayOffline={() => openCharacterSelect('offline')}
@@ -3717,6 +4761,7 @@ function TitleScreen({
   onRegister,
   onPlay,
   onDailyRun,
+  onFriendBattle,
   onAccount,
   onLogout,
   onPlayOffline,
@@ -3730,6 +4775,7 @@ function TitleScreen({
   onRegister: () => void
   onPlay: () => void
   onDailyRun: () => void
+  onFriendBattle: () => void
   onAccount: () => void
   onLogout: () => void
   onPlayOffline: () => void
@@ -3784,6 +4830,9 @@ function TitleScreen({
             </button>
           </>
         )}
+        <button type="button" className="btn" onClick={onFriendBattle}>
+          Friend Battle
+        </button>
         <button type="button" className="btn btn--small" onClick={onFeedback}>
           Feedback
         </button>
@@ -4073,10 +5122,11 @@ function RunMapScreen({
   saveWarning,
   onNodeClick,
   onOpenParty,
+  onOpenInventory,
   onBadgeClick,
   onBackToTitle,
-  onFeedback,
-  onSettings,
+  onOpenRecoveryStation,
+  onOpenFriendBattle,
 }: {
   creature: RunCreature
   mapNodes: MapNode[]
@@ -4097,10 +5147,11 @@ function RunMapScreen({
   saveStatus: SaveStatusKind
   saveWarning: string | null
   onOpenParty: () => void
+  onOpenInventory: () => void
   onBadgeClick: (badgeId: string) => void
   onBackToTitle: () => void
-  onFeedback: () => void
-  onSettings: () => void
+  onOpenRecoveryStation: () => void
+  onOpenFriendBattle: () => void
 }) {
   const statusText = saveStatusLabel(saveStatus, saveWarning)
   const helperName =
@@ -4129,11 +5180,14 @@ function RunMapScreen({
           <button type="button" className="btn btn--small" onClick={onOpenParty}>
             Party
           </button>
-          <button type="button" className="btn btn--small" onClick={onFeedback}>
-            Feedback
+          <button type="button" className="btn btn--small" onClick={onOpenInventory}>
+            Inventory
           </button>
-          <button type="button" className="btn btn--small" onClick={onSettings}>
-            Settings
+          <button type="button" className="btn btn--small" onClick={onOpenRecoveryStation}>
+            Recovery Station
+          </button>
+          <button type="button" className="btn btn--small" onClick={onOpenFriendBattle}>
+            Friend Battle
           </button>
           <button type="button" className="btn btn--small" onClick={onBackToTitle}>
             Back to Title

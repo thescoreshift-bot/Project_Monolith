@@ -10,6 +10,7 @@ import type { ElementType } from '../data/starters'
 import { elementTypeToEvolutionKey } from './creatureProgression'
 import { ensureAbilityMastery } from './abilityMastery'
 import { normalizeCreatureAbilities } from './creatureAbilities'
+import { normalizeEquippedGearId } from './gearSystem'
 import type { PartyCreature } from './party'
 import {
   recalculateStats,
@@ -72,6 +73,7 @@ export function normalizeRunCreature(
     lastEvolutionLevel,
     evolutionHistory: history,
     abilityMastery: creature.abilityMastery ?? {},
+    equippedGearId: normalizeEquippedGearId(creature.equippedGearId),
   }),
   )
 }

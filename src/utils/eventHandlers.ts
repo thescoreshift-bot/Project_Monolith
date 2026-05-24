@@ -25,6 +25,8 @@ export type EventResult = {
   earnedBadges: string[]
   pendingAlphaCombat?: boolean
   message?: string
+  /** Items to add to trainer inventory after the event */
+  inventoryAdds?: Array<{ itemId: string; quantity?: number }>
 }
 
 const STAT_KEYS = ['atk', 'def', 'spAtk', 'spDef', 'spd'] as const
@@ -39,7 +41,16 @@ export function applyEventChoice(
   switch (eventId) {
     case 'strange-monolith':
       if (choice === 'a') starter = addXp(starter, 15).creature
-      else starter = addCoins(starter, eventCoins('eventSmall', regionId))
+      else {
+        starter = addCoins(starter, eventCoins('eventSmall', regionId))
+        return {
+          starter,
+          recruits,
+          earnedBadges,
+          inventoryAdds: [{ itemId: 'monolith-fragment', quantity: 1 }],
+          message: 'Found a Monolith Fragment!',
+        }
+      }
       break
     case 'healing-spring': {
       const healed = healPartyToPercent(starter, recruits, 0.25)
@@ -60,7 +71,18 @@ export function applyEventChoice(
         const perk = pickRandomPerks(1, starter.selectedPerks)[0]
         if (perk) starter = applyPerk(starter, perk.id)
         else starter = addXp(starter, 20).creature
-      } else starter = addCoins(starter, eventCoins('eventMedium', regionId))
+      } else {
+        starter = addCoins(starter, eventCoins('eventMedium', regionId))
+        const gift =
+          Math.random() < 0.5 ? 'small-potion' : 'monolith-fragment'
+        return {
+          starter,
+          recruits,
+          earnedBadges,
+          inventoryAdds: [{ itemId: gift, quantity: 1 }],
+          message: 'Researcher shared supplies.',
+        }
+      }
       break
     case 'lost-creature':
       if (choice === 'a' && Math.random() < 0.3) {
@@ -96,12 +118,34 @@ export function applyEventChoice(
         }
       }
       break
-    case 'hidden-cache':
-      if (choice === 'a') starter = addCoins(starter, eventCoins('eventLarge', regionId))
-      else {
-        starter = addCoins(addXp(starter, 10).creature, eventCoins('eventSmall', regionId))
+    case 'hidden-cache': {
+      const cacheItems = [
+        'small-potion',
+        'ember-scale',
+        'wild-seed',
+        'tide-pearl',
+        'volt-thread',
+      ]
+      const foundId = cacheItems[Math.floor(Math.random() * cacheItems.length)]
+      if (choice === 'a') {
+        starter = addCoins(starter, eventCoins('eventLarge', regionId))
+        return {
+          starter,
+          recruits,
+          earnedBadges,
+          inventoryAdds: [{ itemId: foundId, quantity: 1 }],
+          message: 'Cache opened — coins and supplies!',
+        }
       }
-      break
+      starter = addCoins(addXp(starter, 10).creature, eventCoins('eventSmall', regionId))
+      return {
+        starter,
+        recruits,
+        earnedBadges,
+        inventoryAdds: [{ itemId: foundId, quantity: 1 }],
+        message: 'Salvaged parts from the cache.',
+      }
+    }
     case 'risky-mutation':
       if (choice === 'a') {
         const key = STAT_KEYS[Math.floor(Math.random() * STAT_KEYS.length)]
@@ -140,7 +184,13 @@ export function applyEventChoice(
       if (choice === 'a') {
         return { starter, recruits, earnedBadges, pendingAlphaCombat: true }
       }
-      break
+      return {
+        starter,
+        recruits,
+        earnedBadges,
+        inventoryAdds: [{ itemId: 'material-alpha-claw', quantity: 1 }],
+        message: 'Found an Alpha Claw in the abandoned nest.',
+      }
     default:
       if (choice === 'a') starter = addXp(starter, 10).creature
       else starter = addCoins(starter, eventCoins('eventSmall', regionId))

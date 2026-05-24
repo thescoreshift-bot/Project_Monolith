@@ -19,6 +19,8 @@ export type EvolutionScores = {
 export type BattleBuffs = {
   atk: number
   spAtk: number
+  def: number
+  spd: number
 }
 
 export type EvolutionHistoryEntry = {
@@ -54,6 +56,8 @@ export type RunCreature = {
   lastEvolutionLevel: number
   evolutionHistory: EvolutionHistoryEntry[]
   abilityMastery: AbilityMasteryMap
+  /** Id of held gear item, if any. */
+  equippedGearId?: string | null
 }
 
 export type { AbilityMasteryMap, AbilityMasteryEntry } from './abilityMastery'
@@ -94,7 +98,7 @@ export function createRunCreature(starter: Starter): RunCreature {
     currentXp: 0,
     xpToNextLevel: getXpToNextLevel(1),
     coins: STARTING_COINS,
-    battleBuffs: { atk: 0, spAtk: 0 },
+    battleBuffs: { atk: 0, spAtk: 0, def: 0, spd: 0 },
     temporaryBattleBuffs: [],
     selectedPerks: [],
     evolutionScores: createEmptyEvolutionScores(),
@@ -102,6 +106,7 @@ export function createRunCreature(starter: Starter): RunCreature {
     lastEvolutionLevel: 1,
     evolutionHistory: [],
     abilityMastery: {},
+    equippedGearId: null,
   }),
   )
 }
@@ -117,7 +122,7 @@ export function getEffectiveStats(creature: RunCreature): StarterStats {
 export function clearBattleBuffs(creature: RunCreature): RunCreature {
   return {
     ...creature,
-    battleBuffs: { atk: 0, spAtk: 0 },
+    battleBuffs: { atk: 0, spAtk: 0, def: 0, spd: 0 },
   }
 }
 

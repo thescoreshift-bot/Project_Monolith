@@ -1,4 +1,5 @@
 import { getAbility } from '../data/abilities'
+import { getAbilityRole } from '../data/abilityMasteryPerks'
 import type { AbilityMasteryPerk } from '../data/abilityMasteryPerks'
 import {
   getDraftPerksForQueueEntry,
@@ -27,6 +28,7 @@ export function AbilityUpgradeScreen({
   onChoose,
 }: AbilityUpgradeScreenProps) {
   const ability = getAbility(entry.abilityId)
+  const abilityRole = getAbilityRole(ability)
   const choices = getDraftPerksForQueueEntry(entry)
 
   return (
@@ -36,7 +38,10 @@ export function AbilityUpgradeScreen({
           <h1 className="screen-header__title">Ability Mastery</h1>
           <p className="screen-header__subtitle">
             {creatureName}&apos;s {ability.name} reached {getRankLabel(entry.rank)}!
-            Choose a mastery perk for this ability only.
+          </p>
+          <p className="ability-upgrade-screen__subtitle-detail">
+            Choose a mastery perk for {ability.name}. This affects {creatureName}&apos;s{' '}
+            {ability.name} only.
           </p>
         </header>
 
@@ -44,7 +49,7 @@ export function AbilityUpgradeScreen({
           <span className="panel-label">Ability</span>
           <p className="ability-upgrade-screen__ability-name">{ability.name}</p>
           <p className="ability-upgrade-screen__meta">
-            {ability.type} / {ability.category}
+            Role: <strong>{abilityRole}</strong> · {ability.type} / {ability.category}
             {ability.power > 0 ? ` · Power ${ability.power}` : ''} · Accuracy{' '}
             {ability.accuracy}%
           </p>
@@ -68,6 +73,9 @@ export function AbilityUpgradeScreen({
                 {getPerkEffectSummary(perk)}
               </p>
               <p className="ability-upgrade-card__desc">{perk.description}</p>
+              <p className="ability-upgrade-card__scope">
+                Affects: this ability only ({creatureName})
+              </p>
             </button>
           ))}
         </div>
