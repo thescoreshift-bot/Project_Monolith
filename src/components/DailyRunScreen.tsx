@@ -52,8 +52,7 @@ export function DailyRunScreen({
       <header className="screen-header">
         <h1 className="screen-header__title">Daily Run</h1>
         <p className="screen-header__subtitle">
-          Best survival record for today&apos;s seed. Current attempts reset on death;
-          your best score is kept.
+          One life per attempt — clear regions and travel onward. Your best score for today is kept.
         </p>
       </header>
 

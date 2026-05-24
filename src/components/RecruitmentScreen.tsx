@@ -1,5 +1,7 @@
+import { getRecruitPortraitUrl } from '../data/recruitPortraits'
 import type { PartyCreature } from '../utils/party'
 import type { RunCreature } from '../utils/progression'
+import { CreaturePortrait } from './CreaturePortrait'
 
 type RecruitmentScreenProps = {
   recruit: PartyCreature
@@ -30,6 +32,13 @@ export function RecruitmentScreen({
       </header>
 
       <article className="recruitment-card">
+        <CreaturePortrait
+          type={recruit.type}
+          portraitUrl={getRecruitPortraitUrl(recruit.templateId)}
+          alt={recruit.name}
+          size="lg"
+          className="recruitment-card__portrait"
+        />
         <h2 className="recruitment-card__name">{recruit.name}</h2>
         <span className="recruitment-card__type">{recruit.type}</span>
         <p className="recruitment-card__level">Level {recruit.level}</p>

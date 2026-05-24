@@ -4,6 +4,10 @@ import {
   getEvolutionForStarter,
   stageForThreshold,
 } from '../data/evolutions'
+import {
+  getEvolutionForRecruit,
+  getRecruitEvolutionKey,
+} from '../data/recruitEvolutions'
 import type { PerkCategory } from '../data/perks'
 import type { StatModifiers } from '../data/perks'
 import type { ElementType } from '../data/starters'
@@ -65,16 +69,18 @@ export function normalizeRunCreature(
       ? Math.max(...history.map((h) => h.level))
       : 1)
 
-  return ensureAbilityMastery(
-    normalizeCreatureAbilities({
-    ...creature,
-    starterTypeId: creature.starterTypeId ?? starterTypeId,
-    evolutionStage: stage,
-    lastEvolutionLevel,
-    evolutionHistory: history,
-    abilityMastery: creature.abilityMastery ?? {},
-    equippedGearId: normalizeEquippedGearId(creature.equippedGearId),
-  }),
+  return repairEvolutionProgress(
+    ensureAbilityMastery(
+      normalizeCreatureAbilities({
+        ...creature,
+        starterTypeId: creature.starterTypeId ?? starterTypeId,
+        evolutionStage: stage,
+        lastEvolutionLevel,
+        evolutionHistory: history,
+        abilityMastery: creature.abilityMastery ?? {},
+        equippedGearId: normalizeEquippedGearId(creature.equippedGearId),
+      }),
+    ),
   )
 }
 
@@ -214,10 +220,12 @@ export function toEvolvableStarter(creature: RunCreature): EvolvableCreatureBase
 }
 
 export function toEvolvableRecruit(creature: PartyCreature): EvolvableCreatureBase {
+  const recruitKey = getRecruitEvolutionKey(creature.templateId)
   return {
     name: creature.name,
     type: creature.type,
-    evolutionTypeKey: elementTypeToEvolutionKey(creature.type),
+    evolutionTypeKey:
+      recruitKey ?? elementTypeToEvolutionKey(creature.type),
     level: creature.level,
     selectedPerks: creature.selectedPerks,
     evolutionScores: creature.evolutionScores,
@@ -263,6 +271,71 @@ export function getCrossedEvolutionThresholdsFor(
   )
 }
 
+/** Thresholds the creature's level qualifies for but has not recorded in history. */
+export function getUnresolvedEvolutionThresholds(
+  creature: Pick<EvolvableCreatureBase, 'level' | 'evolutionHistory'>,
+): number[] {
+  return EVOLUTION_THRESHOLDS.filter(
+    (threshold) =>
+      creature.level >= threshold &&
+      !creature.evolutionHistory.some((h) => h.level === threshold),
+  )
+}
+
+/** Level-up crosses plus any evolution milestones still missing from history. */
+export function collectEvolutionThresholdsAfterXp(
+  levelBefore: number,
+  levelAfter: number,
+  creature: Pick<
+    EvolvableCreatureBase,
+    'level' | 'lastEvolutionLevel' | 'evolutionHistory'
+  >,
+): number[] {
+  const crossed = getCrossedEvolutionThresholdsFor(
+    levelBefore,
+    levelAfter,
+    creature,
+  )
+  const unresolved = getUnresolvedEvolutionThresholds(creature)
+  return [...new Set([...crossed, ...unresolved])].sort((a, b) => a - b)
+}
+
+/** Fix saves where lastEvolutionLevel was ahead of evolutionHistory (blocks evolutions). */
+export function repairEvolutionProgress<
+  T extends Pick<
+    EvolvableCreatureBase,
+    'level' | 'lastEvolutionLevel' | 'evolutionHistory'
+  >,
+>(creature: T): T {
+  const history = creature.evolutionHistory ?? []
+  const historyMax =
+    history.length > 0 ? Math.max(...history.map((h) => h.level)) : 0
+  let lastEvolutionLevel = creature.lastEvolutionLevel ?? 1
+
+  if (historyMax === 0) {
+    if (lastEvolutionLevel > 1) {
+      lastEvolutionLevel = 1
+    }
+  } else if (lastEvolutionLevel > historyMax) {
+    lastEvolutionLevel = historyMax
+  }
+
+  for (const threshold of EVOLUTION_THRESHOLDS) {
+    if (
+      lastEvolutionLevel >= threshold &&
+      !history.some((h) => h.level === threshold)
+    ) {
+      lastEvolutionLevel = Math.min(lastEvolutionLevel, threshold - 1)
+    }
+  }
+
+  if (lastEvolutionLevel < 1) {
+    lastEvolutionLevel = 1
+  }
+
+  return { ...creature, lastEvolutionLevel, evolutionHistory: history }
+}
+
 export function buildEvolutionPreviewFor(
   creature: EvolvableCreatureBase,
   threshold: number,
@@ -276,11 +349,17 @@ export function buildEvolutionPreviewFor(
     creature.evolutionScores,
     creature.type,
   )
-  const form = getEvolutionForStarter(
-    creature.evolutionTypeKey,
-    stage,
-    dominant.category,
-  )
+  const form =
+    getEvolutionForRecruit(
+      creature.evolutionTypeKey,
+      stage,
+      dominant.category,
+    ) ??
+    getEvolutionForStarter(
+      creature.evolutionTypeKey,
+      stage,
+      dominant.category,
+    )
   if (!form) return null
   return { form, dominant, oldName: creature.name }
 }

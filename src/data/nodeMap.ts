@@ -92,6 +92,25 @@ export function nodeTypeToCssClass(type: NodeType): string {
   return classes[type]
 }
 
+export function nodeTypeToIconPath(type: NodeType): string {
+  const icons: Record<NodeType, string> = {
+    battle: '/assets/map-nodes/battle.png',
+    elite: '/assets/map-nodes/elite.png',
+    alphaNest: '/assets/map-nodes/alpha-nest.png',
+    event: '/assets/map-nodes/event.png',
+    shop: '/assets/map-nodes/shop.png',
+    rest: '/assets/map-nodes/rest.png',
+    gymTrainer: '/assets/map-nodes/gym-trainer.png',
+    gymLeader: '/assets/map-nodes/gym-leader.png',
+    boss: '/assets/map-nodes/boss.png',
+  }
+  return icons[type]
+}
+
+export function isDramaticNodeType(type: NodeType): boolean {
+  return type === 'boss' || type === 'gymLeader'
+}
+
 export function isNodeReachable(
   _nodes: MapNode[],
   states: Record<string, NodeVisitState>,

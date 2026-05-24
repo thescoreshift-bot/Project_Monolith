@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   getNodeState,
+  isDramaticNodeType,
   NODE_TYPE_LABELS,
   nodeTypeToCssClass,
+  nodeTypeToIconPath,
   type MapNode,
   type NodeVisitState,
 } from '../data/nodeMap'
@@ -22,14 +24,19 @@ function MapNodeButton({
   state: NodeVisitState
   onClick: () => void
 }) {
+  const [iconFailed, setIconFailed] = useState(false)
   const disabled = state !== 'available'
   const typeClass = nodeTypeToCssClass(node.type)
+  const dramatic = isDramaticNodeType(node.type)
+  const useLegacy = iconFailed
 
   return (
     <button
       type="button"
       className={`map-node map-node--${typeClass} map-node--${state}${
         state === 'available' ? ' map-node--available' : ''
+      }${useLegacy ? ' map-node--legacy' : ' map-node--icon'}${
+        dramatic ? ' map-node--dramatic' : ''
       }`}
       style={{ gridColumn: node.column + 1 }}
       disabled={disabled}
@@ -37,8 +44,31 @@ function MapNodeButton({
       onClick={onClick}
       aria-label={`${node.label} — ${NODE_TYPE_LABELS[node.type]} — ${state}`}
     >
-      <span className="map-node__type">{NODE_TYPE_LABELS[node.type]}</span>
-      <span className="map-node__label">{node.label}</span>
+      {useLegacy ? (
+        <>
+          <span className="map-node__type">{NODE_TYPE_LABELS[node.type]}</span>
+          <span className="map-node__label">{node.label}</span>
+        </>
+      ) : (
+        <>
+          <span className="map-node__icon-wrap">
+            <img
+              className="map-node__icon"
+              src={nodeTypeToIconPath(node.type)}
+              alt=""
+              draggable={false}
+              onError={() => setIconFailed(true)}
+            />
+            {state === 'completed' ? (
+              <span className="map-node__completed-mark" aria-hidden="true">
+                ✓
+              </span>
+            ) : null}
+          </span>
+          <span className="map-node__type">{NODE_TYPE_LABELS[node.type]}</span>
+          <span className="map-node__label">{node.label}</span>
+        </>
+      )}
     </button>
   )
 }
@@ -135,7 +165,7 @@ export function MapBoard({ mapNodes, nodeStates, onNodeClick }: MapBoardProps) {
         <div
           className="map-board__layers"
           style={{
-            gridTemplateRows: `repeat(${maxLayer + 1}, minmax(4.5rem, auto))`,
+            gridTemplateRows: `repeat(${maxLayer + 1}, minmax(6.5rem, auto))`,
           }}
         >
           {layers.map((layer) => (

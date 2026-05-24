@@ -52,6 +52,17 @@ export function calculateCurrentAttemptScore(input: DailyRunScoreInput): number 
   ).total
 }
 
+export function calculateProgressScore(checkpoint: DailyCheckpoint): number {
+  return (
+    checkpoint.regionNumber * 10000 +
+    checkpoint.badgesEarned * 500 +
+    checkpoint.nodesCleared * 25 +
+    checkpoint.bossesDefeated * 1000 +
+    checkpoint.highestLevel * 10 +
+    checkpoint.evolutionsCount * 100
+  )
+}
+
 export function compareCheckpoints(
   a: DailyCheckpoint,
   b: DailyCheckpoint,

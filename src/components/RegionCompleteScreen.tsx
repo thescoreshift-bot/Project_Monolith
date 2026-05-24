@@ -16,6 +16,7 @@ type RegionCompleteScreenProps = {
   creature: RunCreature
   partyRecruits: PartyCreature[]
   onChooseNextRegion: () => void
+  nextActionLabel?: string
 }
 
 export function RegionCompleteScreen({
@@ -23,6 +24,7 @@ export function RegionCompleteScreen({
   creature,
   partyRecruits,
   onChooseNextRegion,
+  nextActionLabel = 'Choose Next Region',
 }: RegionCompleteScreenProps) {
   const region = getRegion(data.regionId)
 
@@ -77,7 +79,7 @@ export function RegionCompleteScreen({
         className="btn btn--primary"
         onClick={onChooseNextRegion}
       >
-        Choose Next Region
+        {nextActionLabel}
       </button>
     </main>
   )

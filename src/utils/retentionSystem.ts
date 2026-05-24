@@ -628,6 +628,42 @@ function countCollectionLog(log: CollectionLogState): number {
   )
 }
 
+function markStarterRecruitedInArchive(
+  state: RetentionState,
+  starterTypeId: string,
+  regionId?: string,
+): RetentionState {
+  const entry = resolveArchiveEntryFromStarterId(starterTypeId)
+  if (!entry) return state
+
+  const seenResult = markArchiveSeen(state, entry.creatureId, regionId)
+  let next = seenResult.state
+  next = {
+    ...next,
+    creatureArchive: {
+      ...next.creatureArchive,
+      [entry.creatureId]: {
+        ...next.creatureArchive[entry.creatureId],
+        seen: true,
+        recruited: true,
+      },
+    },
+  }
+  return next
+}
+
+export function ensureStarterArchiveRegistered(
+  state: RetentionState,
+  starterTypeId: string,
+  regionId?: string,
+): RetentionState {
+  const entry = resolveArchiveEntryFromStarterId(starterTypeId)
+  if (!entry) return state
+  const progress = state.creatureArchive[entry.creatureId]
+  if (progress?.recruited) return state
+  return markStarterRecruitedInArchive(state, starterTypeId, regionId)
+}
+
 function markArchiveSeen(
   state: RetentionState,
   creatureId: string,
@@ -692,13 +728,25 @@ export function trackGameEvent(
 
   switch (event) {
     case 'enemySeen': {
-      const entry =
-        (payload.templateId && resolveArchiveEntryFromTemplate(payload.templateId)) ||
-        (payload.starterTypeId && resolveArchiveEntryFromStarterId(payload.starterTypeId))
-      if (entry) {
-        const r = markArchiveSeen(next, entry.creatureId, payload.regionId)
+      const markSeen = (creatureId: string) => {
+        const r = markArchiveSeen(next, creatureId, payload.regionId)
         next = r.state
-        if (r.newlyDiscovered) newArchiveEntries.push(entry.creatureId)
+        if (r.newlyDiscovered) newArchiveEntries.push(creatureId)
+      }
+
+      if (payload.templateId) {
+        const entry = resolveArchiveEntryFromTemplate(payload.templateId)
+        if (entry) markSeen(entry.creatureId)
+      }
+
+      if (payload.creatureName) {
+        const evoEntry = resolveArchiveEntryFromName(payload.creatureName)
+        if (evoEntry) markSeen(evoEntry.creatureId)
+      }
+
+      if (payload.starterTypeId) {
+        const starterEntry = resolveArchiveEntryFromStarterId(payload.starterTypeId)
+        if (starterEntry) markSeen(starterEntry.creatureId)
       }
       break
     }
@@ -727,6 +775,13 @@ export function trackGameEvent(
         stats: { ...next.stats, recruits: next.stats.recruits + 1 },
       }
       next = updateQuestProgress(next, 'creatureRecruited', 1)
+      if (payload.starterTypeId) {
+        next = markStarterRecruitedInArchive(
+          next,
+          payload.starterTypeId,
+          payload.regionId,
+        )
+      }
       if (payload.templateId) {
         const entry = resolveArchiveEntryFromTemplate(payload.templateId)
         if (entry) {

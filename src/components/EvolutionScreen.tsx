@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
 import type { EvolutionForm } from '../data/evolutions'
 import type { PerkCategory } from '../data/perks'
+import { getPortraitForEvolutionForm } from '../data/creaturePortraits'
 import { formatEvolutionStatGains } from '../utils/evolutionSystem'
+import { CreaturePortrait } from './CreaturePortrait'
 
 export type EvolutionScreenData = {
   oldName: string
@@ -23,9 +25,19 @@ function formatCategory(category: string): string {
   return category.charAt(0).toUpperCase() + category.slice(1)
 }
 
+const STARTER_ELEMENT_TYPE: Record<string, 'Fire' | 'Water' | 'Grass' | 'Electric' | 'Ground'> = {
+  fire: 'Fire',
+  water: 'Water',
+  grass: 'Grass',
+  electric: 'Electric',
+  ground: 'Ground',
+}
+
 export function EvolutionScreen({ data, onContinue }: EvolutionScreenProps) {
   const [phase, setPhase] = useState<EvolutionPhase>('announce')
   const statLines = formatEvolutionStatGains(data.form.statModifiers)
+  const portraitUrl = getPortraitForEvolutionForm(data.form)
+  const elementType = STARTER_ELEMENT_TYPE[data.form.fromStarterType] ?? 'Water'
 
   useEffect(() => {
     if (phase !== 'silhouette') return
@@ -64,6 +76,14 @@ export function EvolutionScreen({ data, onContinue }: EvolutionScreenProps) {
 
       {phase === 'reveal' && (
         <section className="evolution-screen__panel evolution-screen__panel--reveal">
+          <CreaturePortrait
+            type={elementType}
+            portraitUrl={portraitUrl}
+            alt={data.form.name}
+            size="lg"
+            idle
+            className="evolution-screen__portrait"
+          />
           <p className="evolution-screen__reveal">
             {data.oldName} evolved into <strong>{data.form.name}</strong>!
           </p>
@@ -79,6 +99,14 @@ export function EvolutionScreen({ data, onContinue }: EvolutionScreenProps) {
 
       {phase === 'details' && (
         <section className="evolution-screen__panel evolution-screen__panel--details">
+          <CreaturePortrait
+            type={elementType}
+            portraitUrl={portraitUrl}
+            alt={data.form.name}
+            size="lg"
+            idle
+            className="evolution-screen__portrait"
+          />
           <header className="evolution-details__header">
             <h1 className="evolution-details__name">{data.form.name}</h1>
             <p className="evolution-details__stage">

@@ -1,8 +1,12 @@
 import type { LeaderboardRow } from '../utils/leaderboardSystem'
-import { parseLeaderboardCheckpointMeta } from '../utils/leaderboardSystem'
+import {
+  formatLeaderboardSeedLabel,
+  isCampaignLeaderboardSeed,
+  parseLeaderboardCheckpointMeta,
+} from '../utils/leaderboardSystem'
 
 export function LeaderboardScreen({
-  dailySeed,
+  seed,
   displayDate,
   rows,
   playerRank,
@@ -13,48 +17,57 @@ export function LeaderboardScreen({
   onTabChange,
   onBack,
 }: {
-  dailySeed: string
+  seed: string
   displayDate: string
   rows: LeaderboardRow[]
   playerRank: number | null
   loggedIn: boolean
   loading: boolean
   errorMessage?: string | null
-  activeTab: 'today' | 'week' | 'all'
-  onTabChange: (tab: 'today' | 'week' | 'all') => void
+  activeTab: 'daily' | 'campaign'
+  onTabChange: (tab: 'daily' | 'campaign') => void
   onBack: () => void
 }) {
+  const isCampaign = isCampaignLeaderboardSeed(seed) || activeTab === 'campaign'
+
   return (
     <main className="leaderboard-screen">
       <header className="screen-header">
         <h1 className="screen-header__title">Leaderboard</h1>
         <p className="screen-header__subtitle">
-          {displayDate} · {dailySeed}
+          {isCampaign ? formatLeaderboardSeedLabel(seed) : `${displayDate} · ${seed}`}
         </p>
       </header>
 
       <div className="leaderboard-screen__tabs" role="tablist">
         <button
           type="button"
-          className={`btn btn--small${activeTab === 'today' ? ' btn--primary' : ''}`}
-          onClick={() => onTabChange('today')}
+          className={`btn btn--small${activeTab === 'daily' ? ' btn--primary' : ''}`}
+          onClick={() => onTabChange('daily')}
         >
-          Today
+          Daily Run
         </button>
-        <button type="button" className="btn btn--small" disabled title="Coming soon">
-          This Week
-        </button>
-        <button type="button" className="btn btn--small" disabled title="Coming soon">
-          All-Time
+        <button
+          type="button"
+          className={`btn btn--small${activeTab === 'campaign' ? ' btn--primary' : ''}`}
+          onClick={() => onTabChange('campaign')}
+        >
+          Campaign
         </button>
       </div>
+
+      <p className="leaderboard-screen__note">
+        {isCampaign
+          ? 'Campaign tracks your furthest progression on a save slot. Defeats do not reset your entry — only improvements are posted.'
+          : 'Daily Run uses one life per attempt. Your best score for today is kept and ranked.'}
+      </p>
 
       {!loggedIn && (
         <p className="leaderboard-screen__note">Login to submit scores.</p>
       )}
       {loggedIn && playerRank !== null && (
         <p className="leaderboard-screen__rank" role="status">
-          Your rank today: <strong>#{playerRank}</strong>
+          Your rank: <strong>#{playerRank}</strong>
         </p>
       )}
 
@@ -75,7 +88,7 @@ export function LeaderboardScreen({
               <tr>
                 <th>Rank</th>
                 <th>Player</th>
-                <th>Best Daily Score</th>
+                <th>Score</th>
                 <th>Region</th>
                 <th>Badges</th>
                 <th>Nodes</th>
@@ -97,7 +110,7 @@ export function LeaderboardScreen({
                     <td>{meta?.nodesCleared ?? '—'}</td>
                     <td>{row.highest_level}</td>
                     <td>{row.evolutions_count}</td>
-                    <td>{row.completed ? 'Cleared' : 'Run'}</td>
+                    <td>{row.completed ? 'Cleared' : 'In progress'}</td>
                   </tr>
                 )
               })}

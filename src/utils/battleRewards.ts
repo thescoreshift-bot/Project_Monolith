@@ -7,9 +7,7 @@ import {
 import { getActiveCombatHelper } from './party'
 import type { PartyCreature } from './party'
 import { addXpToPartyCreature } from './party'
-import {
-  getCrossedEvolutionThresholdsFor,
-} from './evolutionSystem'
+import { collectEvolutionThresholdsAfterXp } from './evolutionSystem'
 import { addXp, type RunCreature } from './progression'
 import { getXpReward } from './rewards'
 
@@ -38,15 +36,38 @@ function buildPerkDraftQueue(
   recruitGains: { id: string; levelsGained: number }[],
 ): PerkDraftQueueEntry[] {
   const queue: PerkDraftQueueEntry[] = []
-  if (starterLevelsGained > 0) {
+  for (let i = 0; i < starterLevelsGained; i++) {
     queue.push({ creatureId: STARTER_CREATURE_ID, reason: 'levelUp' })
   }
   for (const r of recruitGains) {
-    if (r.levelsGained > 0) {
+    for (let i = 0; i < r.levelsGained; i++) {
       queue.push({ creatureId: r.id, reason: 'levelUp' })
     }
   }
   return queue
+}
+
+function appendEvolutionThresholds(
+  queue: EvolutionQueueEntry[],
+  creatureId: string,
+  levelBefore: number,
+  creatureAfter: RunCreature | PartyCreature,
+): void {
+  const existing = new Set(
+    queue
+      .filter((e) => e.creatureId === creatureId)
+      .map((e) => e.threshold),
+  )
+  for (const threshold of collectEvolutionThresholdsAfterXp(
+    levelBefore,
+    creatureAfter.level,
+    creatureAfter,
+  )) {
+    if (!existing.has(threshold)) {
+      existing.add(threshold)
+      queue.push({ creatureId, threshold })
+    }
+  }
 }
 
 export function distributeBattleXp(
@@ -79,13 +100,12 @@ export function distributeBattleXp(
     levelUpLines.push({ name: nextStarter.name, newLevel: nextStarter.level })
   }
 
-  for (const threshold of getCrossedEvolutionThresholdsFor(
+  appendEvolutionThresholds(
+    evolutionQueue,
+    STARTER_CREATURE_ID,
     starterLevelBefore,
-    nextStarter.level,
     nextStarter,
-  )) {
-    evolutionQueue.push({ creatureId: STARTER_CREATURE_ID, threshold })
-  }
+  )
 
   const nextRecruits = recruits.map((recruit) => {
     const isHelper = helper?.id === recruit.id
@@ -110,13 +130,12 @@ export function distributeBattleXp(
     }
     recruitGains.push({ id: recruit.id, levelsGained: result.levelsGained })
 
-    for (const threshold of getCrossedEvolutionThresholdsFor(
+    appendEvolutionThresholds(
+      evolutionQueue,
+      recruit.id,
       levelBefore,
-      result.creature.level,
       result.creature,
-    )) {
-      evolutionQueue.push({ creatureId: recruit.id, threshold })
-    }
+    )
 
     return result.creature
   })

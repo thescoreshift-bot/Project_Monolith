@@ -18,6 +18,8 @@ export type Starter = {
   stats: StarterStats
   ability: string
   abilityId: string
+  portraitUrl: string
+  silhouetteUrl?: string
 }
 
 export const STARTERS: Starter[] = [
@@ -30,6 +32,7 @@ export const STARTERS: Starter[] = [
     stats: { hp: 52, atk: 55, def: 35, spAtk: 50, spDef: 38, spd: 48 },
     ability: 'Spark Ember',
     abilityId: 'spark-ember',
+    portraitUrl: '/assets/creatures/starters/fire-base.png',
   },
   {
     id: 'water',
@@ -40,6 +43,7 @@ export const STARTERS: Starter[] = [
     stats: { hp: 62, atk: 40, def: 45, spAtk: 42, spDef: 48, spd: 38 },
     ability: 'Bubble Hex',
     abilityId: 'bubble-hex',
+    portraitUrl: '/assets/creatures/starters/water-base.png',
   },
   {
     id: 'grass',
@@ -50,6 +54,7 @@ export const STARTERS: Starter[] = [
     stats: { hp: 58, atk: 42, def: 44, spAtk: 45, spDef: 46, spd: 40 },
     ability: 'Vine Lash',
     abilityId: 'vine-lash',
+    portraitUrl: '/assets/creatures/starters/grass-base.png',
   },
   {
     id: 'electric',
@@ -60,6 +65,7 @@ export const STARTERS: Starter[] = [
     stats: { hp: 50, atk: 48, def: 36, spAtk: 52, spDef: 40, spd: 58 },
     ability: 'Static Jolt',
     abilityId: 'static-jolt',
+    portraitUrl: '/assets/creatures/starters/electric-base.png',
   },
   {
     id: 'ground',
@@ -70,5 +76,6 @@ export const STARTERS: Starter[] = [
     stats: { hp: 65, atk: 38, def: 55, spAtk: 35, spDef: 52, spd: 28 },
     ability: 'Stone Nudge',
     abilityId: 'stone-nudge',
+    portraitUrl: '/assets/creatures/starters/ground-base.png',
   },
 ]

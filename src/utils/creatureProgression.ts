@@ -2,6 +2,7 @@ import { getPerk } from '../data/perks'
 import { creatureHasCombatTag, getPerkCombatTag } from '../data/creaturePerks'
 import type { ElementType } from '../data/starters'
 import type { PartyCreature } from './party'
+import { repairEvolutionProgress } from './evolutionSystem'
 import {
   applyEvolutionScore,
   createEmptyEvolutionScores,
@@ -34,16 +35,18 @@ export function elementTypeToEvolutionKey(type: ElementType): string {
   return type.toLowerCase()
 }
 
-export function withDefaultCreaturePerks<T extends Partial<CreaturePerkFields>>(
-  raw: T,
-): CreaturePerkFields {
-  return {
+export function withDefaultCreaturePerks<
+  T extends Partial<CreaturePerkFields> & { level?: number },
+>(raw: T): CreaturePerkFields {
+  const base: CreaturePerkFields = {
     selectedPerks: raw.selectedPerks ?? [],
     evolutionScores: raw.evolutionScores ?? createEmptyEvolutionScores(),
     evolutionStage: raw.evolutionStage ?? 0,
     lastEvolutionLevel: raw.lastEvolutionLevel ?? 1,
     evolutionHistory: raw.evolutionHistory ?? [],
   }
+  if (raw.level == null) return base
+  return repairEvolutionProgress({ ...base, level: raw.level })
 }
 
 export function applyPerkToPartyCreature(

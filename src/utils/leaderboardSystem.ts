@@ -12,6 +12,32 @@ import { getPartyHighestLevel } from './regionRewards'
 import type { DailyCheckpoint } from './dailyRunScoring'
 import { formatCheckpointLabel, compareCheckpoints } from './dailyRunScoring'
 
+import { getDailySeed } from './dailyRun'
+import type { SaveSlotId } from './saveSystem'
+
+export function getDailyLeaderboardSeed(date = new Date()): string {
+  return getDailySeed(date)
+}
+
+export function getCampaignLeaderboardSeed(slotId: SaveSlotId): string {
+  return `campaign-slot-${slotId}`
+}
+
+export function isCampaignLeaderboardSeed(seed: string): boolean {
+  return seed.startsWith('campaign-slot-')
+}
+
+export function formatLeaderboardSeedLabel(seed: string): string {
+  if (isCampaignLeaderboardSeed(seed)) {
+    const slot = seed.replace('campaign-slot-', '')
+    return `Campaign · Save Slot ${slot}`
+  }
+  if (seed.startsWith('daily-')) {
+    return `Daily · ${seed.replace('daily-', '')}`
+  }
+  return seed
+}
+
 export type LeaderboardCheckpointMeta = {
   nodesCleared: number
   bossesDefeated: number
@@ -150,8 +176,8 @@ export type SubmitLeaderboardResult = {
   tableMissing?: boolean
 }
 
-export async function submitDailyLeaderboardScore(params: {
-  dailySeed: string
+export async function submitLeaderboardScore(params: {
+  seed: string
   scoreSnapshot: RunScoreSnapshot
   regionId: string
   starter: RunCreature
@@ -196,7 +222,7 @@ export async function submitDailyLeaderboardScore(params: {
   }
 
   const newScore = params.forceBestScore ?? params.scoreSnapshot.total
-  const existing = await fetchPlayerLeaderboardEntry(params.dailySeed)
+  const existing = await fetchPlayerLeaderboardEntry(params.seed)
   if (existing) {
     const existingMeta = parseLeaderboardCheckpointMeta(existing.final_team)
     const existingCheckpoint: DailyCheckpoint | null = existingMeta
@@ -231,7 +257,7 @@ export async function submitDailyLeaderboardScore(params: {
   const payload = {
     user_id: userData.user.id,
     display_name: displayName,
-    daily_seed: params.dailySeed,
+    daily_seed: params.seed,
     score: Math.max(newScore, existing?.score ?? 0),
     region: params.checkpoint?.region ?? params.regionId,
     starter_name: params.starter.name,
@@ -266,6 +292,32 @@ export async function submitDailyLeaderboardScore(params: {
   }
 
   return { ok: true, keptPrevious: false }
+}
+
+export async function submitDailyLeaderboardScore(params: {
+  dailySeed: string
+  scoreSnapshot: RunScoreSnapshot
+  regionId: string
+  starter: RunCreature
+  recruits: PartyCreature[]
+  badgesEarned: number
+  evolutionsCount: number
+  checkpoint?: DailyCheckpoint | null
+  forceBestScore?: number
+  displayName?: string
+}): Promise<SubmitLeaderboardResult> {
+  return submitLeaderboardScore({
+    seed: params.dailySeed,
+    scoreSnapshot: params.scoreSnapshot,
+    regionId: params.regionId,
+    starter: params.starter,
+    recruits: params.recruits,
+    badgesEarned: params.badgesEarned,
+    evolutionsCount: params.evolutionsCount,
+    checkpoint: params.checkpoint,
+    forceBestScore: params.forceBestScore,
+    displayName: params.displayName,
+  })
 }
 
 export function getPlayerRank(

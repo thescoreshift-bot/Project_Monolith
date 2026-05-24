@@ -15,6 +15,8 @@ import { getPerkEvolutionScoreLabel } from '../utils/progression'
 import type { PartyCreature } from '../utils/party'
 import type { RunCreature } from '../utils/progression'
 import { HpBar } from './HpBar'
+import { CreaturePortrait } from './CreaturePortrait'
+import { getPortraitForCreature } from '../data/creaturePortraits'
 
 type PartyScreenProps = {
   starter: RunCreature
@@ -200,6 +202,16 @@ function CreatureCard({
     <article
       className={`party-creature${isActiveHelper ? ' party-creature--helper' : ''}`}
     >
+      <div className="party-creature__top">
+        <CreaturePortrait
+          type={type}
+          portraitUrl={getPortraitForCreature(creature)}
+          alt={name}
+          size="lg"
+          idle
+          className="party-creature__portrait"
+        />
+        <div className="party-creature__summary">
       <header className="party-creature__header">
         <div>
           <h2 className="party-creature__name">{name}</h2>
@@ -223,6 +235,8 @@ function CreatureCard({
         </span>
         <div className="xp-bar__track">
           <div className="xp-bar__fill" style={{ width: `${xpPercent}%` }} />
+        </div>
+      </div>
         </div>
       </div>
 

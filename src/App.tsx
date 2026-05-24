@@ -14,7 +14,9 @@ import { TutorialOverlay } from './components/TutorialOverlay'
 import { AbilityUpgradeScreen } from './components/AbilityUpgradeScreen'
 import { AbilityTransformScreen } from './components/AbilityTransformScreen'
 import { MoveLearnScreen } from './components/MoveLearnScreen'
+import { CreaturePortrait } from './components/CreaturePortrait'
 import { CombatScreen, type CombatantTarget } from './components/CombatScreen'
+import { getPortraitForStarter } from './data/creaturePortraits'
 import { EventScreen } from './components/EventScreen'
 import { HpBar } from './components/HpBar'
 import { BadgeDetailModal } from './components/BadgeDetailModal'
@@ -47,6 +49,7 @@ import {
   DEFAULT_REGION_ID,
   getRegion,
   normalizeRegionId,
+  REGIONS,
 } from './data/regions'
 import {
   formatDailyDisplayDate,
@@ -67,14 +70,16 @@ import {
 import {
   calculateCheckpoint,
   calculateCurrentAttemptScore,
+  calculateProgressScore,
   formatCheckpointLabel,
   updateBestDailyScore,
   type DailyRunScoreInput,
 } from './utils/dailyRunScoring'
 import {
   fetchLeaderboard,
+  getCampaignLeaderboardSeed,
   getPlayerRank,
-  submitDailyLeaderboardScore,
+  submitLeaderboardScore,
   type LeaderboardRow,
 } from './utils/leaderboardSystem'
 import {
@@ -148,6 +153,8 @@ import {
   canRecruitEnemy,
   getEnemyForNode,
   getEncounterKind,
+  getEnemyArchiveDiscovery,
+  getEnemyFoeName,
   getRewardsForEncounter,
   type EncounterKind,
   type Enemy,
@@ -333,6 +340,7 @@ import {
 import {
   applyPendingRetentionRewards,
   createDefaultRetentionState,
+  ensureStarterArchiveRegistered,
   getScaledQuestContext,
   hasRetentionNotifications,
   loadRetentionFromLocalSlot,
@@ -568,9 +576,8 @@ function App() {
   }>({ screen: 'title' })
   const [leaderboardRows, setLeaderboardRows] = useState<LeaderboardRow[]>([])
   const [leaderboardLoading, setLeaderboardLoading] = useState(false)
-  const [leaderboardTab, setLeaderboardTab] = useState<'today' | 'week' | 'all'>(
-    'today',
-  )
+  const [leaderboardTab, setLeaderboardTab] = useState<'daily' | 'campaign'>('daily')
+  const [leaderboardSeed, setLeaderboardSeed] = useState(getDailySeed())
   const [runSummaryScore, setRunSummaryScore] = useState<RunScoreSnapshot | null>(
     null,
   )
@@ -638,6 +645,7 @@ function App() {
   } | null>(null)
   const pvpOpponentNameRef = useRef('Friend')
   const retentionStateRef = useRef<RetentionState>(createDefaultRetentionState())
+  const leaderboardReturnScreenRef = useRef<Screen>('dailyRun')
 
   useEffect(() => {
     runCreatureRef.current = runCreature
@@ -1302,6 +1310,9 @@ function App() {
       dispatchRetentionEvent('dailyRunCompleted')
     }
     setScreen('runSummary')
+    if (runModeRef.current === 'daily') {
+      void tryAutoSubmitDailyLeaderboard({ completed, silent: false })
+    }
   }
 
   async function loadLeaderboardForSeed(seed: string): Promise<LeaderboardRow[]> {
@@ -1316,10 +1327,107 @@ function App() {
     return result.rows
   }
 
-  function openLeaderboard() {
+  function openLeaderboard(from: Screen = screenRef.current, mode: 'daily' | 'campaign' = 'daily') {
+    leaderboardReturnScreenRef.current = from
+    setLeaderboardTab(mode)
+    const seed =
+      mode === 'campaign'
+        ? getCampaignLeaderboardSeed(activeSlotIdRef.current ?? 1)
+        : getDailySeed()
+    setLeaderboardSeed(seed)
     requireProfileOrSetup('leaderboard', () => {
-      void loadLeaderboardForSeed(dailySeed).then(() => setScreen('leaderboard'))
+      void loadLeaderboardForSeed(seed).then(() => setScreen('leaderboard'))
     })
+  }
+
+  function handleLeaderboardTabChange(tab: 'daily' | 'campaign') {
+    setLeaderboardTab(tab)
+    const seed =
+      tab === 'campaign'
+        ? getCampaignLeaderboardSeed(activeSlotIdRef.current ?? 1)
+        : getDailySeed()
+    setLeaderboardSeed(seed)
+    void loadLeaderboardForSeed(seed)
+  }
+
+  async function tryAutoSubmitDailyLeaderboard(options?: {
+    completed?: boolean
+    silent?: boolean
+  }) {
+    if (!authUser || !playerProfile) return
+    const day = loadDailyRunDayState()
+    if (!day || day.bestScore <= 0) return
+
+    const summary = day.bestRunSummary
+    const checkpoint = summary?.checkpoint ?? day.bestCheckpoint
+    const attempt = day.currentAttemptRunState
+    const starter = attempt?.runCreature ?? runCreature
+    if (!starter || !checkpoint) return
+
+    const result = await submitLeaderboardScore({
+      seed: day.dailySeed,
+      scoreSnapshot: {
+        total: day.bestScore,
+        breakdown: [{ label: 'Best daily score', points: day.bestScore }],
+        completed: summary?.completed ?? options?.completed ?? false,
+      },
+      regionId: checkpoint.region,
+      starter,
+      recruits: attempt?.partyRecruits ?? partyRecruits,
+      badgesEarned: checkpoint.badgesEarned,
+      evolutionsCount: checkpoint.evolutionsCount,
+      checkpoint,
+      forceBestScore: day.bestScore,
+    })
+
+    if (result.ok) {
+      day.leaderboardSubmitted = true
+      saveDailyRunDayState(day)
+      scoreTrackerRef.current.submittedToLeaderboard = true
+      dispatchRetentionEvent('leaderboardSubmitted')
+      if (!options?.silent) {
+        setSubmitMessage(
+          result.keptPrevious
+            ? 'Your previous higher score was kept on the leaderboard.'
+            : 'Score submitted to daily leaderboard!',
+        )
+      }
+    } else if (!options?.silent && result.error) {
+      setSubmitMessage(result.error)
+    }
+  }
+
+  async function tryAutoSubmitCampaignLeaderboard(completed = false, silent = true) {
+    if (!authUser || !playerProfile) return
+    const slotId = activeSlotIdRef.current
+    if (!slotId || runModeRef.current !== 'normal') return
+    const input = buildDailyScoreInput(completed)
+    if (!input) return
+    const checkpoint = calculateCheckpoint(input)
+    if (checkpoint.nodesCleared === 0 && checkpoint.badgesEarned === 0) return
+
+    const progressScore = calculateProgressScore(checkpoint)
+    const result = await submitLeaderboardScore({
+      seed: getCampaignLeaderboardSeed(slotId),
+      scoreSnapshot: {
+        total: progressScore,
+        breakdown: [{ label: 'Campaign progression', points: progressScore }],
+        completed,
+      },
+      regionId: checkpoint.region,
+      starter: input.starter,
+      recruits: input.recruits,
+      badgesEarned: checkpoint.badgesEarned,
+      evolutionsCount: checkpoint.evolutionsCount,
+      checkpoint,
+    })
+
+    if (result.ok && !result.keptPrevious) {
+      dispatchRetentionEvent('leaderboardSubmitted')
+      if (!silent) {
+        setMapMessage('Campaign progress submitted to leaderboard.')
+      }
+    }
   }
 
   function beginDailyAttempt() {
@@ -1419,6 +1527,7 @@ function App() {
     runModeRef.current = 'normal'
     setGameRngOverride(null)
     setScreen('dailyDefeat')
+    void tryAutoSubmitDailyLeaderboard({ silent: true })
   }
 
   async function handleSubmitBestDailyScore(fromMenu = false) {
@@ -1454,8 +1563,8 @@ function App() {
       completed: summary?.completed ?? false,
     }
 
-    const result = await submitDailyLeaderboardScore({
-      dailySeed: day.dailySeed,
+    const result = await submitLeaderboardScore({
+      seed: day.dailySeed,
       scoreSnapshot,
       regionId: checkpoint.region,
       starter,
@@ -1594,7 +1703,9 @@ function App() {
     setPendingEvolutionQueue(saved.pendingEvolutionQueue ?? [])
     setPendingAbilityUpgradeQueue(saved.pendingAbilityUpgradeQueue ?? [])
     setPendingTransformQueue(saved.pendingTransformQueue ?? [])
-    setPendingPostBattleQueue(saved.pendingPostBattleQueue ?? [])
+    const restoredPostBattleQueue = saved.pendingPostBattleQueue ?? []
+    setPendingPostBattleQueue(restoredPostBattleQueue)
+    pendingPostBattleQueueRef.current = restoredPostBattleQueue
     setActiveHelperId(
       resolveActiveHelperId(
         saved.partyRecruits,
@@ -1628,10 +1739,14 @@ function App() {
         migrateLegacyGearInventory(emptyTrainerInventory(), saved.gearInventory),
       pendingBefore,
     )
-    const finalRetention = {
-      ...loadedRetention,
-      pendingRewards: appliedRetention.cleared,
-    }
+    const finalRetention = ensureStarterArchiveRegistered(
+      {
+        ...loadedRetention,
+        pendingRewards: appliedRetention.cleared,
+      },
+      saved.starterId,
+      normalizeRegionId(saved.currentRegion),
+    )
     if (
       pendingBefore.coins > 0 ||
       pendingBefore.items.length > 0 ||
@@ -2198,10 +2313,12 @@ function App() {
         partyRecruits.map((r) => [r.id, structuredClone(r.abilityMastery)]),
       ),
     }
-    setBattleLog([`${spawned.name} appeared!`])
+    const discovery = getEnemyArchiveDiscovery(spawned)
+    setBattleLog([`${spawned.name} sent out ${discovery.creatureName}!`])
     setCombatLocked(false)
     dispatchRetentionEvent('enemySeen', {
-      templateId: spawned.id,
+      templateId: discovery.templateId,
+      creatureName: discovery.creatureName,
       regionId: currentRegionId,
     })
     maybeAdvanceTutorial('clickBattleNode', 'useAbility')
@@ -2536,7 +2653,7 @@ function App() {
         attackerId: attackerKey,
         abilityId: resolvedId,
         abilityName: ability.name,
-        defenderName: enemy.name,
+        defenderName: getEnemyFoeName(enemy),
       }
       let damage = calcDamageWithMastery(
         ability,
@@ -2572,7 +2689,7 @@ function App() {
       const noteSuffix = notes.length > 0 ? ` (${notes.join(', ')})` : ''
 
       appendLog(
-        `${attackerName} used ${ability.name} — ${damage} damage to ${enemy.name}!${noteSuffix}`,
+        `${attackerName} used ${ability.name} — ${damage} damage to ${getEnemyFoeName(enemy)}!${noteSuffix}`,
       )
 
       if (ability.effects?.length) {
@@ -2680,6 +2797,7 @@ function App() {
     }
 
     console.log('Switching to defeat screen')
+    void tryAutoSubmitCampaignLeaderboard(false, true)
     setScreen('defeat')
   }
 
@@ -2753,7 +2871,7 @@ function App() {
     )
 
     if (!rollHits(enemyAbility.accuracy)) {
-      appendLog(`${currentEnemy.name} used ${enemyAbility.name} — it missed!`)
+      appendLog(`${getEnemyFoeName(currentEnemy)} used ${enemyAbility.name} — it missed!`)
     } else {
       const targetCreature =
         target.key === 'starter'
@@ -2808,10 +2926,10 @@ function App() {
       }
       if (damage > 0) {
         appendLog(
-          `${currentEnemy.name} used ${enemyAbility.name} — ${damage} damage to ${target.name}!${seNote}`,
+          `${getEnemyFoeName(currentEnemy)} used ${enemyAbility.name} — ${damage} damage to ${target.name}!${seNote}`,
         )
       } else {
-        appendLog(`${currentEnemy.name} used ${enemyAbility.name} on ${target.name}!`)
+        appendLog(`${getEnemyFoeName(currentEnemy)} used ${enemyAbility.name} on ${target.name}!`)
       }
       if (nextStarterHp <= 0 && target.key === 'starter') {
         const livingHelper = helper
@@ -3238,10 +3356,9 @@ function App() {
     return recruit ?? null
   }
 
-  function startPerkDraftFor(creatureId: string, perks?: string[]) {
-    setDraftingCreatureId(creatureId)
+  function startPerkDraftFor(creatureId: string, perks?: string[]): boolean {
     const creature = getCreatureForDraft(creatureId)
-  const exclude = perks ?? getCreatureSelectedPerks(creatureId)
+    const exclude = perks ?? getCreatureSelectedPerks(creatureId)
     const speciesKey = creature
       ? resolveCreatureSpeciesKey({
           starterTypeId:
@@ -3255,9 +3372,15 @@ function App() {
           type: creature.type,
         })
       : 'fire'
-    setDraftOptions(pickPerksForCreature(speciesKey, exclude))
+    const options = pickPerksForCreature(speciesKey, exclude)
+    if (options.length === 0) {
+      return false
+    }
+    setDraftingCreatureId(creatureId)
+    setDraftOptions(options)
     advanceTutorialTo('choosePerk')
     setScreen('perkDraft')
+    return true
   }
 
   function beginEvolutionFor(
@@ -3325,19 +3448,25 @@ function App() {
             ? starter.selectedPerks
             : (recruits.find((r) => r.id === event.creatureId)?.selectedPerks ??
               [])
-        startPerkDraftFor(event.creatureId, perks)
+        if (!startPerkDraftFor(event.creatureId, perks)) {
+          consumePostBattleQueueAndContinue(starter, recruits)
+        }
         return
       }
       case 'moveLearn':
         beginMoveLearn(event.creatureId, event.abilityId)
         return
-      case 'evolution':
-        beginEvolutionFor(
+      case 'evolution': {
+        const started = beginEvolutionFor(
           { creatureId: event.creatureId, threshold: event.threshold },
           starter,
           recruits,
         )
+        if (!started) {
+          consumePostBattleQueueAndContinue(starter, recruits)
+        }
         return
+      }
       case 'abilityMasteryPerk': {
         const masteryCreature =
           event.creatureId === STARTER_CREATURE_ID
@@ -3382,7 +3511,7 @@ function App() {
     starter: RunCreature,
     recruits: PartyCreature[],
   ) {
-    const nextQueue = shiftQueue(pendingPostBattleQueue)
+    const nextQueue = shiftQueue(pendingPostBattleQueueRef.current)
     setPendingPostBattleQueue(nextQueue)
     pendingPostBattleQueueRef.current = nextQueue
     processNextPostBattleEvent(starter, recruits, nextQueue)
@@ -3393,7 +3522,7 @@ function App() {
     processNextPostBattleEvent(
       runCreature,
       partyRecruits,
-      pendingPostBattleQueue,
+      pendingPostBattleQueueRef.current,
     )
   }
 
@@ -3588,6 +3717,12 @@ function App() {
     setActiveNodeId(null)
     setCurrentNode(null)
     setScreen('regionComplete')
+    if (runModeRef.current === 'daily') {
+      syncDailyDayStateFromGame(false)
+      void tryAutoSubmitDailyLeaderboard({ silent: true })
+    } else {
+      void tryAutoSubmitCampaignLeaderboard(false, true)
+    }
   }
 
   function healPartyAfterBattle(creature: RunCreature) {
@@ -3615,13 +3750,21 @@ function App() {
   function proceedAfterVictoryFlow(creature: RunCreature) {
     healPartyAfterBattle(creature)
 
-    if (runModeRef.current === 'daily' && (rewardInfo?.bossVictory || pendingBossVictory)) {
-      scoreTrackerRef.current.badgesEarned = earnedBadges.length
-      openRunSummary(true)
-      return
-    }
-
     if (rewardInfo?.bossVictory || pendingBossVictory) {
+      if (runModeRef.current === 'daily') {
+        scoreTrackerRef.current.badgesEarned = earnedBadges.length
+        syncDailyDayStateFromGame(false)
+        const input = buildDailyScoreInput(false)
+        if (input && dailySeedRef.current) {
+          let day = getDailyRunDayStateForToday(
+            dailySeedRef.current,
+            dailyModifierRef.current.id,
+          )
+          const result = updateBestDailyScore(day, input)
+          saveDailyRunDayState(result.dayState)
+        }
+      }
+
       if (rewardInfo) {
         openRegionComplete(rewardInfo)
         return
@@ -3651,6 +3794,17 @@ function App() {
   }
 
   function handleChooseNextRegion() {
+    if (runModeRef.current === 'daily') {
+      syncDailyDayStateFromGame(false)
+      void tryAutoSubmitDailyLeaderboard({ silent: true })
+      const allCleared = REGIONS.every((r) => completedRegionIds.includes(r.id))
+      if (allCleared) {
+        openRunSummary(true)
+        return
+      }
+    } else {
+      void tryAutoSubmitCampaignLeaderboard(false, true)
+    }
     setScreen('regionSelect')
   }
 
@@ -3671,6 +3825,11 @@ function App() {
     setCurrentNode(null)
     setMapMessage(null)
     resetCombatSession()
+    if (runModeRef.current === 'daily') {
+      syncDailyDayStateFromGame(false)
+    } else {
+      void tryAutoSubmitCampaignLeaderboard(false, true)
+    }
     setScreen('runMap')
   }
 
@@ -4396,7 +4555,7 @@ function App() {
           onContinueAttempt={continueDailyRunSaved}
           onRestartAttempt={restartDailyAttempt}
           onSubmitBest={() => void handleSubmitBestDailyScore(true)}
-          onLeaderboard={openLeaderboard}
+          onLeaderboard={() => openLeaderboard('dailyRun', 'daily')}
           onBack={goToTitle}
           submitBusy={submitBusy}
           submitMessage={dailyMenuSubmitMessage}
@@ -4414,7 +4573,7 @@ function App() {
           bestCheckpointLabel={dailyDefeatBestCheckpoint}
           newBestSaved={dailyDefeatNewBest}
           onRestart={beginDailyAttempt}
-          onLeaderboard={openLeaderboard}
+          onLeaderboard={() => openLeaderboard('dailyRun', 'daily')}
           onMenu={() => {
             refreshDailyMenu()
             setScreen('dailyRun')
@@ -4428,7 +4587,7 @@ function App() {
     return (
       <div className="app">
         <LeaderboardScreen
-          dailySeed={dailySeed}
+          seed={leaderboardSeed}
           displayDate={formatDailyDisplayDate()}
           rows={leaderboardRows}
           playerRank={getPlayerRank(leaderboardRows, authUser?.id)}
@@ -4436,8 +4595,8 @@ function App() {
           loading={leaderboardLoading}
           errorMessage={leaderboardError}
           activeTab={leaderboardTab}
-          onTabChange={setLeaderboardTab}
-          onBack={() => setScreen('dailyRun')}
+          onTabChange={handleLeaderboardTabChange}
+          onBack={() => setScreen(leaderboardReturnScreenRef.current)}
         />
       </div>
     )
@@ -4458,7 +4617,7 @@ function App() {
           submitBusy={submitBusy}
           submitMessage={submitMessage}
           onSubmit={() => void handleSubmitDailyScore()}
-          onLeaderboard={openLeaderboard}
+          onLeaderboard={() => openLeaderboard('dailyRun', 'daily')}
           onMenu={goToTitle}
         />
       </div>
@@ -4805,6 +4964,11 @@ function App() {
   }
 
   if (screen === 'regionComplete' && regionCompleteInfo && runCreature) {
+    const allRegionsCleared = REGIONS.every((r) => completedRegionIds.includes(r.id))
+    const regionCompleteNextLabel =
+      runMode === 'daily' && allRegionsCleared
+        ? 'Finish Daily Run'
+        : 'Choose Next Region'
     return (
       <div className="app">
         <RegionCompleteScreen
@@ -4812,6 +4976,7 @@ function App() {
           creature={runCreature}
           partyRecruits={partyRecruits}
           onChooseNextRegion={handleChooseNextRegion}
+          nextActionLabel={regionCompleteNextLabel}
         />
       </div>
     )
@@ -4972,6 +5137,9 @@ function App() {
           onOpenRecoveryStation={openRecoveryStation}
           onOpenFriendBattle={() => openFriendBattle('runMap')}
           onOpenFeedback={() => setFeedbackOpen(true)}
+          onOpenLeaderboard={() =>
+            openLeaderboard('runMap', runMode === 'daily' ? 'daily' : 'campaign')
+          }
         />
         {selectedBadgeId && (
           <BadgeDetailModal
@@ -5007,6 +5175,7 @@ function App() {
           setScreen('settings')
         }}
         onFeedback={() => setFeedbackOpen(true)}
+        onLeaderboard={() => openLeaderboard('title', 'daily')}
       />
       {renderGlobalToasts()}
       {renderFeedbackModal()}
@@ -5047,6 +5216,7 @@ function TitleScreen({
   onPlayOffline,
   onSettings,
   onFeedback,
+  onLeaderboard,
 }: {
   loggedIn: boolean
   cloudConfigured: boolean
@@ -5063,10 +5233,12 @@ function TitleScreen({
   onPlayOffline: () => void
   onSettings: () => void
   onFeedback: () => void
+  onLeaderboard: () => void
 }) {
   return (
-    <main className="title-screen">
-      <div className="title-screen__glow" aria-hidden="true" />
+    <main className="main-menu-screen title-screen">
+      <div className="main-menu-screen__bg" aria-hidden="true" />
+      <div className="main-menu-screen__overlay" aria-hidden="true" />
 
       <header className="title-screen__header">
         <h1 className="title-screen__title">PROJECT MONOLITH</h1>
@@ -5127,6 +5299,9 @@ function TitleScreen({
         )}
         <button type="button" className="btn" onClick={onFriendBattle}>
           Friend Battle
+        </button>
+        <button type="button" className="btn" onClick={onLeaderboard}>
+          Leaderboard
         </button>
         <button type="button" className="btn btn--small" onClick={onFeedback}>
           Feedback
@@ -5226,6 +5401,15 @@ function StarterCard({
     <article
       className={`starter-card starter-card--${starter.type.toLowerCase()}${selected ? ' starter-card--selected' : ''}`}
     >
+      <CreaturePortrait
+        type={starter.type}
+        portraitUrl={getPortraitForStarter(starter)}
+        silhouetteUrl={starter.silhouetteUrl}
+        alt={starter.name}
+        size="md"
+        idle
+        className="starter-card__portrait"
+      />
       <header className="starter-card__header">
         <h2 className="starter-card__name">{starter.name}</h2>
         <span className="starter-card__type">{starter.type}</span>
@@ -5423,6 +5607,7 @@ function RunMapScreen({
   onOpenRecoveryStation,
   onOpenFriendBattle,
   onOpenFeedback,
+  onOpenLeaderboard,
 }: {
   creature: RunCreature
   mapNodes: MapNode[]
@@ -5449,6 +5634,7 @@ function RunMapScreen({
   onOpenRecoveryStation: () => void
   onOpenFriendBattle: () => void
   onOpenFeedback: () => void
+  onOpenLeaderboard: () => void
 }) {
   const statusText = saveStatusLabel(saveStatus, saveWarning)
   const helperName =
@@ -5485,6 +5671,9 @@ function RunMapScreen({
           </button>
           <button type="button" className="btn btn--small" onClick={onOpenFriendBattle}>
             Friend Battle
+          </button>
+          <button type="button" className="btn btn--small" onClick={onOpenLeaderboard}>
+            Leaderboard
           </button>
           <button type="button" className="btn btn--small" onClick={onOpenFeedback}>
             Feedback

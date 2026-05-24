@@ -1,5 +1,7 @@
 import type { ElementType } from './starters'
 import type { NodeType } from './nodeMap'
+import { resolveNpcCreatureDisplay } from './creaturePortraits'
+import { normalizeRecruitTemplateId } from './recruitPortraits'
 import {
   encounterKindToHpMultiplier,
   enemyKindToHpMultiplier,
@@ -29,6 +31,8 @@ export type EnemyTemplate = {
   stats: EnemyStats
   abilityIds: string[]
   recruitable?: boolean
+  /** Recruit template id for portrait + foe name (trainers, leaders, elites). */
+  companionTemplateId?: string
 }
 
 export type Enemy = EnemyTemplate & {
@@ -147,6 +151,7 @@ export const ENEMY_TEMPLATES: Record<string, EnemyTemplate> = {
     stats: { atk: 44, def: 34, spAtk: 40, spDef: 32, spd: 42 },
     abilityIds: ['static-jolt', 'tackle'],
     recruitable: false,
+    companionTemplateId: 'voltimp',
   },
   'gym-trainer-nova': {
     id: 'gym-trainer-nova',
@@ -158,6 +163,7 @@ export const ENEMY_TEMPLATES: Record<string, EnemyTemplate> = {
     stats: { atk: 46, def: 36, spAtk: 42, spDef: 34, spd: 40 },
     abilityIds: ['spark-ember', 'cinder-bite'],
     recruitable: false,
+    companionTemplateId: 'ashling',
   },
   'gym-leader-ember': {
     id: 'gym-leader-ember',
@@ -169,6 +175,7 @@ export const ENEMY_TEMPLATES: Record<string, EnemyTemplate> = {
     stats: { atk: 52, def: 40, spAtk: 55, spDef: 42, spd: 44 },
     abilityIds: ['spark-ember', 'cinder-bite'],
     recruitable: false,
+    companionTemplateId: 'ashling',
   },
   'gym-leader-tide': {
     id: 'gym-leader-tide',
@@ -180,6 +187,7 @@ export const ENEMY_TEMPLATES: Record<string, EnemyTemplate> = {
     stats: { atk: 44, def: 44, spAtk: 52, spDef: 48, spd: 38 },
     abilityIds: ['bubble-hex', 'tackle'],
     recruitable: false,
+    companionTemplateId: 'driftwisp',
   },
   'gym-leader-bloom': {
     id: 'gym-leader-bloom',
@@ -191,6 +199,7 @@ export const ENEMY_TEMPLATES: Record<string, EnemyTemplate> = {
     stats: { atk: 46, def: 42, spAtk: 50, spDef: 46, spd: 36 },
     abilityIds: ['vine-lash', 'sting'],
     recruitable: false,
+    companionTemplateId: 'bristlebug',
   },
   'gym-leader-volt': {
     id: 'gym-leader-volt',
@@ -202,6 +211,7 @@ export const ENEMY_TEMPLATES: Record<string, EnemyTemplate> = {
     stats: { atk: 48, def: 38, spAtk: 58, spDef: 40, spd: 52 },
     abilityIds: ['static-jolt', 'spark-ember'],
     recruitable: false,
+    companionTemplateId: 'voltimp',
   },
   'gym-leader-stone': {
     id: 'gym-leader-stone',
@@ -213,6 +223,7 @@ export const ENEMY_TEMPLATES: Record<string, EnemyTemplate> = {
     stats: { atk: 50, def: 58, spAtk: 40, spDef: 52, spd: 28 },
     abilityIds: ['rock-bump', 'stone-nudge'],
     recruitable: false,
+    companionTemplateId: 'pebblemaw',
   },
   'gym-leader-venom': {
     id: 'gym-leader-venom',
@@ -224,6 +235,7 @@ export const ENEMY_TEMPLATES: Record<string, EnemyTemplate> = {
     stats: { atk: 42, def: 40, spAtk: 56, spDef: 44, spd: 40 },
     abilityIds: ['vine-lash', 'sting'],
     recruitable: false,
+    companionTemplateId: 'bristlebug',
   },
   'gym-leader-spirit': {
     id: 'gym-leader-spirit',
@@ -235,6 +247,7 @@ export const ENEMY_TEMPLATES: Record<string, EnemyTemplate> = {
     stats: { atk: 40, def: 42, spAtk: 54, spDef: 56, spd: 42 },
     abilityIds: ['bubble-hex', 'static-jolt'],
     recruitable: false,
+    companionTemplateId: 'driftwisp',
   },
   'gym-leader-apex': {
     id: 'gym-leader-apex',
@@ -246,6 +259,7 @@ export const ENEMY_TEMPLATES: Record<string, EnemyTemplate> = {
     stats: { atk: 55, def: 45, spAtk: 58, spDef: 48, spd: 50 },
     abilityIds: ['static-jolt', 'cinder-bite'],
     recruitable: false,
+    companionTemplateId: 'voltimp',
   },
   'region-boss-verdant': {
     id: 'region-boss-verdant',
@@ -257,6 +271,7 @@ export const ENEMY_TEMPLATES: Record<string, EnemyTemplate> = {
     stats: { atk: 58, def: 52, spAtk: 55, spDef: 50, spd: 42 },
     abilityIds: ['vine-lash', 'sting'],
     recruitable: false,
+    companionTemplateId: 'bristlebug',
   },
   'region-boss-ember': {
     id: 'region-boss-ember',
@@ -268,6 +283,7 @@ export const ENEMY_TEMPLATES: Record<string, EnemyTemplate> = {
     stats: { atk: 65, def: 48, spAtk: 62, spDef: 46, spd: 48 },
     abilityIds: ['cinder-bite', 'spark-ember'],
     recruitable: false,
+    companionTemplateId: 'ashling',
   },
   'region-boss-storm': {
     id: 'region-boss-storm',
@@ -279,6 +295,7 @@ export const ENEMY_TEMPLATES: Record<string, EnemyTemplate> = {
     stats: { atk: 62, def: 50, spAtk: 68, spDef: 48, spd: 58 },
     abilityIds: ['static-jolt', 'spark-ember'],
     recruitable: false,
+    companionTemplateId: 'voltimp',
   },
   'region-boss-obsidian': {
     id: 'region-boss-obsidian',
@@ -290,11 +307,65 @@ export const ENEMY_TEMPLATES: Record<string, EnemyTemplate> = {
     stats: { atk: 72, def: 65, spAtk: 70, spDef: 58, spd: 52 },
     abilityIds: ['rock-bump', 'stone-nudge'],
     recruitable: false,
+    companionTemplateId: 'pebblemaw',
   },
 }
 
 /** @deprecated Use region-specific boss ids */
 const LEGACY_REGION_BOSS = 'region-boss-verdant'
+
+export function getEnemyCombatDisplay(enemy: Enemy): {
+  creatureName: string
+  trainerLabel: string
+  portraitUrl: string | null
+  displayType: ElementType
+} {
+  const companionId = enemy.companionTemplateId
+  const companion = companionId ? ENEMY_TEMPLATES[companionId] : undefined
+
+  const creatureTemplateId = companionId ?? normalizeRecruitTemplateId(enemy.id)
+  const baseTemplate = companion ?? ENEMY_TEMPLATES[creatureTemplateId]
+  const baseName = baseTemplate?.name ?? enemy.name
+  const elementType = baseTemplate?.type ?? enemy.type
+
+  const resolved = resolveNpcCreatureDisplay(
+    creatureTemplateId,
+    elementType,
+    enemy.level,
+    baseName,
+  )
+
+  const trainerLabel =
+    companionId &&
+    (enemy.kind === 'trainer' || enemy.kind === 'boss' || enemy.kind === 'elite')
+      ? enemy.name
+      : 'Enemy'
+
+  return {
+    creatureName: resolved.name,
+    trainerLabel,
+    portraitUrl: resolved.portraitUrl,
+    displayType: elementType,
+  }
+}
+
+export function getEnemyFoeName(enemy: Enemy): string {
+  return getEnemyCombatDisplay(enemy).creatureName
+}
+
+/** Archive discovery ids when a battle starts (base recruit + displayed evolution name). */
+export function getEnemyArchiveDiscovery(enemy: Enemy): {
+  templateId: string
+  creatureName: string
+} {
+  const display = getEnemyCombatDisplay(enemy)
+  const templateId =
+    enemy.companionTemplateId ?? normalizeRecruitTemplateId(enemy.id)
+  return {
+    templateId,
+    creatureName: display.creatureName,
+  }
+}
 
 const NORMAL_POOL = [
   'bristlebug',

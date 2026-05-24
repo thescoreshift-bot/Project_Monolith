@@ -4,12 +4,15 @@ import {
   CREATURE_ARCHIVE_ENTRIES,
   formatArchiveNumber,
   getArchiveFamilyLine,
+  type CreatureArchiveEntry,
 } from '../data/creatureArchive'
 import { ARCHIVE_QUEST_BY_ID } from '../data/archiveQuests'
 import { GEAR_ITEMS } from '../data/gearItems'
 import { ITEMS } from '../data/items'
 import { BADGES_BY_ID } from '../data/badges'
+import { getPortraitForArchiveEntry } from '../data/creaturePortraits'
 import type { ElementType } from '../data/starters'
+import { CreaturePortrait } from './CreaturePortrait'
 import {
   claimAchievement,
   claimArchiveQuest,
@@ -23,7 +26,16 @@ import {
   getWeeklyResetRemaining,
   markArchiveViewed,
   type RetentionState,
+  type CreatureArchiveProgress,
 } from '../utils/retentionSystem'
+
+function isArchiveEntryUnlocked(
+  entry: CreatureArchiveEntry,
+  progress?: CreatureArchiveProgress,
+): boolean {
+  if (!progress) return false
+  return entry.familyOrder === 0 ? progress.recruited : progress.evolved
+}
 
 type ArchiveTab =
   | 'dailyRewards'
@@ -62,7 +74,7 @@ export function MonolithArchiveScreen({
   onApplyRewardMessage,
 }: MonolithArchiveScreenProps) {
   const [tab, setTab] = useState<ArchiveTab>('dailyRewards')
-  const [archiveFilter, setArchiveFilter] = useState<'all' | 'seen' | 'recruited' | 'unknown'>('all')
+  const [archiveFilter, setArchiveFilter] = useState<'all' | 'seen' | 'seenOnly' | 'recruited' | 'unknown'>('all')
   const [typeFilter, setTypeFilter] = useState<ElementType | 'all'>('all')
   const [selectedCreatureId, setSelectedCreatureId] = useState<string | null>(null)
 
@@ -110,6 +122,7 @@ export function MonolithArchiveScreen({
     const p = state.creatureArchive[e.creatureId]
     if (typeFilter !== 'all' && e.type !== typeFilter) return false
     if (archiveFilter === 'seen') return p?.seen
+    if (archiveFilter === 'seenOnly') return p?.seen && !isArchiveEntryUnlocked(e, p)
     if (archiveFilter === 'recruited') return p?.recruited
     if (archiveFilter === 'unknown') return !p?.seen
     return true
@@ -235,6 +248,7 @@ export function MonolithArchiveScreen({
               >
                 <option value="all">All</option>
                 <option value="seen">Seen</option>
+                <option value="seenOnly">Seen only</option>
                 <option value="recruited">Recruited</option>
                 <option value="unknown">Unknown</option>
               </select>
@@ -251,43 +265,81 @@ export function MonolithArchiveScreen({
             <div className="archive-creature-grid">
               {filteredArchive.map((e) => {
                 const p = state.creatureArchive[e.creatureId]
-                const seen = p?.seen
+                const seen = Boolean(p?.seen)
+                const unlocked = isArchiveEntryUnlocked(e, p)
+                const seenOnly = seen && !unlocked
                 return (
                   <button
                     key={e.creatureId}
                     type="button"
-                    className={`archive-creature-card${seen ? '' : ' archive-creature-card--unknown'}`}
+                    className={`archive-creature-card${!seen ? ' archive-creature-card--unknown' : seenOnly ? ' archive-creature-card--seen-only' : ' archive-creature-card--unlocked'}`}
                     onClick={() => setSelectedCreatureId(e.creatureId)}
                   >
+                    <CreaturePortrait
+                      type={e.type}
+                      portraitUrl={seen ? getPortraitForArchiveEntry(e) : null}
+                      alt={seen ? e.name : 'Unknown creature'}
+                      size="sm"
+                      unseen={!seen}
+                      dimmed={seenOnly}
+                      idle={unlocked}
+                      className="archive-creature-card__portrait"
+                    />
                     <span className="archive-creature-card__num">{formatArchiveNumber(e.archiveNumber)}</span>
                     <strong>{seen ? e.name : '???'}</strong>
                     <span>{seen ? e.type : 'Unknown'}</span>
                     <span className="archive-creature-card__icons">
-                      {p?.seen ? 'Seen ' : ''}
-                      {p?.recruited ? 'Recruited ' : ''}
-                      {p?.evolved ? 'Evolved' : ''}
+                      {seenOnly && (
+                        <span className="archive-creature-card__badge">Seen only</span>
+                      )}
+                      {unlocked && e.familyOrder === 0 && p?.recruited && (
+                        <span className="archive-creature-card__badge">Recruited</span>
+                      )}
+                      {unlocked && e.familyOrder > 0 && p?.evolved && (
+                        <span className="archive-creature-card__badge">Evolved</span>
+                      )}
                     </span>
                   </button>
                 )
               })}
             </div>
-            {selected && (
+            {selected && (() => {
+              const selectedProgress = state.creatureArchive[selected.creatureId]
+              const selectedSeen = Boolean(selectedProgress?.seen)
+              const selectedUnlocked = isArchiveEntryUnlocked(selected, selectedProgress)
+              const selectedSeenOnly = selectedSeen && !selectedUnlocked
+              return (
               <aside className="archive-creature-detail">
+                <CreaturePortrait
+                  type={selected.type}
+                  portraitUrl={selectedSeen ? getPortraitForArchiveEntry(selected) : null}
+                  alt={selectedSeen ? selected.name : 'Unknown creature'}
+                  size="lg"
+                  unseen={!selectedSeen}
+                  dimmed={selectedSeenOnly}
+                  idle={selectedUnlocked}
+                  className="archive-creature-detail__portrait"
+                />
                 <h3>
                   {formatArchiveNumber(selected.archiveNumber)}{' '}
-                  {state.creatureArchive[selected.creatureId]?.seen ? selected.name : '???'}
+                  {selectedSeen ? selected.name : '???'}
                 </h3>
                 <p>
-                  {state.creatureArchive[selected.creatureId]?.seen
-                    ? selected.description
+                  {selectedSeen
+                    ? selectedSeenOnly
+                      ? `${selected.description} (Seen in battle — recruit or evolve to unlock full record.)`
+                      : selected.description
                     : 'Undiscovered creature.'}
                 </p>
                 <p>
                   Type:{' '}
-                  {state.creatureArchive[selected.creatureId]?.seen ? selected.type : 'Unknown'}
+                  {selectedSeen ? selected.type : 'Unknown'}
                 </p>
-                {state.creatureArchive[selected.creatureId]?.regionFirstSeen && (
-                  <p>First seen in: {state.creatureArchive[selected.creatureId]?.regionFirstSeen}</p>
+                {selectedProgress?.regionFirstSeen && (
+                  <p>First seen in: {selectedProgress.regionFirstSeen}</p>
+                )}
+                {selectedSeenOnly && (
+                  <p className="archive-creature-card__badge">Seen only — not yet in your party</p>
                 )}
                 <p className="archive-evolution-line">
                   {getArchiveFamilyLine(selected.familyId).map((f, i) => {
@@ -305,7 +357,8 @@ export function MonolithArchiveScreen({
                   Close
                 </button>
               </aside>
-            )}
+              )
+            })()}
           </>
         )}
 
