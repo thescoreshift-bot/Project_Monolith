@@ -1,4 +1,4 @@
-import { getAbility } from './abilities'
+import { getAbility, ABILITIES } from './abilities'
 import type { AbilityDefinition } from './abilityTypes'
 import { SUPPORT_ABILITY_MASTERY_PERKS } from './supportAbilityMasteryPerks'
 
@@ -139,160 +139,177 @@ function perkMatchesAbilityRole(
   return perkRole === abilityRole
 }
 
-let fallbackIdCounter = 0
-
-function nextFallbackId(prefix: string): string {
-  fallbackIdCounter += 1
-  return `${prefix}-fb-${fallbackIdCounter}`
-}
-
 export function generateFallbackMasteryPerks(
   abilityId: string,
   abilityRole: AbilityRole,
   rank: number,
   count: number,
 ): AbilityMasteryPerk[] {
+  const ability = getAbility(abilityId)
+  const abilityName = ability.name
+
   const templates: Record<
     AbilityRole,
-    { name: string; description: string; effects: MasteryPerkEffects; role: AbilityRole }[]
+    { slug: string; name: string; description: string; effects: MasteryPerkEffects; role: AbilityRole }[]
   > = {
     damage: [
       {
-        name: 'Sharpened Power',
-        description: 'This ability deals 10% more damage.',
-        effects: { bonusDamagePercent: 0.1 },
+        slug: 'overdrive',
+        name: `${abilityName}: Overdrive`,
+        description: `${abilityName} hits 12% harder at this mastery rank.`,
+        effects: { bonusDamagePercent: 0.12 },
         role: 'damage',
       },
       {
-        name: 'Focused Strike',
-        description: 'This ability gains +10 accuracy.',
-        effects: { bonusAccuracy: 10 },
+        slug: 'true-aim',
+        name: `${abilityName}: True Aim`,
+        description: `${abilityName} gains +12 accuracy from focused training.`,
+        effects: { bonusAccuracy: 12 },
         role: 'damage',
       },
       {
-        name: 'Piercing Hit',
-        description: '+4 flat damage for this ability.',
-        effects: { flatDamage: 4 },
+        slug: 'breaking-force',
+        name: `${abilityName}: Breaking Force`,
+        description: `${abilityName} lands with +5 extra damage.`,
+        effects: { flatDamage: 5 },
         role: 'damage',
       },
     ],
     debuff: [
       {
-        name: 'Deeper Pressure',
-        description: 'Debuffs from this ability apply +1 stage.',
+        slug: 'crush-spirit',
+        name: `${abilityName}: Crush Spirit`,
+        description: `${abilityName} applies debuffs +1 stage deeper.`,
         effects: { statStageBonus: 1 },
         role: 'debuff',
       },
       {
-        name: 'Reliable Pressure',
-        description: 'This debuff gains +10 accuracy.',
-        effects: { bonusAccuracy: 10 },
+        slug: 'unshakable',
+        name: `${abilityName}: Unshakable`,
+        description: `${abilityName} lands debuffs more reliably (+12 accuracy).`,
+        effects: { bonusAccuracy: 12 },
         role: 'debuff',
       },
       {
-        name: 'Lingering Effect',
-        description: '+10% status chance on this ability.',
-        effects: { bonusStatusChance: 10 },
+        slug: 'lingering-weight',
+        name: `${abilityName}: Lingering Weight`,
+        description: `${abilityName} leaves foes struggling under pressure (+12% status chance).`,
+        effects: { bonusStatusChance: 12 },
         role: 'debuff',
       },
     ],
     buff: [
       {
-        name: 'Stronger Stance',
-        description: 'Buffs from this ability apply +1 stage.',
+        slug: 'iron-stance',
+        name: `${abilityName}: Iron Stance`,
+        description: `${abilityName} raises stats +1 extra stage.`,
         effects: { statStageBonus: 1 },
         role: 'buff',
       },
       {
-        name: 'Steady Focus',
-        description: '+10 accuracy for this ability.',
-        effects: { bonusAccuracy: 10 },
+        slug: 'steady-breath',
+        name: `${abilityName}: Steady Breath`,
+        description: `${abilityName} sets up more reliably (+12 accuracy).`,
+        effects: { bonusAccuracy: 12 },
         role: 'buff',
       },
       {
-        name: 'Shared Momentum',
-        description: 'Minor team buff synergy (planned).',
-        effects: { healOnHitPercent: 0.03 },
+        slug: 'shared-rhythm',
+        name: `${abilityName}: Shared Rhythm`,
+        description: `${abilityName} restores 4% max HP when used.`,
+        effects: { healOnHitPercent: 0.04 },
         role: 'buff',
       },
     ],
     status: [
       {
-        name: 'Higher Chance',
-        description: 'Status effects from this ability gain +15% chance.',
-        effects: { bonusStatusChance: 15 },
+        slug: 'potent-hex',
+        name: `${abilityName}: Potent Hex`,
+        description: `${abilityName} status effects gain +18% chance.`,
+        effects: { bonusStatusChance: 18 },
         role: 'status',
       },
       {
-        name: 'Reliable Hex',
-        description: '+10 accuracy for this ability.',
-        effects: { bonusAccuracy: 10 },
+        slug: 'sure-cast',
+        name: `${abilityName}: Sure Cast`,
+        description: `${abilityName} gains +12 accuracy.`,
+        effects: { bonusAccuracy: 12 },
         role: 'status',
       },
       {
-        name: 'Punishing Status',
-        description: 'On status hit, +8% damage on next use (planned).',
-        effects: { bonusDamagePercent: 0.08 },
+        slug: 'punish-window',
+        name: `${abilityName}: Punish Window`,
+        description: `After ${abilityName} lands, your next hit deals +10% damage.`,
+        effects: { bonusDamagePercent: 0.1 },
         role: 'status',
       },
     ],
     healing: [
       {
-        name: 'Stronger Recovery',
-        description: 'Healing from this ability is 20% stronger.',
-        effects: { healBonusPercent: 0.2 },
+        slug: 'deep-recovery',
+        name: `${abilityName}: Deep Recovery`,
+        description: `${abilityName} heals 25% more HP.`,
+        effects: { healBonusPercent: 0.25 },
         role: 'healing',
       },
       {
-        name: 'Gentle Flow',
-        description: 'Also restores a little HP to the user on use.',
-        effects: { healOnHitPercent: 0.05 },
+        slug: 'afterglow',
+        name: `${abilityName}: Afterglow`,
+        description: `${abilityName} leaves a soothing pulse (+6% heal on use).`,
+        effects: { healOnHitPercent: 0.06 },
         role: 'healing',
       },
       {
-        name: 'Protective Recovery',
-        description: '+10 accuracy for this ability.',
-        effects: { bonusAccuracy: 10 },
+        slug: 'calm-flow',
+        name: `${abilityName}: Calm Flow`,
+        description: `${abilityName} is easier to land (+12 accuracy).`,
+        effects: { bonusAccuracy: 12 },
         role: 'healing',
       },
     ],
     support: [
       {
-        name: 'Refined Technique',
-        description: '+10 accuracy for this ability.',
-        effects: { bonusAccuracy: 10 },
+        slug: 'refined-form',
+        name: `${abilityName}: Refined Form`,
+        description: `${abilityName} gains +12 accuracy.`,
+        effects: { bonusAccuracy: 12 },
         role: 'support',
       },
       {
-        name: 'Tactical Edge',
-        description: 'Small damage boost on hybrid/support use.',
-        effects: { bonusDamagePercent: 0.08 },
+        slug: 'tactical-edge',
+        name: `${abilityName}: Tactical Edge`,
+        description: `${abilityName} adds +10% damage when used in a combo.`,
+        effects: { bonusDamagePercent: 0.1 },
         role: 'support',
       },
       {
-        name: 'Calm Control',
-        description: 'Support effects +10% stronger.',
-        effects: { healBonusPercent: 0.1 },
+        slug: 'field-control',
+        name: `${abilityName}: Field Control`,
+        description: `${abilityName} support effects are 12% stronger.`,
+        effects: { healBonusPercent: 0.12 },
         role: 'support',
       },
     ],
     hybrid: [
       {
-        name: 'Versatile Power',
-        description: 'This ability deals 8% more damage.',
-        effects: { bonusDamagePercent: 0.08 },
+        slug: 'dual-edge',
+        name: `${abilityName}: Dual Edge`,
+        description: `${abilityName} deals 10% more damage.`,
+        effects: { bonusDamagePercent: 0.1 },
         role: 'hybrid',
       },
       {
-        name: 'Dual Focus',
-        description: '+10 accuracy and +10% status chance.',
-        effects: { bonusAccuracy: 10, bonusStatusChance: 10 },
+        slug: 'split-focus',
+        name: `${abilityName}: Split Focus`,
+        description: `${abilityName} gains +12 accuracy and +12% status chance.`,
+        effects: { bonusAccuracy: 12, bonusStatusChance: 12 },
         role: 'hybrid',
       },
       {
-        name: 'Combo Flow',
-        description: '+3 flat damage and +1 debuff stage.',
-        effects: { flatDamage: 3, statStageBonus: 1 },
+        slug: 'combo-weave',
+        name: `${abilityName}: Combo Weave`,
+        description: `${abilityName} adds +4 damage and +1 debuff stage.`,
+        effects: { flatDamage: 4, statStageBonus: 1 },
         role: 'hybrid',
       },
     ],
@@ -300,7 +317,7 @@ export function generateFallbackMasteryPerks(
 
   const pool = templates[abilityRole] ?? templates.support
   return pool.slice(0, count).map((t) => ({
-    id: nextFallbackId(abilityId),
+    id: `${abilityId}-${t.slug}-r${rank}`,
     abilityId,
     name: t.name,
     description: t.description,
@@ -415,34 +432,34 @@ function enemyMovePerks(
 ): AbilityMasteryPerk[] {
   return [
     {
-      id: `${abilityId}-sharp`,
+      id: `${abilityId}-fang-overdrive`,
       abilityId,
-      name: 'Sharpened Power',
-      description: `${displayName} deals 10% more damage.`,
+      name: `${displayName}: Fang Overdrive`,
+      description: `${displayName} hits 12% harder.`,
       rankMinimum: 2,
       pathTag: 'damage',
       abilityRole: 'damage',
-      effects: { bonusDamagePercent: 0.1 },
+      effects: { bonusDamagePercent: 0.12 },
     },
     {
-      id: `${abilityId}-focus`,
+      id: `${abilityId}-keen-strike`,
       abilityId,
-      name: 'Focused Strike',
-      description: `+10 accuracy for ${displayName}.`,
+      name: `${displayName}: Keen Strike`,
+      description: `${displayName} gains +12 accuracy.`,
       rankMinimum: 2,
       pathTag: 'damage',
       abilityRole: 'damage',
-      effects: { bonusAccuracy: 10 },
+      effects: { bonusAccuracy: 12 },
     },
     {
-      id: `${abilityId}-pierce`,
+      id: `${abilityId}-crushing-blow`,
       abilityId,
-      name: 'Piercing Hit',
-      description: `+4 flat damage for ${displayName}.`,
+      name: `${displayName}: Crushing Blow`,
+      description: `${displayName} lands with +5 bonus damage.`,
       rankMinimum: 3,
       pathTag: 'damage',
       abilityRole: 'damage',
-      effects: { flatDamage: 4 },
+      effects: { flatDamage: 5 },
     },
   ]
 }
@@ -457,7 +474,26 @@ function stingPerks(): AbilityMasteryPerk[] {
   ]
 }
 
-export const ABILITY_MASTERY_PERKS: AbilityMasteryPerk[] = [
+function buildAutoGeneratedAbilityPerks(
+  handcrafted: AbilityMasteryPerk[],
+): AbilityMasteryPerk[] {
+  const covered = new Set(handcrafted.map((p) => p.abilityId))
+  const generated: AbilityMasteryPerk[] = []
+  for (const ability of Object.values(ABILITIES)) {
+    if (covered.has(ability.id)) continue
+    generated.push(
+      ...generateFallbackMasteryPerks(
+        ability.id,
+        getAbilityRole(ability),
+        2,
+        3,
+      ),
+    )
+  }
+  return generated
+}
+
+const HANDCRAFTED_ABILITY_MASTERY_PERKS: AbilityMasteryPerk[] = [
   ...sparkPerks(),
   ...bubblePerks(),
   ...vinePerks(),
@@ -468,6 +504,11 @@ export const ABILITY_MASTERY_PERKS: AbilityMasteryPerk[] = [
   ...enemyMovePerks('cinder-bite', 'Cinder Bite'),
   ...enemyMovePerks('rock-bump', 'Rock Bump'),
   ...SUPPORT_ABILITY_MASTERY_PERKS,
+]
+
+export const ABILITY_MASTERY_PERKS: AbilityMasteryPerk[] = [
+  ...HANDCRAFTED_ABILITY_MASTERY_PERKS,
+  ...buildAutoGeneratedAbilityPerks(HANDCRAFTED_ABILITY_MASTERY_PERKS),
 ]
 
 const PERK_BY_ID = Object.fromEntries(

@@ -1,11 +1,13 @@
 import type { TemporaryBattleBuff } from './battleBuffs'
 import type { Perk, PerkCategory } from '../data/perks'
 import { getPerk, PERKS } from '../data/perks'
+import { getPerkCombatTag } from '../data/creaturePerks'
 import type { Starter, StarterStats } from '../data/starters'
 import {
   ensureAbilityMastery,
   type AbilityMasteryMap,
 } from './abilityMastery'
+import { creatureHasCombatTag } from '../data/creaturePerks'
 import { normalizeCreatureAbilities } from './creatureAbilities'
 
 export type EvolutionScores = {
@@ -164,9 +166,10 @@ export function recalculateStats(
 }
 
 export function getEvolutionScoreGain(perk: Perk): number {
-  if (perk.id === 'primal-mutation') return 5
-  if (perk.id === 'adaptive-core') return 1
-  if (perk.id === 'strange-catalyst') return 3
+  const tag = getPerkCombatTag(perk.id)
+  if (tag === 'primal_mutation' || perk.id === 'primal-mutation') return 5
+  if (tag === 'adaptive_core' || perk.id === 'adaptive-core') return 1
+  if (tag === 'strange_catalyst' || perk.id === 'strange-catalyst') return 3
   if (perk.category === 'evolution') {
     return EVOLUTION_SCORE_BY_RARITY[perk.rarity] + 1
   }
@@ -175,7 +178,7 @@ export function getEvolutionScoreGain(perk: Perk): number {
 
 export function getPerkEvolutionScoreLabel(perk: Perk): string {
   const gain = getEvolutionScoreGain(perk)
-  if (perk.id === 'adaptive-core') {
+  if (getPerkCombatTag(perk.id) === 'adaptive_core' || perk.id === 'adaptive-core') {
     return 'All paths +1'
   }
   const label = perk.category.charAt(0).toUpperCase() + perk.category.slice(1)
@@ -189,7 +192,7 @@ export function applyEvolutionScore(
   const next = { ...scores }
   const gain = getEvolutionScoreGain(perk)
 
-  if (perk.id === 'adaptive-core') {
+  if (getPerkCombatTag(perk.id) === 'adaptive_core' || perk.id === 'adaptive-core') {
     next.offense += 1
     next.defense += 1
     next.speed += 1
@@ -309,7 +312,7 @@ export function hasPerk(creature: RunCreature, perkId: string): boolean {
 }
 
 export function applyPostBattleHealing(creature: RunCreature): RunCreature {
-  if (!hasPerk(creature, 'second-wind')) return creature
+  if (!creatureHasCombatTag(creature.selectedPerks, 'second_wind')) return creature
   return {
     ...creature,
     currentHp: Math.min(creature.maxHp, creature.currentHp + 8),
@@ -317,7 +320,7 @@ export function applyPostBattleHealing(creature: RunCreature): RunCreature {
 }
 
 export function applyRestNodeHealing(creature: RunCreature): RunCreature {
-  if (!hasPerk(creature, 'field-recovery')) return creature
+  if (!creatureHasCombatTag(creature.selectedPerks, 'field_recovery')) return creature
   return {
     ...creature,
     currentHp: Math.min(creature.maxHp, creature.currentHp + 20),

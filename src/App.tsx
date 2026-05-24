@@ -164,7 +164,7 @@ import {
   type NodeClickAction,
   type NodeVisitState,
 } from './data/nodeMap'
-import { getPerk, pickRandomPerks, type Perk } from './data/perks'
+import { getPerk, pickPerksForCreature, resolveCreatureSpeciesKey, type Perk } from './data/perks'
 import { getGearItem } from './data/gearItems'
 import { SHOP_ITEMS, type ShopItemId } from './data/shopItems'
 import { STARTERS, type Starter } from './data/starters'
@@ -2889,7 +2889,7 @@ function App() {
       levelUpLines: xpResult.levelUpLines,
       masteryLines,
       pendingChoices,
-      loot: rewards.coins > 0 ? 'Battle spoils' : 'None',
+      loot: rewards.coins > 0 ? 'Coin reward from battle' : 'None',
       enemyName: defeatedEnemy.name,
       hasPerkDrafts: xpResult.perkDraftQueue.length > 0,
       badgeEarned,
@@ -3041,9 +3041,22 @@ function App() {
 
   function startPerkDraftFor(creatureId: string, perks?: string[]) {
     setDraftingCreatureId(creatureId)
-    setDraftOptions(
-      pickRandomPerks(3, perks ?? getCreatureSelectedPerks(creatureId)),
-    )
+    const creature = getCreatureForDraft(creatureId)
+  const exclude = perks ?? getCreatureSelectedPerks(creatureId)
+    const speciesKey = creature
+      ? resolveCreatureSpeciesKey({
+          starterTypeId:
+            creatureId === STARTER_CREATURE_ID && runCreature
+              ? runCreature.starterTypeId
+              : undefined,
+          templateId:
+            creatureId !== STARTER_CREATURE_ID
+              ? partyRecruits.find((r) => r.id === creatureId)?.templateId
+              : undefined,
+          type: creature.type,
+        })
+      : 'fire'
+    setDraftOptions(pickPerksForCreature(speciesKey, exclude))
     advanceTutorialTo('choosePerk')
     setScreen('perkDraft')
   }

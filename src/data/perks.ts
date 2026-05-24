@@ -1,3 +1,13 @@
+import { CREATURE_PERKS } from './creaturePerks'
+
+export type { CreatureSpeciesKey } from './creaturePerks'
+export {
+  creatureHasCombatTag,
+  getPerkCombatTag,
+  pickPerksForCreature,
+  resolveCreatureSpeciesKey,
+} from './creaturePerks'
+
 export type PerkRarity = 'common' | 'rare' | 'legendary'
 
 export type PerkCategory =
@@ -27,7 +37,8 @@ export type Perk = {
   effect: string
 }
 
-export const PERKS: Record<string, Perk> = {
+/** @deprecated Pre–species-perk saves only — not offered in new drafts. */
+const LEGACY_GENERIC_PERKS: Record<string, Perk> = {
   'ember-blood': {
     id: 'ember-blood',
     name: 'Ember Blood',
@@ -214,12 +225,18 @@ export const PERKS: Record<string, Perk> = {
   },
 }
 
+export const PERKS: Record<string, Perk> = {
+  ...LEGACY_GENERIC_PERKS,
+  ...CREATURE_PERKS,
+}
+
 export const PERK_LIST = Object.values(PERKS)
 
 export function getPerk(id: string): Perk {
   return PERKS[id]
 }
 
+/** @deprecated Use pickPerksForCreature for species-specific drafts. */
 export function pickRandomPerks(
   count: number,
   excludeIds: string[] = [],

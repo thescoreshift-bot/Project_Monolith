@@ -1,4 +1,4 @@
-import { pickRandomPerks } from '../data/perks'
+import { pickPerksForCreature, resolveCreatureSpeciesKey } from '../data/perks'
 import { pickRandomNormalEnemy } from '../data/enemies'
 import { partyCreatureFromTemplate } from './party'
 import type { PartyCreature } from './party'
@@ -68,7 +68,14 @@ export function applyEventChoice(
     }
     case 'wandering-researcher':
       if (choice === 'a') {
-        const perk = pickRandomPerks(1, starter.selectedPerks)[0]
+        const perk = pickPerksForCreature(
+          resolveCreatureSpeciesKey({
+            starterTypeId: starter.starterTypeId,
+            type: starter.type,
+          }),
+          starter.selectedPerks,
+          1,
+        )[0]
         if (perk) starter = applyPerk(starter, perk.id)
         else starter = addXp(starter, 20).creature
       } else {

@@ -1,4 +1,5 @@
 import { getPerk } from '../data/perks'
+import { creatureHasCombatTag, getPerkCombatTag } from '../data/creaturePerks'
 import type { ElementType } from '../data/starters'
 import type { PartyCreature } from './party'
 import {
@@ -67,9 +68,14 @@ export function applyPerkToPartyCreature(
 
 export function hasCreaturePerk(
   creature: { selectedPerks: string[] },
-  perkId: string,
+  perkIdOrTag: string,
 ): boolean {
-  return creature.selectedPerks.includes(perkId)
+  if (creature.selectedPerks.includes(perkIdOrTag)) return true
+  const legacyTag = getPerkCombatTag(perkIdOrTag)
+  if (legacyTag) {
+    return creatureHasCombatTag(creature.selectedPerks, legacyTag)
+  }
+  return creatureHasCombatTag(creature.selectedPerks, perkIdOrTag)
 }
 
 export function migrateLegacyStarterPerksToRecruits(

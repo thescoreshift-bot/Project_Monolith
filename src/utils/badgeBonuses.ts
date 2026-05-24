@@ -1,5 +1,6 @@
 import { getBadge } from '../data/badges'
 import type { Ability } from '../data/abilities'
+import { creatureHasCombatTag } from '../data/creaturePerks'
 import type { StarterStats } from '../data/starters'
 import type { PartyCreature } from './party'
 import {
@@ -178,7 +179,7 @@ export function getDefenderStatsForAttack(
   attackerPerks: string[],
 ): Pick<StarterStats, 'atk' | 'def' | 'spAtk' | 'spDef'> {
   if (
-    attackerPerks.includes('piercing-instinct') &&
+    creatureHasCombatTag(attackerPerks, 'piercing_instinct') &&
     ability.category === 'physical'
   ) {
     return {
@@ -197,10 +198,16 @@ export function getAttackerDamageMultiplier(
 ): number {
   let mult = getDamageMultiplierForAbility(ability, earnedBadges)
 
-  for (const perkId of selectedPerks) {
-    if (perkId === 'ember-blood' && ability.type === 'Fire') {
-      mult += 0.1
-    }
+  const TYPE_DAMAGE_TAGS: Record<string, string> = {
+    Fire: 'fire_damage_bonus',
+    Water: 'water_damage_bonus',
+    Grass: 'grass_damage_bonus',
+    Electric: 'electric_damage_bonus',
+    Ground: 'ground_damage_bonus',
+  }
+  const typeTag = TYPE_DAMAGE_TAGS[ability.type]
+  if (typeTag && creatureHasCombatTag(selectedPerks, typeTag)) {
+    mult += 0.1
   }
 
   if (attacker) {
@@ -219,7 +226,7 @@ export function getFirstStrikeBonus(
   alreadyUsed: boolean,
 ): number {
   if (alreadyUsed) return 0
-  if (selectedPerks.includes('first-strike')) return 8
+  if (creatureHasCombatTag(selectedPerks, 'first_strike')) return 8
   return 0
 }
 
