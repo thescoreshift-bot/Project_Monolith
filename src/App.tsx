@@ -3437,7 +3437,7 @@ function App() {
   ) {
     const event = queue[0]
     if (!event) {
-      proceedAfterVictoryFlow(starter)
+      proceedAfterVictoryFlow(starter, recruits)
       return
     }
 
@@ -3503,7 +3503,7 @@ function App() {
         })
         return
       default:
-        proceedAfterVictoryFlow(starter)
+        proceedAfterVictoryFlow(starter, recruits)
     }
   }
 
@@ -3520,8 +3520,8 @@ function App() {
   function advancePostBattleFlow() {
     if (!runCreature) return
     processNextPostBattleEvent(
-      runCreature,
-      partyRecruits,
+      runCreatureRef.current ?? runCreature,
+      partyRecruitsRef.current,
       pendingPostBattleQueueRef.current,
     )
   }
@@ -3649,16 +3649,18 @@ function App() {
     const targetId = creatureId ?? STARTER_CREATURE_ID
 
     let nextStarter = runCreature
-    let nextRecruits = partyRecruits
+    let nextRecruits = partyRecruitsRef.current
 
     if (targetId === STARTER_CREATURE_ID) {
       nextStarter = evolveStarter(runCreature, threshold)
       setRunCreature(nextStarter)
+      runCreatureRef.current = nextStarter
     } else {
-      nextRecruits = partyRecruits.map((r) =>
+      nextRecruits = nextRecruits.map((r) =>
         r.id === targetId ? evolvePartyCreature(r, threshold) : r,
       )
       setPartyRecruits(nextRecruits)
+      partyRecruitsRef.current = nextRecruits
     }
 
     const evolvedName =
@@ -3725,10 +3727,13 @@ function App() {
     }
   }
 
-  function healPartyAfterBattle(creature: RunCreature) {
+  function healPartyAfterBattle(
+    creature: RunCreature,
+    recruits: PartyCreature[] = partyRecruitsRef.current,
+  ) {
     const healed = clearPartyBattleBuffs(
       applyPostBattleHealing(creature),
-      partyRecruits,
+      recruits,
     )
     let healedStarter = healed.starter
     const healedRecruits = healed.recruits.map((r) => {
@@ -3747,8 +3752,11 @@ function App() {
     runCreatureRef.current = healedStarter
   }
 
-  function proceedAfterVictoryFlow(creature: RunCreature) {
-    healPartyAfterBattle(creature)
+  function proceedAfterVictoryFlow(
+    creature: RunCreature,
+    recruits: PartyCreature[] = partyRecruitsRef.current,
+  ) {
+    healPartyAfterBattle(creature, recruits)
 
     if (rewardInfo?.bossVictory || pendingBossVictory) {
       if (runModeRef.current === 'daily') {
@@ -3771,10 +3779,10 @@ function App() {
       }
     }
 
-    finishRunReturn(creature)
+    finishRunReturn()
   }
 
-  function finishRunReturn(creature: RunCreature) {
+  function finishRunReturn() {
     resetCombatSession()
     setEnemy(null)
     setBattleLog([])
@@ -3788,7 +3796,6 @@ function App() {
     setPendingRecruit(null)
     setLastCombatNode(null)
     setCombatPhase('starter')
-    healPartyAfterBattle(creature)
     maybeAdvanceTutorial('evolutionPath', 'nextNode')
     setScreen('runMap')
   }
@@ -3949,16 +3956,18 @@ function App() {
     if (!runCreature || !draftingCreatureId) return
 
     let nextStarter = runCreature
-    let nextRecruits = partyRecruits
+    let nextRecruits = partyRecruitsRef.current
 
     if (draftingCreatureId === STARTER_CREATURE_ID) {
       nextStarter = applyPerk(runCreature, perkId)
       setRunCreature(nextStarter)
+      runCreatureRef.current = nextStarter
     } else {
-      nextRecruits = partyRecruits.map((r) =>
+      nextRecruits = nextRecruits.map((r) =>
         r.id === draftingCreatureId ? applyPerkToPartyCreature(r, perkId) : r,
       )
       setPartyRecruits(nextRecruits)
+      partyRecruitsRef.current = nextRecruits
     }
 
     setDraftingCreatureId(null)
