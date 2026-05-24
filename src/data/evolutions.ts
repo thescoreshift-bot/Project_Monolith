@@ -1,5 +1,6 @@
 import type { PerkCategory } from './perks'
 import type { StatModifiers } from './perks'
+import { ALL_RECRUIT_EVOLUTION_FORMS } from './recruitEvolutions'
 
 export type EvolutionBranchCategory = PerkCategory
 
@@ -333,10 +334,13 @@ const EVOLUTION_BY_KEY = new Map(
   ]),
 )
 
-const EVOLUTION_BY_ID = new Map(ALL_EVOLUTION_FORMS.map((f) => [f.id, f]))
+const ALL_FORMS_BY_ID = new Map([
+  ...ALL_EVOLUTION_FORMS.map((f) => [f.id, f] as const),
+  ...ALL_RECRUIT_EVOLUTION_FORMS.map((f) => [f.id, f] as const),
+])
 
 export function getEvolutionFormById(id: string): EvolutionForm | undefined {
-  return EVOLUTION_BY_ID.get(id)
+  return ALL_FORMS_BY_ID.get(id)
 }
 
 export const EVOLUTION_THRESHOLDS = [10, 20, 30] as const

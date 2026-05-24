@@ -30,8 +30,8 @@ export const GAME_EVENTS: GameEvent[] = [
     id: 'wandering-researcher',
     title: 'Wandering Researcher',
     description: 'A researcher offers data chips or coin for your route logs.',
-    choiceA: { label: 'Trade logs for insight', summary: 'Gain 20 XP' },
-    choiceB: { label: 'Sell route data', summary: 'Gain 30 coins' },
+    choiceA: { label: 'Trade logs for insight', summary: 'Gain a random perk (or 20 XP)' },
+    choiceB: { label: 'Sell route data', summary: 'Gain coins and supplies' },
   },
   {
     id: 'lost-creature',
@@ -73,14 +73,47 @@ export const GAME_EVENTS: GameEvent[] = [
     title: 'Friendly Trainer',
     description: 'A trainer waves you down for a quick sparring offer.',
     choiceA: { label: 'Spar hard', summary: '20 XP but lose 10 HP' },
-    choiceB: { label: 'Chat and trade', summary: 'Gain 15 coins' },
+    choiceB: { label: 'Chat and trade', summary: 'Gain coins' },
   },
   {
     id: 'ancient-nest',
     title: 'Ancient Nest',
     description: 'A deep nest reverberates with alpha energy.',
     choiceA: { label: 'Disturb the nest', summary: 'Fight alpha next (bonus rewards)' },
-    choiceB: { label: 'Sneak past', summary: 'Leave safely' },
+    choiceB: { label: 'Sneak past', summary: 'Take an Alpha Claw' },
+  },
+  {
+    id: 'mysterious-egg',
+    title: 'Mysterious Egg',
+    description:
+      'A warm egg pulses in a nest of monolith ash. Something strong might hatch — or you could sell it.',
+    choiceA: { label: 'Hatch the egg', summary: 'A recruitable joins your party' },
+    choiceB: { label: 'Sell the egg', summary: 'Gain coins' },
+  },
+  {
+    id: 'relic-cache',
+    title: 'Relic Cache',
+    description: 'A sealed vault of pre-collapse gear hums when you approach.',
+    choiceA: { label: 'Pry it open', summary: 'Rare+ gear (or 25 XP fallback)' },
+    choiceB: { label: 'Strip the casing', summary: 'Large coin payout' },
+  },
+  {
+    id: 'monolith-veteran',
+    title: 'Monolith Veteran',
+    description:
+      'A scarred traveler offers a title of witness — or a restorative ritual.',
+    choiceA: {
+      label: 'Accept the title',
+      summary: 'Title + Monolith Resonance perk',
+    },
+    choiceB: { label: 'Rest with them', summary: 'Heal party 40% max HP' },
+  },
+  {
+    id: 'storm-forge',
+    title: 'Storm Forge',
+    description: 'Lightning forges gear in the open air. One strike could arm you.',
+    choiceA: { label: 'Catch the spark', summary: 'Epic gear (or XP fallback)' },
+    choiceB: { label: 'Harvest scrap', summary: 'Gain coins' },
   },
 ]
 

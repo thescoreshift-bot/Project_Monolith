@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import type { EvolutionForm } from '../data/evolutions'
+import { ENEMY_TEMPLATES } from '../data/enemies'
 import type { PerkCategory } from '../data/perks'
+import type { ElementType } from '../data/starters'
 import { getPortraitForEvolutionForm } from '../data/creaturePortraits'
 import { formatEvolutionStatGains } from '../utils/evolutionSystem'
 import { CreaturePortrait } from './CreaturePortrait'
@@ -25,7 +27,7 @@ function formatCategory(category: string): string {
   return category.charAt(0).toUpperCase() + category.slice(1)
 }
 
-const STARTER_ELEMENT_TYPE: Record<string, 'Fire' | 'Water' | 'Grass' | 'Electric' | 'Ground'> = {
+const STARTER_ELEMENT_TYPE: Record<string, ElementType> = {
   fire: 'Fire',
   water: 'Water',
   grass: 'Grass',
@@ -33,11 +35,17 @@ const STARTER_ELEMENT_TYPE: Record<string, 'Fire' | 'Water' | 'Grass' | 'Electri
   ground: 'Ground',
 }
 
+function elementTypeForEvolutionForm(form: EvolutionForm): ElementType {
+  const recruitTemplate = ENEMY_TEMPLATES[form.fromStarterType]
+  if (recruitTemplate?.type) return recruitTemplate.type
+  return STARTER_ELEMENT_TYPE[form.fromStarterType] ?? 'Water'
+}
+
 export function EvolutionScreen({ data, onContinue }: EvolutionScreenProps) {
   const [phase, setPhase] = useState<EvolutionPhase>('announce')
   const statLines = formatEvolutionStatGains(data.form.statModifiers)
   const portraitUrl = getPortraitForEvolutionForm(data.form)
-  const elementType = STARTER_ELEMENT_TYPE[data.form.fromStarterType] ?? 'Water'
+  const elementType = elementTypeForEvolutionForm(data.form)
 
   useEffect(() => {
     if (phase !== 'silhouette') return

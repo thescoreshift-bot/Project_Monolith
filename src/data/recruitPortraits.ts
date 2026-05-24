@@ -15,6 +15,45 @@ export function normalizeRecruitTemplateId(templateId: string): string {
   return templateId.replace(/^alpha-/, '')
 }
 
+const RECRUITABLE_IDS = [
+  'bristlebug',
+  'ashling',
+  'pebblemaw',
+  'voltimp',
+  'driftwisp',
+] as const
+
+/** Resolve the base recruit template id used for evolution lookups. */
+export function resolveRecruitTemplateId(input: {
+  templateId?: string | null
+  id?: string
+  name?: string
+}): string | null {
+  if (input.templateId) {
+    const base = normalizeRecruitTemplateId(input.templateId)
+    if (RECRUITABLE_IDS.includes(base as (typeof RECRUITABLE_IDS)[number])) {
+      return base
+    }
+  }
+  if (input.id) {
+    const match = input.id.match(
+      /^recruit-(bristlebug|ashling|pebblemaw|voltimp|driftwisp)-/,
+    )
+    if (match?.[1]) return match[1]
+  }
+  if (input.name) {
+    const byName: Record<string, string> = {
+      Bristlebug: 'bristlebug',
+      Ashling: 'ashling',
+      Pebblemaw: 'pebblemaw',
+      Voltimp: 'voltimp',
+      Driftwisp: 'driftwisp',
+    }
+    if (byName[input.name]) return byName[input.name]
+  }
+  return null
+}
+
 export function getRecruitPortraitUrl(templateId: string | undefined | null): string | null {
   if (!templateId) return null
   const base = normalizeRecruitTemplateId(templateId)

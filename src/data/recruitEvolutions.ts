@@ -1,6 +1,6 @@
 import type { EvolutionBranchCategory, EvolutionForm } from './evolutions'
 import type { StatModifiers } from './perks'
-import { normalizeRecruitTemplateId } from './recruitPortraits'
+import { normalizeRecruitTemplateId, resolveRecruitTemplateId } from './recruitPortraits'
 
 type BranchTemplate = Omit<
   EvolutionForm,
@@ -52,6 +52,9 @@ function buildRecruitEvolutions(
         statModifiers: scaleMods(template.statModifiers, stage),
         newAbilityId: template.newAbilityId,
         ...(stage === 1 && template.portraitUrl
+          ? { portraitUrl: template.portraitUrl }
+          : {}),
+        ...(stage === 2 && template.portraitUrl
           ? { portraitUrl: template.portraitUrl }
           : {}),
         ...(stage === 3 && template.portraitUrlStage3
@@ -311,12 +314,24 @@ const RECRUIT_EVOLUTION_BY_KEY = new Map(
   ]),
 )
 
+const RECRUIT_EVOLUTION_BY_ID = new Map(
+  ALL_RECRUIT_EVOLUTION_FORMS.map((f) => [f.id, f]),
+)
+
+export function getRecruitEvolutionFormById(
+  id: string,
+): EvolutionForm | undefined {
+  return RECRUIT_EVOLUTION_BY_ID.get(id)
+}
+
 export function hasRecruitEvolutions(templateId: string): boolean {
   return RECRUIT_EVOLUTION_TEMPLATE_IDS.has(normalizeRecruitTemplateId(templateId))
 }
 
 export function getRecruitEvolutionKey(templateId: string): string | null {
-  const base = normalizeRecruitTemplateId(templateId)
+  const base =
+    resolveRecruitTemplateId({ templateId }) ??
+    normalizeRecruitTemplateId(templateId)
   return RECRUIT_EVOLUTION_TEMPLATE_IDS.has(base) ? base : null
 }
 

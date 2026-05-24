@@ -7,7 +7,11 @@ import {
   ALL_RECRUIT_EVOLUTION_FORMS,
   hasRecruitEvolutions,
 } from './recruitEvolutions'
-import { getRecruitPortraitUrl, normalizeRecruitTemplateId } from './recruitPortraits'
+import {
+  getRecruitPortraitUrl,
+  normalizeRecruitTemplateId,
+  resolveRecruitTemplateId,
+} from './recruitPortraits'
 import type { ElementType, Starter } from './starters'
 import type { EvolutionHistoryEntry } from '../utils/progression'
 
@@ -183,6 +187,15 @@ export function getEvolutionPortraitUrl(
     if (stageOne?.portraitUrl) return stageOne.portraitUrl
   }
 
+  if (hasRecruitEvolutions(evolutionKey) && branchCategory !== 'offense') {
+    const offensePortrait = getEvolutionPortraitUrl(
+      evolutionKey,
+      stage,
+      'offense',
+    )
+    if (offensePortrait) return offensePortrait
+  }
+
   return null
 }
 
@@ -242,6 +255,7 @@ export function getPortraitForCreature(creature: {
   starterTypeId?: string
   templateId?: string
   id?: string
+  name?: string
   evolutionHistory?: EvolutionHistoryEntry[]
 }): string | null {
   if (creature.starterTypeId) {
@@ -249,18 +263,28 @@ export function getPortraitForCreature(creature: {
   }
 
   const templateId = creature.templateId ?? creature.id
+  const recruitBase = resolveRecruitTemplateId({
+    templateId,
+    id: creature.id,
+    name: creature.name,
+  })
   const history = creature.evolutionHistory ?? []
-  if (history.length > 0 && templateId) {
+  if (history.length > 0 && recruitBase) {
     const latest = history[history.length - 1]!
+    const formById = latest.evolutionId
+      ? getEvolutionFormById(latest.evolutionId)
+      : undefined
+    if (formById?.portraitUrl) return formById.portraitUrl
+
     const evolutionPortrait = getRecruitEvolutionPortraitUrl(
-      templateId,
+      recruitBase,
       latest.stage,
       latest.branchCategory,
     )
     if (evolutionPortrait) return evolutionPortrait
   }
 
-  return getRecruitPortraitUrl(templateId)
+  return getRecruitPortraitUrl(recruitBase ?? templateId)
 }
 
 export function getPortraitForEnemyId(enemyId: string): string | null {

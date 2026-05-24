@@ -10,6 +10,7 @@ import { ARCHIVE_QUEST_BY_ID } from '../data/archiveQuests'
 import { GEAR_ITEMS } from '../data/gearItems'
 import { ITEMS } from '../data/items'
 import { BADGES_BY_ID } from '../data/badges'
+import { getTitleDefinition } from '../data/titles'
 import { getPortraitForArchiveEntry } from '../data/creaturePortraits'
 import type { ElementType } from '../data/starters'
 import { CreaturePortrait } from './CreaturePortrait'
@@ -373,9 +374,20 @@ export function MonolithArchiveScreen({
               <p>No titles unlocked yet.</p>
             ) : (
               <ul>
-                {state.titles.map((t) => (
-                  <li key={t}>{t.replace(/-/g, ' ')}</li>
-                ))}
+                {state.titles.map((t) => {
+                  const def = getTitleDefinition(t)
+                  return (
+                    <li key={t}>
+                      {def ? (
+                        <>
+                          <strong>{def.name}</strong> — {def.description}
+                        </>
+                      ) : (
+                        t.replace(/-/g, ' ')
+                      )}
+                    </li>
+                  )
+                })}
               </ul>
             )}
           </div>

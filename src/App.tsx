@@ -156,6 +156,7 @@ import {
   getEnemyArchiveDiscovery,
   getEnemyFoeName,
   getRewardsForEncounter,
+  spawnEnemy,
   type EncounterKind,
   type Enemy,
   type EnemySpawnOptions,
@@ -240,12 +241,12 @@ import {
   applyDefeatPenalties,
   generateNewRoute,
 } from './utils/defeatRecovery'
-import { applyEventChoice } from './utils/eventHandlers'
+import { applyEventChoice, formatEventRewardMessage } from './utils/eventHandlers'
 import {
   getMapNodeFromList,
   unlockBossIfReady,
 } from './utils/mapGenerator'
-import { rollBattleGearDrop, rollShopGearOffers } from './utils/gearSystem'
+import { rollBattleGearDrop, rollRelicShopOffers, rollShopGearOffers } from './utils/gearSystem'
 import {
   addGearIdToTrainerInventory,
   addItemToTrainerInventory,
@@ -526,6 +527,7 @@ function App() {
   const playModeRef = useRef<PlayMode | null>(null)
   const activeSlotIdRef = useRef<SaveSlotId | null>(null)
   const persistInFlightRef = useRef(false)
+  const persistQueuedRef = useRef(false)
   const [selectedBadgeId, setSelectedBadgeId] = useState<string | null>(null)
   const [pendingEvolutionQueue, setPendingEvolutionQueue] = useState<
     EvolutionQueueEntry[]
@@ -1598,19 +1600,34 @@ function App() {
   }
 
   async function persistRun() {
+    if (persistInFlightRef.current) {
+      persistQueuedRef.current = true
+      return
+    }
+
     if (runModeRef.current === 'daily') {
-      if (!runCreature || persistInFlightRef.current) return
+      if (!runCreature) return
       persistInFlightRef.current = true
       setSaveStatus('saving')
       saveDailyRunProgress()
       setSaveStatus('local')
       persistInFlightRef.current = false
+      if (persistQueuedRef.current) {
+        persistQueuedRef.current = false
+        void persistRun()
+      }
       return
     }
 
     const slotId = activeSlotIdRef.current
     const data = buildSaveData()
-    if (!slotId || !data || persistInFlightRef.current) return
+    if (!slotId || !data) {
+      if (persistQueuedRef.current) {
+        persistQueuedRef.current = false
+        void persistRun()
+      }
+      return
+    }
 
     persistInFlightRef.current = true
     setSaveStatus('saving')
@@ -1619,27 +1636,33 @@ function App() {
     const envelope = buildSaveEnvelope(slotId, data)
     const mode = playModeRef.current
 
-    if (mode === 'cloud' && authUserRef.current && isSupabaseConfigured()) {
-      const localOk = saveRunToSlot(slotId, data)
-      const cloudResult = await saveToCloudSlot(slotId, envelope)
-      if (cloudResult.ok) {
-        setSaveStatus('cloud')
-        await refreshCloudSlots()
-      } else if (localOk) {
-        setSaveStatus('warning')
-        setSaveWarning('Cloud save failed. Local backup saved.')
+    try {
+      if (mode === 'cloud' && authUserRef.current && isSupabaseConfigured()) {
+        const localOk = saveRunToSlot(slotId, data)
+        const cloudResult = await saveToCloudSlot(slotId, envelope)
+        if (cloudResult.ok) {
+          setSaveStatus('cloud')
+          await refreshCloudSlots()
+        } else if (localOk) {
+          setSaveStatus('warning')
+          setSaveWarning('Cloud save failed. Local backup saved.')
+          refreshLocalSlots()
+        } else {
+          setSaveStatus('failed')
+        }
+      } else if (saveRunToSlot(slotId, data)) {
+        setSaveStatus('local')
         refreshLocalSlots()
       } else {
         setSaveStatus('failed')
       }
-    } else if (saveRunToSlot(slotId, data)) {
-      setSaveStatus('local')
-      refreshLocalSlots()
-    } else {
-      setSaveStatus('failed')
+    } finally {
+      persistInFlightRef.current = false
+      if (persistQueuedRef.current) {
+        persistQueuedRef.current = false
+        void persistRun()
+      }
     }
-
-    persistInFlightRef.current = false
   }
 
   async function persistSaveData(data: RunSaveData) {
@@ -2325,6 +2348,39 @@ function App() {
     setScreen('combat')
   }
 
+  function startBonusAlphaCombat() {
+    const starterSnapshot = runCreatureRef.current ?? runCreature
+    if (!starterSnapshot) return
+
+    const recruitsSnapshot = partyRecruitsRef.current
+    const partyLevel = getPartyHighestLevel(starterSnapshot, recruitsSnapshot)
+    const alphas = ['alpha-bristlebug', 'alpha-ashling', 'alpha-pebblemaw']
+    const id = alphas[Math.floor(Math.random() * alphas.length)] ?? 'alpha-ashling'
+    const spawned = spawnEnemy(id, partyLevel, { encounterKind: 'alphaNest' })
+
+    setLastCombatNode(null)
+    setActiveEncounterKind('alphaNest')
+    setEnemy(spawned)
+    resetCombatSession()
+    setPendingAbilityUpgradeQueue([])
+    setCombatPhase('starter')
+    preCombatMasteryRef.current = {
+      starter: structuredClone(starterSnapshot.abilityMastery),
+      recruits: Object.fromEntries(
+        recruitsSnapshot.map((r) => [r.id, structuredClone(r.abilityMastery)]),
+      ),
+    }
+    const discovery = getEnemyArchiveDiscovery(spawned)
+    setBattleLog([`Bonus alpha — ${spawned.name} sent out ${discovery.creatureName}!`])
+    setCombatLocked(false)
+    dispatchRetentionEvent('enemySeen', {
+      templateId: discovery.templateId,
+      creatureName: discovery.creatureName,
+      regionId: currentRegionId,
+    })
+    setScreen('combat')
+  }
+
   function handleMapNodeClick(node: MapNode) {
     if (!runCreature) return
 
@@ -2369,6 +2425,11 @@ function App() {
       case 'shop':
         setShopLog([])
         setShopGearOffers(rollShopGearOffers(currentRegionId))
+        setScreen('shop')
+        break
+      case 'relicShop':
+        setShopLog([])
+        setShopGearOffers(rollRelicShopOffers(runCreature.type))
         setScreen('shop')
         break
       case 'rest':
@@ -2916,7 +2977,7 @@ function App() {
       if (target.key === 'starter') {
         nextStarterHp = applyDamage(nextStarterHp, damage)
       } else {
-        nextRecruits = partyRecruits.map((r) =>
+        nextRecruits = nextRecruits.map((r) =>
           r.id === target.key
             ? { ...r, currentHp: applyDamage(r.currentHp, damage) }
             : r,
@@ -3333,11 +3394,19 @@ function App() {
     activeHelperId,
   ])
 
+  function getLatestRecruits(): PartyCreature[] {
+    return partyRecruitsRef.current
+  }
+
+  function getLatestStarter(): RunCreature | null {
+    return runCreatureRef.current ?? runCreature
+  }
+
   function getCreatureSelectedPerks(creatureId: string): string[] {
-    if (creatureId === STARTER_CREATURE_ID && runCreature) {
-      return runCreature.selectedPerks
+    if (creatureId === STARTER_CREATURE_ID) {
+      return getLatestStarter()?.selectedPerks ?? []
     }
-    return partyRecruits.find((r) => r.id === creatureId)?.selectedPerks ?? []
+    return getLatestRecruits().find((r) => r.id === creatureId)?.selectedPerks ?? []
   }
 
   function getCreatureForDraft(creatureId: string): {
@@ -3349,11 +3418,10 @@ function App() {
     evolutionStage: number
     evolutionScores: RunCreature['evolutionScores']
   } | null {
-    if (creatureId === STARTER_CREATURE_ID && runCreature) {
-      return runCreature
+    if (creatureId === STARTER_CREATURE_ID) {
+      return getLatestStarter()
     }
-    const recruit = partyRecruits.find((r) => r.id === creatureId)
-    return recruit ?? null
+    return getLatestRecruits().find((r) => r.id === creatureId) ?? null
   }
 
   function startPerkDraftFor(creatureId: string, perks?: string[]): boolean {
@@ -3362,12 +3430,12 @@ function App() {
     const speciesKey = creature
       ? resolveCreatureSpeciesKey({
           starterTypeId:
-            creatureId === STARTER_CREATURE_ID && runCreature
-              ? runCreature.starterTypeId
+            creatureId === STARTER_CREATURE_ID
+              ? getLatestStarter()?.starterTypeId
               : undefined,
           templateId:
             creatureId !== STARTER_CREATURE_ID
-              ? partyRecruits.find((r) => r.id === creatureId)?.templateId
+              ? getLatestRecruits().find((r) => r.id === creatureId)?.templateId
               : undefined,
           type: creature.type,
         })
@@ -3527,32 +3595,35 @@ function App() {
   }
 
   function getCreatureById(creatureId: string): RunCreature | PartyCreature | null {
-    if (creatureId === STARTER_CREATURE_ID && runCreature) return runCreature
-    return partyRecruits.find((r) => r.id === creatureId) ?? null
+    if (creatureId === STARTER_CREATURE_ID) return getLatestStarter()
+    return getLatestRecruits().find((r) => r.id === creatureId) ?? null
   }
 
   function handleAbilityUpgradeChosen(perkId: string) {
-    if (!runCreature || pendingAbilityUpgradeQueue.length === 0) return
+    const starterSnapshot = getLatestStarter()
+    if (!starterSnapshot || pendingAbilityUpgradeQueue.length === 0) return
 
     const entry = pendingAbilityUpgradeQueue[0]
-    let nextStarter = runCreature
-    let nextRecruits = partyRecruits
+    let nextStarter = starterSnapshot
+    let nextRecruits = getLatestRecruits()
 
     if (entry.creatureId === STARTER_CREATURE_ID) {
       nextStarter = applyPerkToCreature(
-        runCreature,
+        starterSnapshot,
         entry.abilityId,
         perkId,
         entry.rank,
       )
       setRunCreature(nextStarter)
+      runCreatureRef.current = nextStarter
     } else {
-      nextRecruits = partyRecruits.map((r) =>
+      nextRecruits = nextRecruits.map((r) =>
         r.id === entry.creatureId
           ? applyPerkToCreature(r, entry.abilityId, perkId, entry.rank)
           : r,
       )
       setPartyRecruits(nextRecruits)
+      partyRecruitsRef.current = nextRecruits
     }
 
     const remainingUpgrades = pendingAbilityUpgradeQueue.slice(1)
@@ -3562,19 +3633,22 @@ function App() {
   }
 
   function handleMoveLearnConfirm() {
-    if (!runCreature || !moveLearnContext) return
+    const starterSnapshot = getLatestStarter()
+    if (!starterSnapshot || !moveLearnContext) return
     const { creatureId, abilityId } = moveLearnContext
-    let nextStarter = runCreature
-    let nextRecruits = partyRecruits
+    let nextStarter = starterSnapshot
+    let nextRecruits = getLatestRecruits()
 
     if (creatureId === STARTER_CREATURE_ID) {
-      nextStarter = addActiveAbility(runCreature, abilityId)
+      nextStarter = addActiveAbility(starterSnapshot, abilityId)
       setRunCreature(nextStarter)
+      runCreatureRef.current = nextStarter
     } else {
-      nextRecruits = partyRecruits.map((r) =>
+      nextRecruits = nextRecruits.map((r) =>
         r.id === creatureId ? addActiveAbility(r, abilityId) : r,
       )
       setPartyRecruits(nextRecruits)
+      partyRecruitsRef.current = nextRecruits
     }
 
     setMoveLearnContext(null)
@@ -3582,21 +3656,24 @@ function App() {
   }
 
   function handleMoveLearnReplace(oldAbilityId: string) {
-    if (!runCreature || !moveLearnContext) return
+    const starterSnapshot = getLatestStarter()
+    if (!starterSnapshot || !moveLearnContext) return
     const { creatureId, abilityId } = moveLearnContext
-    let nextStarter = runCreature
-    let nextRecruits = partyRecruits
+    let nextStarter = starterSnapshot
+    let nextRecruits = getLatestRecruits()
 
     if (creatureId === STARTER_CREATURE_ID) {
-      nextStarter = forgetActiveAbility(runCreature, oldAbilityId, abilityId)
+      nextStarter = forgetActiveAbility(starterSnapshot, oldAbilityId, abilityId)
       setRunCreature(nextStarter)
+      runCreatureRef.current = nextStarter
     } else {
-      nextRecruits = partyRecruits.map((r) =>
+      nextRecruits = nextRecruits.map((r) =>
         r.id === creatureId
           ? forgetActiveAbility(r, oldAbilityId, abilityId)
           : r,
       )
       setPartyRecruits(nextRecruits)
+      partyRecruitsRef.current = nextRecruits
     }
 
     setMoveLearnContext(null)
@@ -3604,27 +3681,30 @@ function App() {
   }
 
   function handleMoveLearnSkip() {
-    if (!runCreature) return
+    const starterSnapshot = getLatestStarter()
+    if (!starterSnapshot) return
     setMoveLearnContext(null)
-    consumePostBattleQueueAndContinue(runCreature, partyRecruits)
+    consumePostBattleQueueAndContinue(starterSnapshot, getLatestRecruits())
   }
 
   function handleTransformConfirm() {
-    if (!runCreature || !activeTransformEntry) return
+    const starterSnapshot = getLatestStarter()
+    if (!starterSnapshot || !activeTransformEntry) return
     const entry = activeTransformEntry
-    let nextStarter = runCreature
-    let nextRecruits = partyRecruits
+    let nextStarter = starterSnapshot
+    let nextRecruits = getLatestRecruits()
 
     if (entry.creatureId === STARTER_CREATURE_ID) {
       nextStarter = applyTransformationToCreature(
-        runCreature,
+        starterSnapshot,
         entry.abilityId,
         entry.newAbilityId,
         entry.rank,
       )
       setRunCreature(nextStarter)
+      runCreatureRef.current = nextStarter
     } else {
-      nextRecruits = partyRecruits.map((r) =>
+      nextRecruits = nextRecruits.map((r) =>
         r.id === entry.creatureId
           ? applyTransformationToCreature(
               r,
@@ -3635,6 +3715,7 @@ function App() {
           : r,
       )
       setPartyRecruits(nextRecruits)
+      partyRecruitsRef.current = nextRecruits
     }
 
     setActiveTransformEntry(null)
@@ -3643,16 +3724,17 @@ function App() {
   }
 
   function handleEvolutionContinue() {
-    if (!runCreature || !evolutionScreenData) return
+    const starterSnapshot = getLatestStarter()
+    if (!starterSnapshot || !evolutionScreenData) return
 
     const { threshold, creatureId } = evolutionScreenData
     const targetId = creatureId ?? STARTER_CREATURE_ID
 
-    let nextStarter = runCreature
-    let nextRecruits = partyRecruitsRef.current
+    let nextStarter = starterSnapshot
+    let nextRecruits = getLatestRecruits()
 
     if (targetId === STARTER_CREATURE_ID) {
-      nextStarter = evolveStarter(runCreature, threshold)
+      nextStarter = evolveStarter(starterSnapshot, threshold)
       setRunCreature(nextStarter)
       runCreatureRef.current = nextStarter
     } else {
@@ -3852,6 +3934,7 @@ function App() {
       nextRecruits = nextRecruits.slice(-MAX_RECRUITS)
     }
     setPartyRecruits(nextRecruits)
+    partyRecruitsRef.current = nextRecruits
     scoreTrackerRef.current.recruitsAdded += 1
     const templateId = pendingRecruit.templateId
     setPendingRecruit(null)
@@ -3877,6 +3960,7 @@ function App() {
       r.id === replaceId ? syncedRecruit : r,
     )
     setPartyRecruits(nextRecruits)
+    partyRecruitsRef.current = nextRecruits
     scoreTrackerRef.current.recruitsAdded += 1
     const templateId = pendingRecruit.templateId
     dispatchQuestEvent('creatureRecruited', {})
@@ -4436,6 +4520,7 @@ function App() {
   function handleEventChoice(choice: EventChoiceId) {
     if (!runCreature || !currentEvent || !activeNodeId) return
 
+    const recruitCountBefore = partyRecruits.length
     const result = applyEventChoice(currentEvent.id, choice, {
       starter: runCreature,
       recruits: partyRecruits,
@@ -4443,9 +4528,12 @@ function App() {
       regionId: currentRegionId,
     })
 
+    runCreatureRef.current = result.starter
+    partyRecruitsRef.current = result.recruits
     setRunCreature(result.starter)
     setPartyRecruits(result.recruits)
     setEarnedBadges(result.earnedBadges)
+
     if (result.inventoryAdds?.length) {
       setTrainerInventory((prev) => {
         let next = prev
@@ -4454,15 +4542,63 @@ function App() {
         }
         return next
       })
+      for (const add of result.inventoryAdds) {
+        dispatchRetentionEvent('itemCollected', { itemId: add.itemId })
+      }
     }
-    if (result.message) {
-      setMapMessage(result.message)
+
+    if (result.gearAdds?.length) {
+      setTrainerInventory((prev) => {
+        let next = prev
+        for (const gearId of result.gearAdds!) {
+          next = addGearIdToTrainerInventory(next, gearId)
+        }
+        return next
+      })
+      for (const gearId of result.gearAdds) {
+        dispatchRetentionEvent('gearCollected', { gearId })
+      }
     }
+
+    if (result.titleGrant) {
+      setRetentionState((prev) => {
+        if (prev.titles.includes(result.titleGrant!)) return prev
+        return {
+          ...prev,
+          titles: [...prev.titles, result.titleGrant!],
+          collectionLog: {
+            ...prev.collectionLog,
+            titles: [...prev.collectionLog.titles, result.titleGrant!],
+          },
+        }
+      })
+    }
+
+    if (result.recruits.length > recruitCountBefore) {
+      const newest = result.recruits[result.recruits.length - 1]
+      if (newest) {
+        dispatchQuestEvent('creatureRecruited', {})
+        dispatchRetentionEvent('creatureRecruited', {
+          templateId: newest.templateId,
+          regionId: currentRegionId,
+        })
+      }
+    }
+
+    setMapMessage(result.message ?? formatEventRewardMessage(result.rewardLines))
     dispatchQuestEvent('eventCompleted', {})
     dispatchRetentionEvent('eventCompleted')
     markNodeComplete(activeNodeId)
     setCurrentEvent(null)
+
+    if (result.pendingAlphaCombat) {
+      startBonusAlphaCombat()
+      void persistRun()
+      return
+    }
+
     setScreen('runMap')
+    void persistRun()
   }
 
   if (!authReady) {
@@ -4695,13 +4831,18 @@ function App() {
     )
   }
 
-  if (screen === 'shop' && runCreature && currentNode?.type === 'shop') {
+  if (
+    screen === 'shop' &&
+    runCreature &&
+    (currentNode?.type === 'shop' || currentNode?.type === 'relicShop')
+  ) {
     return (
       <div className="app">
         <ShopScreen
           creature={runCreature}
           shopLog={shopLog}
           gearOffers={shopGearOffers}
+          variant={currentNode.type === 'relicShop' ? 'relic' : 'market'}
           onBuyConsumable={handleBuyConsumable}
           onBuyGear={handleBuyGear}
           onOpenInventory={() => openInventory('shop')}

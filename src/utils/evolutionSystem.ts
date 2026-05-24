@@ -8,10 +8,10 @@ import {
   getEvolutionForRecruit,
   getRecruitEvolutionKey,
 } from '../data/recruitEvolutions'
+import { resolveRecruitTemplateId } from '../data/recruitPortraits'
 import type { PerkCategory } from '../data/perks'
 import type { StatModifiers } from '../data/perks'
 import type { ElementType } from '../data/starters'
-import { elementTypeToEvolutionKey } from './creatureProgression'
 import { ensureAbilityMastery } from './abilityMastery'
 import { normalizeCreatureAbilities } from './creatureAbilities'
 import { normalizeEquippedGearId } from './gearSystem'
@@ -220,12 +220,17 @@ export function toEvolvableStarter(creature: RunCreature): EvolvableCreatureBase
 }
 
 export function toEvolvableRecruit(creature: PartyCreature): EvolvableCreatureBase {
-  const recruitKey = getRecruitEvolutionKey(creature.templateId)
+  const recruitKey =
+    getRecruitEvolutionKey(creature.templateId) ??
+    resolveRecruitTemplateId({
+      templateId: creature.templateId,
+      id: creature.id,
+      name: creature.name,
+    })
   return {
     name: creature.name,
     type: creature.type,
-    evolutionTypeKey:
-      recruitKey ?? elementTypeToEvolutionKey(creature.type),
+    evolutionTypeKey: recruitKey ?? creature.templateId,
     level: creature.level,
     selectedPerks: creature.selectedPerks,
     evolutionScores: creature.evolutionScores,
@@ -437,5 +442,17 @@ export function evolvePartyCreature(
 ): PartyCreature {
   const evolved = applyEvolutionToBase(toEvolvableRecruit(creature), threshold)
   if (!evolved) return creature
-  return ensureAbilityMastery({ ...creature, ...evolved })
+  const templateId =
+    resolveRecruitTemplateId({
+      templateId: creature.templateId,
+      id: creature.id,
+      name: creature.name,
+    }) ?? creature.templateId
+  return ensureAbilityMastery({
+    ...creature,
+    ...evolved,
+    templateId,
+    id: creature.id,
+    source: creature.source,
+  })
 }

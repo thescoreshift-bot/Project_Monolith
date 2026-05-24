@@ -16,10 +16,11 @@ function getContentRows(regionId: string): number {
 const GRID_COLUMNS = 5
 
 const TYPE_WEIGHTS: { type: NodeType; weight: number }[] = [
-  { type: 'battle', weight: 28 },
+  { type: 'battle', weight: 26 },
   { type: 'event', weight: 18 },
   { type: 'rest', weight: 10 },
   { type: 'shop', weight: 10 },
+  { type: 'relicShop', weight: 4 },
   { type: 'elite', weight: 10 },
   { type: 'alphaNest', weight: 5 },
   { type: 'gymTrainer', weight: 8 },
@@ -33,6 +34,7 @@ function getLabels(regionId: string): Record<NodeType, string[]> {
     alphaNest: ['Alpha Nest', 'Primal Den'],
     event: ['Signal Anomaly', 'Strange Echo', 'Monolith Pulse'],
     shop: ['Drift Market', 'Supply Cache', 'Wandering Trader'],
+    relicShop: ['Relic Vault', 'Monolith Curator', 'Ash Reliquary'],
     rest: ['Bio Camp', 'Safe Haven', 'Recovery Post'],
     gymTrainer: ['Gym Trainer', 'Ace Trainer', 'Gym Acolyte'],
     gymLeader: ['Gym Leader', 'Gym Master'],

@@ -4,12 +4,13 @@ import { getRegion } from '../data/regions'
 import {
   GEAR_ITEM_LIST,
   getGearItem,
+  RELIC_GEAR_BY_TYPE,
   type GearDamageModifiers,
   type GearItem,
   type GearRarity,
   type GearStatModifiers,
 } from '../data/gearItems'
-import type { StarterStats } from '../data/starters'
+import type { ElementType, StarterStats } from '../data/starters'
 export type CreatureWithGear = {
   equippedGearId?: string | null
 }
@@ -114,6 +115,22 @@ export function rollShopGearOffers(regionId: string): string[] {
     offers.push(item.id)
   }
   return offers
+}
+
+/** All three premium gear pieces for the starter's element (epic, mythic, legendary). */
+export function rollRelicShopOffers(starterType: ElementType): string[] {
+  return [...RELIC_GEAR_BY_TYPE[starterType]]
+}
+
+/** Random gear at or above a minimum rarity for event rewards. */
+export function rollEventGearDrop(
+  minRarity: 'rare' | 'epic',
+): GearItem | null {
+  const order: GearRarity[] = ['rare', 'epic', 'mythic', 'legendary']
+  const start = order.indexOf(minRarity)
+  const rarities = order.slice(Math.max(0, start))
+  const pool = filterGearByRarities(rarities)
+  return pickRandom(pool.length > 0 ? pool : GEAR_ITEM_LIST)
 }
 
 type DropTable = { chance: number; rarities: GearRarity[] }

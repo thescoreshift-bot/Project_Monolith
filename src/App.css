@@ -1075,6 +1075,9 @@
 .map-node--shop .map-node__type {
   color: #facc15;
 }
+.map-node--relic-shop .map-node__type {
+  color: #22d3ee;
+}
 .map-node--alpha-nest .map-node__type {
   color: #fb923c;
 }
@@ -1271,7 +1274,13 @@
 .shop-item__rarity--uncommon { color: #7dd3fc; }
 .shop-item__rarity--rare { color: #a78bfa; }
 .shop-item__rarity--epic { color: #f472b6; }
+.shop-item__rarity--mythic { color: #22d3ee; }
 .shop-item__rarity--legendary { color: #facc15; }
+
+.map-node--relic-shop {
+  border-color: #22d3ee;
+  box-shadow: 0 0 12px rgba(34, 211, 238, 0.35);
+}
 
 .party-creature__gear {
   margin: 0.75rem 0;
@@ -1307,6 +1316,7 @@
 .party-creature__gear-rarity--uncommon { color: #7dd3fc; }
 .party-creature__gear-rarity--rare { color: #a78bfa; }
 .party-creature__gear-rarity--epic { color: #f472b6; }
+.party-creature__gear-rarity--mythic { color: #22d3ee; }
 .party-creature__gear-rarity--legendary { color: #facc15; }
 
 .party-creature__stats-note {

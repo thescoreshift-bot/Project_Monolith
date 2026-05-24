@@ -1,5 +1,5 @@
-import type { ElementType } from '../data/starters'
-import type { StarterStats } from '../data/starters'
+import { resolveRecruitTemplateId } from '../data/recruitPortraits'
+import type { ElementType, StarterStats } from '../data/starters'
 import type { Enemy } from '../data/enemies'
 import { withDefaultCreaturePerks, type CreaturePerkFields } from './creatureProgression'
 import type { TemporaryBattleBuff } from './battleBuffs'
@@ -56,6 +56,12 @@ export function normalizePartyCreature(
   const stats = recalculateStats(baseStats, selectedPerks)
   const maxHp = stats.hp
   const battleBuffs = raw.battleBuffs ?? { atk: 0, spAtk: 0, def: 0, spd: 0 }
+  const templateId =
+    resolveRecruitTemplateId({
+      templateId: raw.templateId,
+      id: raw.id,
+      name: raw.name,
+    }) ?? raw.templateId
   const baseStatsSafe = {
     hp: baseStats.hp ?? maxHp,
     atk: baseStats.atk ?? 1,
@@ -76,6 +82,7 @@ export function normalizePartyCreature(
     normalizeCreatureAbilities({
     ...raw,
     ...perks,
+    templateId,
     level,
     baseStats: baseStatsSafe,
     stats: statsSafe,
@@ -212,27 +219,29 @@ export function partyCreatureFromTemplate(
   },
 ): PartyCreature {
   const baseStats = { ...template.stats, hp: template.maxHp }
-  const perks = withDefaultCreaturePerks({})
-  const stats = recalculateStats(baseStats, perks.selectedPerks)
-  return ensureAbilityMastery({
-    id: `recruit-${template.id}-${Date.now()}`,
-    name: template.name,
-    type: template.type,
-    level: template.level,
-    currentXp: 0,
-    xpToNextLevel: getXpToNextLevel(template.level),
-    maxHp: template.maxHp,
-    currentHp: template.maxHp,
-    baseStats,
-    stats,
-    abilityId: template.abilityId,
-    source: 'recruited',
-    templateId: template.id,
-    battleBuffs: { atk: 0, spAtk: 0, def: 0, spd: 0 },
-    temporaryBattleBuffs: [],
-    abilityMastery: {},
-    ...perks,
-  })
+  const perks = withDefaultCreaturePerks({ level: template.level })
+  return normalizePartyCreature(
+    {
+      id: `recruit-${template.id}-${Date.now()}`,
+      name: template.name,
+      type: template.type,
+      level: template.level,
+      currentXp: 0,
+      xpToNextLevel: getXpToNextLevel(template.level),
+      maxHp: template.maxHp,
+      currentHp: template.maxHp,
+      baseStats,
+      stats: baseStats,
+      abilityId: template.abilityId,
+      source: 'recruited',
+      templateId: template.id,
+      battleBuffs: { atk: 0, spAtk: 0, def: 0, spd: 0 },
+      temporaryBattleBuffs: [],
+      abilityMastery: {},
+      ...perks,
+    } as PartyCreature,
+    template.level,
+  )
 }
 
 export function healPartyToPercent(

@@ -7,6 +7,7 @@ type ShopScreenProps = {
   creature: RunCreature
   shopLog: string[]
   gearOffers: string[]
+  variant?: 'market' | 'relic'
   onBuyConsumable: (itemId: ShopItemId) => void
   onBuyGear: (gearId: string) => void
   onOpenInventory?: () => void
@@ -17,11 +18,13 @@ export function ShopScreen({
   creature,
   shopLog,
   gearOffers,
+  variant = 'market',
   onBuyConsumable,
   onBuyGear,
   onOpenInventory,
   onLeave,
 }: ShopScreenProps) {
+  const isRelic = variant === 'relic'
   const gearItems = gearOffers
     .map((id) => getGearItem(id))
     .filter((g): g is NonNullable<typeof g> => g !== null)
@@ -29,9 +32,13 @@ export function ShopScreen({
   return (
     <main className="shop-screen">
       <header className="screen-header">
-        <h1 className="screen-header__title">Drift Market</h1>
+        <h1 className="screen-header__title">
+          {isRelic ? 'Relic Vault' : 'Drift Market'}
+        </h1>
         <p className="screen-header__subtitle">
-          Spend coins on supplies and held gear before the path closes.
+          {isRelic
+            ? 'Premium epic, mythic, and legendary gear tuned to your element — prices are steep.'
+            : 'Spend coins on supplies and held gear before the path closes.'}
         </p>
       </header>
 
@@ -40,38 +47,40 @@ export function ShopScreen({
         <strong>{creature.coins}</strong>
       </p>
 
-      <section className="shop-screen__section" aria-labelledby="consumables-heading">
-        <h2 id="consumables-heading" className="shop-screen__section-title">
-          Consumables
-        </h2>
-        <div className="shop-items">
-          {SHOP_ITEMS.map((item) => (
-            <article key={item.id} className="shop-item">
-              <header className="shop-item__header">
-                <h3 className="shop-item__name">{item.name}</h3>
-                <span className={`shop-item__rarity shop-item__rarity--${item.rarity}`}>
-                  {item.rarity}
-                </span>
-                <span className="shop-item__cost">{item.cost} coins</span>
-              </header>
-              <p className="shop-item__desc">{item.description}</p>
-              <p className="shop-item__category">consumable</p>
-              <button
-                type="button"
-                className="btn btn--small btn--primary"
-                onClick={() => onBuyConsumable(item.id)}
-                disabled={creature.coins < item.cost}
-              >
-                Buy
-              </button>
-            </article>
-          ))}
-        </div>
-      </section>
+      {!isRelic && (
+        <section className="shop-screen__section" aria-labelledby="consumables-heading">
+          <h2 id="consumables-heading" className="shop-screen__section-title">
+            Consumables
+          </h2>
+          <div className="shop-items">
+            {SHOP_ITEMS.map((item) => (
+              <article key={item.id} className="shop-item">
+                <header className="shop-item__header">
+                  <h3 className="shop-item__name">{item.name}</h3>
+                  <span className={`shop-item__rarity shop-item__rarity--${item.rarity}`}>
+                    {item.rarity}
+                  </span>
+                  <span className="shop-item__cost">{item.cost} coins</span>
+                </header>
+                <p className="shop-item__desc">{item.description}</p>
+                <p className="shop-item__category">consumable</p>
+                <button
+                  type="button"
+                  className="btn btn--small btn--primary"
+                  onClick={() => onBuyConsumable(item.id)}
+                  disabled={creature.coins < item.cost}
+                >
+                  Buy
+                </button>
+              </article>
+            ))}
+          </div>
+        </section>
+      )}
 
       <section className="shop-screen__section" aria-labelledby="gear-heading">
         <h2 id="gear-heading" className="shop-screen__section-title">
-          Gear
+          {isRelic ? 'Relic gear' : 'Gear'}
         </h2>
         {gearItems.length === 0 ? (
           <p className="shop-screen__empty">No gear in stock this visit.</p>

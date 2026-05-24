@@ -4,6 +4,7 @@ export type NodeType =
   | 'alphaNest'
   | 'event'
   | 'shop'
+  | 'relicShop'
   | 'rest'
   | 'gymTrainer'
   | 'gymLeader'
@@ -25,6 +26,7 @@ export const NODE_TYPE_LABELS: Record<NodeType, string> = {
   alphaNest: 'Alpha Nest',
   event: 'Event',
   shop: 'Shop',
+  relicShop: 'Relic Vault',
   rest: 'Rest',
   gymTrainer: 'Gym Trainer',
   gymLeader: 'Gym Leader',
@@ -40,13 +42,14 @@ export const ALL_NODE_TYPES: readonly NodeType[] = [
   'alphaNest',
   'event',
   'shop',
+  'relicShop',
   'rest',
   'gymTrainer',
   'gymLeader',
   'boss',
 ] as const
 
-export type NodeClickAction = 'combat' | 'shop' | 'rest' | 'event'
+export type NodeClickAction = 'combat' | 'shop' | 'relicShop' | 'rest' | 'event'
 
 export function getNodeClickAction(nodeType: NodeType): NodeClickAction {
   switch (nodeType) {
@@ -59,6 +62,8 @@ export function getNodeClickAction(nodeType: NodeType): NodeClickAction {
       return 'combat'
     case 'shop':
       return 'shop'
+    case 'relicShop':
+      return 'relicShop'
     case 'rest':
       return 'rest'
     case 'event':
@@ -84,6 +89,7 @@ export function nodeTypeToCssClass(type: NodeType): string {
     alphaNest: 'alpha-nest',
     event: 'event',
     shop: 'shop',
+    relicShop: 'relic-shop',
     rest: 'rest',
     gymTrainer: 'gym-trainer',
     gymLeader: 'gym-leader',
@@ -99,6 +105,7 @@ export function nodeTypeToIconPath(type: NodeType): string {
     alphaNest: '/assets/map-nodes/alpha-nest.png',
     event: '/assets/map-nodes/event.png',
     shop: '/assets/map-nodes/shop.png',
+    relicShop: '/assets/map-nodes/shop.png',
     rest: '/assets/map-nodes/rest.png',
     gymTrainer: '/assets/map-nodes/gym-trainer.png',
     gymLeader: '/assets/map-nodes/gym-leader.png',
