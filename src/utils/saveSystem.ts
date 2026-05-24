@@ -24,9 +24,13 @@ import {
   normalizeQuestState,
   type QuestState,
 } from './questSystem'
+import {
+  normalizeRetentionState,
+  type RetentionState,
+} from './retentionSystem'
 
 const LEGACY_SAVE_KEY = 'project-monolith-run'
-export const SAVE_VERSION = 7
+export const SAVE_VERSION = 8
 
 export type SaveSlotId = 1 | 2
 
@@ -169,6 +173,7 @@ export type RunSaveData = {
   gearInventory?: string[]
   trainerInventory?: TrainerInventory
   questState?: QuestState
+  retentionState?: RetentionState
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -309,7 +314,9 @@ function validateRunSaveData(value: unknown): value is RunSaveData {
     value.version !== 2 &&
     value.version !== 3 &&
     value.version !== 4 &&
-    value.version !== 5
+    value.version !== 5 &&
+    value.version !== 6 &&
+    value.version !== 7
   ) {
     return false
   }
@@ -518,6 +525,7 @@ export function normalizeLoadedSaveData(
       parsed.gearInventory,
     ),
     questState: normalizeQuestState(parsed.questState),
+    retentionState: normalizeRetentionState(parsed.retentionState),
     version: SAVE_VERSION,
   }
 }

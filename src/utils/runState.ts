@@ -24,6 +24,7 @@ import type { RunCreature } from './progression'
 import {
   createDefaultQuestState,
 } from './questSystem'
+import { createDefaultRetentionState } from './retentionSystem'
 
 export type FreshMapState = {
   mapNodes: MapNode[]
@@ -121,6 +122,7 @@ export function createFreshSaveData(params: {
       keyItems: [...inv.keyItems],
     },
     questState: createDefaultQuestState(),
+    retentionState: createDefaultRetentionState(),
   }
 }
 

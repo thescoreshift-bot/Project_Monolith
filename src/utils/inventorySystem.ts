@@ -322,6 +322,9 @@ export type BattleDropResult = {
   inventory: TrainerInventory
   itemsFound: string[]
   gearFound?: string
+  gearId?: string
+  itemIds: string[]
+  materialIds: string[]
   materialsFound: string[]
 }
 
@@ -333,6 +336,8 @@ export function applyBattleDropsToInventory(
   let next = inv
   const itemsFound: string[] = []
   const materialsFound: string[] = []
+  const itemIds: string[] = []
+  const materialIds: string[] = []
 
   if (gearDrop) {
     next = addGearIdToTrainerInventory(next, gearDrop.id)
@@ -383,6 +388,7 @@ export function applyBattleDropsToInventory(
       const def = getItemDefinition(id)!
       next = addItemToTrainerInventory(next, id, 1)
       itemsFound.push(def.name)
+      itemIds.push(id)
     }
   }
 
@@ -395,6 +401,7 @@ export function applyBattleDropsToInventory(
       const def = getItemDefinition(id)!
       next = addItemToTrainerInventory(next, id, 1)
       materialsFound.push(def.name)
+      materialIds.push(id)
       if (!itemsFound.includes(def.name)) {
         itemsFound.push(def.name)
       }
@@ -405,12 +412,17 @@ export function applyBattleDropsToInventory(
     next = addItemToTrainerInventory(next, 'monolith-fragment', 1)
     materialsFound.push(ITEMS['monolith-fragment'].name)
     itemsFound.push(ITEMS['monolith-fragment'].name)
+    materialIds.push('monolith-fragment')
+    itemIds.push('monolith-fragment')
   }
 
   return {
     inventory: next,
     itemsFound,
     gearFound: gearDrop?.name,
+    gearId: gearDrop?.id,
+    itemIds,
+    materialIds,
     materialsFound,
   }
 }

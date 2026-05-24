@@ -36,6 +36,8 @@ import { RecruitmentScreen } from './components/RecruitmentScreen'
 import { RestScreen } from './components/RestScreen'
 import { RecoveryStationScreen } from './components/RecoveryStationScreen'
 import { QuestCompleteToastStack } from './components/QuestCompleteToast'
+import { AchievementUnlockToastStack } from './components/AchievementUnlockToast'
+import { MonolithArchiveScreen } from './components/MonolithArchiveScreen'
 import { FriendBattleScreen } from './components/FriendBattleScreen'
 import { PvpResultScreen } from './components/PvpResultScreen'
 import { ShopScreen } from './components/ShopScreen'
@@ -328,6 +330,19 @@ import {
   type SaveSlotId,
   type SaveSlotSummary,
 } from './utils/saveSystem'
+import {
+  applyPendingRetentionRewards,
+  createDefaultRetentionState,
+  getScaledQuestContext,
+  hasRetentionNotifications,
+  loadRetentionFromLocalSlot,
+  normalizeRetentionState,
+  saveRetentionToLocalSlot,
+  trackGameEvent,
+  type GameEventPayload,
+  type GameEventType,
+  type RetentionState,
+} from './utils/retentionSystem'
 import './App.css'
 
 type PlayMode = 'offline' | 'cloud'
@@ -369,6 +384,7 @@ type Screen =
   | 'pvp'
   | 'pvpVictory'
   | 'pvpDefeat'
+  | 'monolithArchive'
 
 type CombatPhase = 'starter' | 'recruit' | 'enemy'
 
@@ -585,6 +601,13 @@ function App() {
   const [questCompleteToasts, setQuestCompleteToasts] = useState<
     { id: string; title: string; rewardPreview: string }[]
   >([])
+  const [retentionState, setRetentionState] = useState<RetentionState>(
+    createDefaultRetentionState,
+  )
+  const [achievementUnlockToasts, setAchievementUnlockToasts] = useState<
+    { id: string; title: string }[]
+  >([])
+  const [archiveMessage, setArchiveMessage] = useState<string | null>(null)
 
   const screenRef = useRef<Screen>('title')
   const inventoryReturnScreenRef = useRef<'runMap' | 'party' | 'shop'>('runMap')
@@ -614,6 +637,7 @@ function App() {
     activeHelperId: string | null
   } | null>(null)
   const pvpOpponentNameRef = useRef('Friend')
+  const retentionStateRef = useRef<RetentionState>(createDefaultRetentionState())
 
   useEffect(() => {
     runCreatureRef.current = runCreature
@@ -653,6 +677,10 @@ function App() {
     activeSlotIdRef.current = activeSlotId
   }, [activeSlotId])
 
+  useEffect(() => {
+    retentionStateRef.current = retentionState
+  }, [retentionState])
+
   const refreshLocalSlots = useCallback(() => {
     setLocalSlots(getAllLocalSaveSlotSummaries())
   }, [])
@@ -671,6 +699,7 @@ function App() {
 
   useEffect(() => {
     syncTutorialFromStorage()
+    setRetentionState(loadRetentionFromLocalSlot(1))
   }, [])
 
   useEffect(() => {
@@ -937,6 +966,92 @@ function App() {
     })
   }
 
+  function getRetentionSlot(): SaveSlotId {
+    return activeSlotIdRef.current ?? 1
+  }
+
+  function persistRetentionState(state: RetentionState) {
+    saveRetentionToLocalSlot(getRetentionSlot(), state)
+  }
+
+  function applyRetentionPendingToRun(state: RetentionState): RetentionState {
+    const pending = state.pendingRewards
+    if (
+      !runCreatureRef.current ||
+      (pending.coins <= 0 && pending.items.length === 0 && pending.gearIds.length === 0)
+    ) {
+      return state
+    }
+    const applied = applyPendingRetentionRewards(
+      runCreatureRef.current,
+      partyRecruitsRef.current,
+      trainerInventory,
+      pending,
+    )
+    runCreatureRef.current = applied.starter
+    setRunCreature(applied.starter)
+    setTrainerInventory(applied.inventory)
+    return { ...state, pendingRewards: applied.cleared }
+  }
+
+  function dispatchRetentionEvent(
+    event: GameEventType,
+    payload: GameEventPayload = {},
+  ) {
+    setRetentionState((prev) => {
+      const result = trackGameEvent(prev, event, payload)
+      if (result.newlyUnlockedAchievements.length > 0) {
+        setAchievementUnlockToasts((toasts) => [
+          ...toasts,
+          ...result.newlyUnlockedAchievements.map((a) => ({
+            id: `${a.id}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+            title: a.title,
+          })),
+        ])
+      }
+      const withPending = applyRetentionPendingToRun(result.state)
+      persistRetentionState(withPending)
+      return withPending
+    })
+  }
+
+  function handleRetentionStateChange(next: RetentionState) {
+    const withPending = applyRetentionPendingToRun(next)
+    setRetentionState(withPending)
+    persistRetentionState(withPending)
+    void persistRun()
+  }
+
+  function openMonolithArchive() {
+    const slot = getRetentionSlot()
+    const loaded = loadRetentionFromLocalSlot(slot)
+    setRetentionState(loaded)
+    setArchiveMessage(null)
+    setScreen('monolithArchive')
+  }
+
+  function dismissAchievementToast(id: string) {
+    setAchievementUnlockToasts((prev) => prev.filter((t) => t.id !== id))
+  }
+
+  function renderAchievementToasts() {
+    return (
+      <AchievementUnlockToastStack
+        toasts={achievementUnlockToasts}
+        onDismiss={dismissAchievementToast}
+      />
+    )
+  }
+
+  function renderGlobalToasts() {
+    return (
+      <>
+        {renderQuestToasts()}
+        {renderAchievementToasts()}
+      </>
+    )
+  }
+
   function handleAcceptQuest(questId: string) {
     setQuestState((s) => acceptQuest(s, questId))
     setQuestBoardMessage('Quest accepted.')
@@ -993,6 +1108,7 @@ function App() {
       pendingPostBattleQueue,
       trainerInventory,
       questState,
+      retentionState,
     }
   }
 
@@ -1182,6 +1298,9 @@ function App() {
     )
     setRunSummaryScore(snapshot)
     setSubmitMessage(null)
+    if (completed) {
+      dispatchRetentionEvent('dailyRunCompleted')
+    }
     setScreen('runSummary')
   }
 
@@ -1359,6 +1478,7 @@ function App() {
     day.leaderboardSubmitted = true
     saveDailyRunDayState(day)
     scoreTrackerRef.current.submittedToLeaderboard = true
+    dispatchRetentionEvent('leaderboardSubmitted')
 
     const successMsg = result.keptPrevious
       ? 'Your previous higher score was kept on the leaderboard.'
@@ -1496,6 +1616,33 @@ function App() {
         ),
     )
     setQuestState(normalizeQuestState(saved.questState))
+    const loadedRetention = normalizeRetentionState(
+      saved.retentionState ??
+        loadRetentionFromLocalSlot(activeSlotIdRef.current ?? 1),
+    )
+    const pendingBefore = loadedRetention.pendingRewards
+    const appliedRetention = applyPendingRetentionRewards(
+      normalizedCreature,
+      saved.partyRecruits,
+      saved.trainerInventory ??
+        migrateLegacyGearInventory(emptyTrainerInventory(), saved.gearInventory),
+      pendingBefore,
+    )
+    const finalRetention = {
+      ...loadedRetention,
+      pendingRewards: appliedRetention.cleared,
+    }
+    if (
+      pendingBefore.coins > 0 ||
+      pendingBefore.items.length > 0 ||
+      pendingBefore.gearIds.length > 0
+    ) {
+      setRunCreature(appliedRetention.starter)
+      runCreatureRef.current = appliedRetention.starter
+      setTrainerInventory(appliedRetention.inventory)
+    }
+    setRetentionState(finalRetention)
+    persistRetentionState(finalRetention)
     setRestChoiceMade(saved.restChoiceMade)
     setEnemy(null)
     setBattleLog([])
@@ -1613,7 +1760,8 @@ function App() {
       screen === 'dailyRun' ||
       screen === 'leaderboard' ||
       screen === 'runSummary' ||
-      screen === 'profileSetup'
+      screen === 'profileSetup' ||
+      screen === 'monolithArchive'
     ) {
       return
     }
@@ -1649,6 +1797,8 @@ function App() {
     draftOptions,
     pendingRecruit,
     pendingEvolutionQueue,
+    trainerInventory,
+    retentionState,
   ])
 
   function resetRun() {
@@ -1711,6 +1861,10 @@ function App() {
   }
 
   function goToTitle() {
+    const slot = activeSlotIdRef.current
+    if (slot) {
+      saveRetentionToLocalSlot(slot, retentionStateRef.current)
+    }
     resetRunMemory()
     setActiveSlotId(null)
     activeSlotIdRef.current = null
@@ -1981,18 +2135,25 @@ function App() {
     if (isDaily) {
       saveDailyRunProgress()
     } else if (activeSlotIdRef.current) {
-      const freshSave = createFreshSaveData({
-        starterId: pendingStarter.id,
-        runCreature: creature,
-        mapNodes: nodes,
-        nodeStates: states,
-        regionId,
-        trainerInventory: freshInventory,
-      })
+      const freshSave = {
+        ...createFreshSaveData({
+          starterId: pendingStarter.id,
+          runCreature: creature,
+          mapNodes: nodes,
+          nodeStates: states,
+          regionId,
+          trainerInventory: freshInventory,
+        }),
+        retentionState: retentionStateRef.current,
+      }
       void persistSaveData(freshSave)
     }
 
     setMapMessage('New run created.')
+    dispatchRetentionEvent('creatureRecruited', {
+      starterTypeId: pendingStarter.id,
+      regionId,
+    })
     maybeAdvanceTutorial('chooseStarter', 'clickBattleNode')
     setScreen('runMap')
   }
@@ -2006,6 +2167,7 @@ function App() {
     setCurrentNode(null)
     if (node) {
       dispatchQuestEvent('nodeCleared', { nodeType: node.type })
+      dispatchRetentionEvent('nodeCleared', { nodeType: node.type })
     }
   }
 
@@ -2038,6 +2200,10 @@ function App() {
     }
     setBattleLog([`${spawned.name} appeared!`])
     setCombatLocked(false)
+    dispatchRetentionEvent('enemySeen', {
+      templateId: spawned.id,
+      regionId: currentRegionId,
+    })
     maybeAdvanceTutorial('clickBattleNode', 'useAbility')
     setScreen('combat')
   }
@@ -2738,6 +2904,17 @@ function App() {
       encounterKind: activeEncounterKind,
       enemyKind: defeatedEnemy.kind,
     })
+    dispatchRetentionEvent('battleWon')
+    dispatchRetentionEvent('enemyDefeated')
+    if (activeEncounterKind === 'alphaNest') {
+      dispatchRetentionEvent('alphaDefeated')
+    }
+    if (activeEncounterKind === 'elite') {
+      dispatchRetentionEvent('eliteOrAlphaDefeated')
+    }
+    if (lastCombatNode.type === 'boss') {
+      dispatchRetentionEvent('bossDefeated', { regionId: currentRegionId })
+    }
 
     recordBattleVictory(scoreTrackerRef.current, activeEncounterKind)
 
@@ -2810,6 +2987,7 @@ function App() {
       setNodeStates((s) => unlockBossIfReady(mapNodes, s, newBadges))
       appendLog(`Earned the ${badge?.name ?? 'badge'}!`)
       scoreTrackerRef.current.badgesEarned += 1
+      dispatchRetentionEvent('badgeEarned', { badgeId: leaderBadgeId })
     }
 
     const masteryStarter = {
@@ -2860,6 +3038,17 @@ function App() {
 
     const pendingChoices = summarizePostBattleQueue(postQueue)
 
+    for (const line of masteryLines) {
+      if (line.xpGained > 0) {
+        dispatchRetentionEvent('abilityMasteryXp', { amount: line.xpGained })
+      }
+      if (line.rankUp && line.newRank != null) {
+        dispatchRetentionEvent('abilityMasteryLevelReached', {
+          masteryLevel: line.newRank,
+        })
+      }
+    }
+
     if (xpResult.perkDraftQueue.length > 0) {
       maybeAdvanceTutorial('winBattle', 'choosePerk')
     } else {
@@ -2882,6 +3071,15 @@ function App() {
       droppedGear,
     )
     setTrainerInventory(dropResult.inventory)
+    if (dropResult.gearId) {
+      dispatchRetentionEvent('gearCollected', { gearId: dropResult.gearId })
+    }
+    for (const itemId of dropResult.itemIds) {
+      dispatchRetentionEvent('itemCollected', { itemId })
+    }
+    for (const itemId of dropResult.materialIds) {
+      dispatchRetentionEvent('materialCollected', { itemId })
+    }
 
     const rewardPayload: RewardInfo = {
       coinsGained: rewards.coins,
@@ -2955,6 +3153,7 @@ function App() {
     const questAbility = getAbility(abilityId)
     if (questAbility) {
       dispatchQuestEvent('abilityUsed', { abilityType: questAbility.type })
+      dispatchRetentionEvent('abilityUsed')
     }
 
     const starterSnapshot = runCreatureRef.current ?? runCreature
@@ -3310,6 +3509,7 @@ function App() {
     }
 
     setActiveTransformEntry(null)
+    dispatchRetentionEvent('abilityTransformed', { abilityId: entry.newAbilityId })
     consumePostBattleQueueAndContinue(nextStarter, nextRecruits)
   }
 
@@ -3330,6 +3530,17 @@ function App() {
         r.id === targetId ? evolvePartyCreature(r, threshold) : r,
       )
       setPartyRecruits(nextRecruits)
+    }
+
+    const evolvedName =
+      targetId === STARTER_CREATURE_ID
+        ? nextStarter.name
+        : nextRecruits.find((r) => r.id === targetId)?.name
+    if (evolvedName) {
+      dispatchRetentionEvent('creatureEvolved', {
+        creatureName: evolvedName,
+        regionId: currentRegionId,
+      })
     }
 
     scoreTrackerRef.current.evolutionsReached += 1
@@ -3476,8 +3687,13 @@ function App() {
     }
     setPartyRecruits(nextRecruits)
     scoreTrackerRef.current.recruitsAdded += 1
+    const templateId = pendingRecruit.templateId
     setPendingRecruit(null)
     dispatchQuestEvent('creatureRecruited', {})
+    dispatchRetentionEvent('creatureRecruited', {
+      templateId,
+      regionId: currentRegionId,
+    })
     setScreen('reward')
   }
 
@@ -3496,7 +3712,12 @@ function App() {
     )
     setPartyRecruits(nextRecruits)
     scoreTrackerRef.current.recruitsAdded += 1
+    const templateId = pendingRecruit.templateId
     dispatchQuestEvent('creatureRecruited', {})
+    dispatchRetentionEvent('creatureRecruited', {
+      templateId,
+      regionId: currentRegionId,
+    })
     if (activeHelperId === replaceId) {
       setActiveHelperId(pendingRecruit.id)
     }
@@ -3612,6 +3833,7 @@ function App() {
       coins: runCreature.coins - item.cost,
     }
     setTrainerInventory((prev) => addItemToTrainerInventory(prev, itemId, 1))
+    dispatchRetentionEvent('itemCollected', { itemId })
     setShopLog((prev) => [...prev, `Bought ${item.name} x1.`])
     runCreatureRef.current = next
     setRunCreature(next)
@@ -3636,6 +3858,7 @@ function App() {
       coins: runCreature.coins - gear.price,
     }
     setTrainerInventory((prev) => addGearIdToTrainerInventory(prev, gearId))
+    dispatchRetentionEvent('gearCollected', { gearId })
     setShopLog((prev) => [...prev, `Bought ${gear.name} x1.`])
     runCreatureRef.current = next
     setRunCreature(next)
@@ -3657,6 +3880,7 @@ function App() {
       setGearEquipCreatureId(null)
       setInventoryMessage(`Equipped gear on ${runCreature.name}.`)
       dispatchQuestEvent('gearEquipped', {})
+      dispatchRetentionEvent('gearEquipped')
       return
     }
 
@@ -3677,6 +3901,7 @@ function App() {
     setGearEquipCreatureId(null)
     setInventoryMessage(`Equipped gear on ${recruit.name}.`)
     dispatchQuestEvent('gearEquipped', {})
+    dispatchRetentionEvent('gearEquipped')
   }
 
   function handleUnequipGear(creatureId: string) {
@@ -3830,6 +4055,8 @@ function App() {
     partyRecruitsRef.current = healed.recruits
     setRecoveryLogMessage(`Your party was healed for ${cost} coins.`)
     dispatchQuestEvent('recoveryUsed', {})
+    dispatchRetentionEvent('recoveryUsed')
+    dispatchRetentionEvent('recoveryUsed')
     void persistRun()
   }
 
@@ -3868,6 +4095,7 @@ function App() {
     partyRecruitsRef.current = revived.recruits
     setRecoveryLogMessage(`${revivedName} was revived for ${REVIVE_FAINTED_COST} coins.`)
     dispatchQuestEvent('recoveryUsed', {})
+    dispatchRetentionEvent('recoveryUsed')
     void persistRun()
   }
 
@@ -3890,6 +4118,7 @@ function App() {
     partyRecruitsRef.current = recovered.recruits
     setRecoveryLogMessage(`Full recovery complete for ${cost} coins.`)
     dispatchQuestEvent('recoveryUsed', {})
+    dispatchRetentionEvent('recoveryUsed')
     void persistRun()
   }
 
@@ -3998,6 +4227,7 @@ function App() {
     setPvpResultCoins(20)
     setPvpResultMessage('Friend Battle victory!')
     setScreen('pvpVictory')
+    dispatchRetentionEvent('pvpWon')
     void persistRun()
   }
 
@@ -4061,6 +4291,7 @@ function App() {
       setMapMessage(result.message)
     }
     dispatchQuestEvent('eventCompleted', {})
+    dispatchRetentionEvent('eventCompleted')
     markNodeComplete(activeNodeId)
     setCurrentEvent(null)
     setScreen('runMap')
@@ -4308,7 +4539,7 @@ function App() {
           onOpenInventory={() => openInventory('shop')}
           onLeave={handleLeaveShop}
         />
-        {renderQuestToasts()}
+        {renderGlobalToasts()}
       </div>
     )
   }
@@ -4323,7 +4554,7 @@ function App() {
           onTrain={() => handleRestChoice('train')}
           onContinue={handleRestContinue}
         />
-        {renderQuestToasts()}
+        {renderGlobalToasts()}
       </div>
     )
   }
@@ -4332,7 +4563,7 @@ function App() {
     return (
       <div className="app">
         <EventScreen event={currentEvent} onChoose={handleEventChoice} />
-        {renderQuestToasts()}
+        {renderGlobalToasts()}
       </div>
     )
   }
@@ -4358,7 +4589,7 @@ function App() {
         />
         {renderTutorialOverlay()}
         {renderFeedbackModal()}
-        {renderQuestToasts()}
+        {renderGlobalToasts()}
       </div>
     )
   }
@@ -4386,7 +4617,7 @@ function App() {
           defeat={defeatInfo}
           onBeginNewRoute={handleBeginNewRoute}
         />
-        {renderQuestToasts()}
+        {renderGlobalToasts()}
       </div>
     )
   }
@@ -4397,7 +4628,7 @@ function App() {
         <RewardScreen reward={rewardInfo} onContinue={handleRewardContinue} />
         {renderTutorialOverlay()}
         {renderFeedbackModal()}
-        {renderQuestToasts()}
+        {renderGlobalToasts()}
       </div>
     )
   }
@@ -4556,7 +4787,7 @@ function App() {
         )}
         {renderTutorialOverlay()}
         {renderFeedbackModal()}
-        {renderQuestToasts()}
+        {renderGlobalToasts()}
         {perksModalCreatureId && (
           <CreaturePerksModal
             creatureName={
@@ -4623,7 +4854,7 @@ function App() {
           onClaimQuest={handleClaimQuest}
           onBack={handleRecoveryBack}
         />
-        {renderQuestToasts()}
+        {renderGlobalToasts()}
       </div>
     )
   }
@@ -4656,6 +4887,35 @@ function App() {
             }
           }}
         />
+      </div>
+    )
+  }
+
+  if (screen === 'monolithArchive') {
+    const questCtx = runCreature
+      ? getScaledQuestContext(runCreature, partyRecruits, currentRegionId)
+      : { partyLevel: 1, regionId: DEFAULT_REGION_ID }
+    return (
+      <div className="app">
+        <MonolithArchiveScreen
+          state={retentionState}
+          partyLevel={questCtx.partyLevel}
+          regionId={questCtx.regionId}
+          onBack={() =>
+            setScreen(runCreature && selectedStarter ? 'runMap' : 'title')
+          }
+          onStateChange={handleRetentionStateChange}
+          onApplyRewardMessage={(msg) => {
+            setArchiveMessage(msg)
+            if (runCreature) setMapMessage(msg)
+          }}
+        />
+        {archiveMessage && (
+          <p className="archive-flash" style={{ textAlign: 'center' }}>
+            {archiveMessage}
+          </p>
+        )}
+        {renderGlobalToasts()}
       </div>
     )
   }
@@ -4721,7 +4981,7 @@ function App() {
         )}
         {renderTutorialOverlay()}
         {renderFeedbackModal()}
-        {renderQuestToasts()}
+        {renderGlobalToasts()}
       </div>
     )
   }
@@ -4732,11 +4992,13 @@ function App() {
         loggedIn={Boolean(authUser)}
         cloudConfigured={isSupabaseConfigured()}
         displayName={playerProfile?.display_name}
+        hasArchiveNotification={hasRetentionNotifications(retentionState)}
         onLogin={() => setScreen('login')}
         onRegister={() => setScreen('register')}
         onPlay={() => openCharacterSelect('cloud')}
         onDailyRun={openDailyRunMenu}
         onFriendBattle={() => openFriendBattle('title')}
+        onMonolithArchive={openMonolithArchive}
         onAccount={() => setScreen('account')}
         onLogout={() => void handleLogout()}
         onPlayOffline={() => openCharacterSelect('offline')}
@@ -4746,6 +5008,7 @@ function App() {
         }}
         onFeedback={() => setFeedbackOpen(true)}
       />
+      {renderGlobalToasts()}
       {renderFeedbackModal()}
     </div>
   )
@@ -4772,11 +5035,13 @@ function TitleScreen({
   loggedIn,
   cloudConfigured,
   displayName,
+  hasArchiveNotification,
   onLogin,
   onRegister,
   onPlay,
   onDailyRun,
   onFriendBattle,
+  onMonolithArchive,
   onAccount,
   onLogout,
   onPlayOffline,
@@ -4786,11 +5051,13 @@ function TitleScreen({
   loggedIn: boolean
   cloudConfigured: boolean
   displayName?: string
+  hasArchiveNotification?: boolean
   onLogin: () => void
   onRegister: () => void
   onPlay: () => void
   onDailyRun: () => void
   onFriendBattle: () => void
+  onMonolithArchive: () => void
   onAccount: () => void
   onLogout: () => void
   onPlayOffline: () => void
@@ -4809,6 +5076,19 @@ function TitleScreen({
       <nav className="title-screen__actions" aria-label="Main menu">
         <button type="button" className="btn btn--primary" onClick={onDailyRun}>
           Daily Run
+        </button>
+        <button
+          type="button"
+          className="btn title-screen__archive-btn"
+          onClick={onMonolithArchive}
+        >
+          Monolith Archive
+          {hasArchiveNotification ? (
+            <span className="title-screen__archive-badge" aria-label="Rewards available">
+              {' '}
+              !
+            </span>
+          ) : null}
         </button>
         {loggedIn ? (
           <>
