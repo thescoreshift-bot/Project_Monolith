@@ -1,4 +1,4 @@
-import { getAbility, type Ability } from '../data/abilities'
+import { getAbility, getAbilityDisplayName, type Ability } from '../data/abilities'
 import {
   getMasteryPerk,
   getAbilityTransformationPath,
@@ -399,7 +399,7 @@ export function applyMasteryXpToCreature<T extends CombatFighterWithMastery>(
     activeAbilityId
   const current = getMasteryEntry(ensured, masteryKey)
   const xpGain = computeMasteryXpGain(ctx)
-  const result = grantMasteryXp(current, xpGain, ability.name)
+  const result = grantMasteryXp(current, xpGain, getAbilityDisplayName(ability))
 
   const mastery = {
     ...ensured.abilityMastery,
@@ -407,7 +407,7 @@ export function applyMasteryXpToCreature<T extends CombatFighterWithMastery>(
   }
 
   const logLines = [
-    `${creature.name}'s ${ability.name} gained +${result.xpGained} mastery XP.`,
+    `${creature.name}'s ${getAbilityDisplayName(ability)} gained +${result.xpGained} mastery XP.`,
     ...result.rankUpMessages,
   ]
 

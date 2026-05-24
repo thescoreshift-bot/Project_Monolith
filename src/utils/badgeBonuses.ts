@@ -15,6 +15,7 @@ import {
 import {
   applyGearStatModifiers,
   getEquippedGear,
+  getEquippedGearUpgradeLevel,
   getGearDamageMultiplier,
   type CreatureWithGear,
 } from './gearSystem'
@@ -159,8 +160,10 @@ export function getEffectiveStats(
     currentHp: creature.currentHp,
   }
   const withBadges = getEffectiveStatsWithBadges(withPerks, context.earnedBadges)
-  const gear = getEquippedGear(creature as CreatureWithGear)
-  const withGear = applyGearStatModifiers(withBadges, gear)
+  const gearCreature = creature as CreatureWithGear
+  const gear = getEquippedGear(gearCreature)
+  const gearLevel = getEquippedGearUpgradeLevel(gearCreature)
+  const withGear = applyGearStatModifiers(withBadges, gear, gearLevel)
   const stages = context.statStages ?? {}
 
   return {
@@ -211,9 +214,11 @@ export function getAttackerDamageMultiplier(
   }
 
   if (attacker) {
+    const atkGear = attacker as CreatureWithGear
     const gearMult = getGearDamageMultiplier(
-      getEquippedGear(attacker as CreatureWithGear),
+      getEquippedGear(atkGear),
       ability,
+      getEquippedGearUpgradeLevel(atkGear),
     )
     mult *= gearMult
   }

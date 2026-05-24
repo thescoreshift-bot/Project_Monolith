@@ -22,7 +22,7 @@ function SlotCard({
 }) {
   const title = summary.isEmpty
     ? 'Empty Slot'
-    : (summary.saveName ?? summary.creatureName ?? 'Saved Run')
+    : (summary.saveName ?? summary.trainerName ?? 'Saved Run')
 
   return (
     <button
@@ -37,7 +37,11 @@ function SlotCard({
       ) : (
         <ul className="slot-card__stats">
           <li>
-            {summary.creatureName} · Lv {summary.level}
+            Starter: {summary.starterName ?? '—'}
+            {summary.starterType ? ` (${summary.starterType})` : ''}
+          </li>
+          <li>
+            Highest party level: Lv {summary.highestPartyLevel ?? summary.level}
           </li>
           <li>{summary.regionName}</li>
           <li>
@@ -57,6 +61,7 @@ export function CharacterSelectScreen({
   selectedSlotId,
   onSelectSlot,
   onContinue,
+  onRename,
   onNewGame,
   onDelete,
   onBack,
@@ -72,6 +77,7 @@ export function CharacterSelectScreen({
   selectedSlotId: SaveSlotId | null
   onSelectSlot: (id: SaveSlotId) => void
   onContinue: () => void
+  onRename: () => void
   onNewGame: () => void
   onDelete: () => void
   onBack: () => void
@@ -84,6 +90,7 @@ export function CharacterSelectScreen({
 }) {
   const selected = selectedSlotId ? slots[selectedSlotId] : null
   const canContinue = selected && !selected.isEmpty
+  const canRename = selected && !selected.isEmpty
 
   return (
     <main className="character-select-screen">
@@ -105,13 +112,13 @@ export function CharacterSelectScreen({
       <div className="character-select-screen__slots">
         <SlotCard
           summary={slots[1]}
-          storageLabel={mode === 'cloud' ? 'Cloud Slot 1' : 'Local Slot 1'}
+          storageLabel={mode === 'cloud' ? 'Cloud · Slot 1' : 'Local · Slot 1'}
           selected={selectedSlotId === 1}
           onSelect={() => onSelectSlot(1)}
         />
         <SlotCard
           summary={slots[2]}
-          storageLabel={mode === 'cloud' ? 'Cloud Slot 2' : 'Local Slot 2'}
+          storageLabel={mode === 'cloud' ? 'Cloud · Slot 2' : 'Local · Slot 2'}
           selected={selectedSlotId === 2}
           onSelect={() => onSelectSlot(2)}
         />
@@ -126,8 +133,16 @@ export function CharacterSelectScreen({
         >
           Continue
         </button>
+        <button
+          type="button"
+          className="btn"
+          disabled={!canRename}
+          onClick={onRename}
+        >
+          Rename
+        </button>
         <button type="button" className="btn" disabled={!selectedSlotId} onClick={onNewGame}>
-          New Game
+          {selected?.isEmpty ? 'New Game' : 'Overwrite'}
         </button>
         <button
           type="button"
@@ -160,7 +175,8 @@ export function CharacterSelectScreen({
               return (
                 <div key={localSlot} className="upload-local-row">
                   <span>
-                    Local Slot {localSlot}: {local.creatureName} Lv{local.level}
+                    Local Slot {localSlot}: {local.saveName ?? local.creatureName} Lv
+                    {local.highestPartyLevel ?? local.level}
                   </span>
                   <div className="upload-local-row__btns">
                     <button

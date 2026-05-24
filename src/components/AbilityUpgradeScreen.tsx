@@ -1,4 +1,4 @@
-import { getAbility } from '../data/abilities'
+import { getAbility, getAbilityDisplayName } from '../data/abilities'
 import { getAbilityRole } from '../data/abilityMasteryPerks'
 import type { AbilityMasteryPerk } from '../data/abilityMasteryPerks'
 import {
@@ -14,10 +14,17 @@ type AbilityUpgradeScreenProps = {
   onChoose: (perkId: string) => void
 }
 
+const PATH_TAG_LABELS: Record<AbilityMasteryPerk['pathTag'], string> = {
+  damage: 'Power',
+  status: 'Status',
+  utility: 'Support',
+  hybrid: 'Hybrid',
+}
+
 function PathTagBadge({ tag }: { tag: AbilityMasteryPerk['pathTag'] }) {
   return (
     <span className={`ability-perk-kind ability-perk-kind--${tag}`}>
-      {tag}
+      {PATH_TAG_LABELS[tag]}
     </span>
   )
 }
@@ -28,6 +35,7 @@ export function AbilityUpgradeScreen({
   onChoose,
 }: AbilityUpgradeScreenProps) {
   const ability = getAbility(entry.abilityId)
+  const displayName = getAbilityDisplayName(ability)
   const abilityRole = getAbilityRole(ability)
   const choices = getDraftPerksForQueueEntry(entry)
 
@@ -37,17 +45,17 @@ export function AbilityUpgradeScreen({
         <header className="screen-header">
           <h1 className="screen-header__title">Ability Mastery</h1>
           <p className="screen-header__subtitle">
-            {creatureName}&apos;s {ability.name} reached {getRankLabel(entry.rank)}!
+            {creatureName}&apos;s {displayName} reached {getRankLabel(entry.rank)}!
           </p>
           <p className="ability-upgrade-screen__subtitle-detail">
-            Choose a mastery perk for {ability.name}. This affects {creatureName}&apos;s{' '}
-            {ability.name} only.
+            Choose a mastery perk for {displayName}. This affects {creatureName}&apos;s{' '}
+            {displayName} only.
           </p>
         </header>
 
         <section className="ability-upgrade-screen__current">
           <span className="panel-label">Ability</span>
-          <p className="ability-upgrade-screen__ability-name">{ability.name}</p>
+          <p className="ability-upgrade-screen__ability-name">{displayName}</p>
           <p className="ability-upgrade-screen__meta">
             Role: <strong>{abilityRole}</strong> · {ability.type} / {ability.category}
             {ability.power > 0 ? ` · Power ${ability.power}` : ''} · Accuracy{' '}

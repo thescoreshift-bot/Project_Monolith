@@ -60,6 +60,7 @@ export type RunCreature = {
   abilityMastery: AbilityMasteryMap
   /** Id of held gear item, if any. */
   equippedGearId?: string | null
+  equippedGearUpgradeLevel?: number
 }
 
 export type { AbilityMasteryMap, AbilityMasteryEntry } from './abilityMastery'
@@ -109,6 +110,7 @@ export function createRunCreature(starter: Starter): RunCreature {
     evolutionHistory: [],
     abilityMastery: {},
     equippedGearId: null,
+    equippedGearUpgradeLevel: 0,
   }),
   )
 }

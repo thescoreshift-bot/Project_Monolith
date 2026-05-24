@@ -1,11 +1,17 @@
+import type { SaveSlotId } from './saveSystem'
+
 const PREFS_KEY = 'project-monolith-player-prefs'
 
 export type PlayerPrefs = {
   tutorialCompleted: boolean
+  lastSaveSlotId: SaveSlotId | null
+  showTesterPanel: boolean
 }
 
 const DEFAULT_PREFS: PlayerPrefs = {
   tutorialCompleted: false,
+  lastSaveSlotId: null,
+  showTesterPanel: false,
 }
 
 function readRaw(): PlayerPrefs {
@@ -13,8 +19,11 @@ function readRaw(): PlayerPrefs {
     const raw = localStorage.getItem(PREFS_KEY)
     if (!raw) return { ...DEFAULT_PREFS }
     const parsed = JSON.parse(raw) as Partial<PlayerPrefs>
+    const lastSlot = parsed.lastSaveSlotId
     return {
       tutorialCompleted: Boolean(parsed.tutorialCompleted),
+      lastSaveSlotId: lastSlot === 1 || lastSlot === 2 ? lastSlot : null,
+      showTesterPanel: Boolean(parsed.showTesterPanel),
     }
   } catch {
     return { ...DEFAULT_PREFS }
@@ -30,7 +39,11 @@ export function isTutorialCompleted(): boolean {
 }
 
 export function setTutorialCompleted(completed: boolean): void {
-  const next = { ...readRaw(), tutorialCompleted: completed }
+  setPlayerPrefs({ tutorialCompleted: completed })
+}
+
+export function setPlayerPrefs(patch: Partial<PlayerPrefs>): void {
+  const next = { ...readRaw(), ...patch }
   try {
     localStorage.setItem(PREFS_KEY, JSON.stringify(next))
   } catch {
@@ -38,6 +51,18 @@ export function setTutorialCompleted(completed: boolean): void {
   }
 }
 
+export function setLastSaveSlotId(slotId: SaveSlotId): void {
+  setPlayerPrefs({ lastSaveSlotId: slotId })
+}
+
 export function resetTutorialPrefs(): void {
-  setTutorialCompleted(false)
+  setPlayerPrefs({ tutorialCompleted: false })
+}
+
+export function isTesterPanelEnabled(): boolean {
+  return readRaw().showTesterPanel
+}
+
+export function setTesterPanelEnabled(enabled: boolean): void {
+  setPlayerPrefs({ showTesterPanel: enabled })
 }

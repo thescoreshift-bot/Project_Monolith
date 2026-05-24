@@ -79,6 +79,10 @@ export function normalizeRunCreature(
         evolutionHistory: history,
         abilityMastery: creature.abilityMastery ?? {},
         equippedGearId: normalizeEquippedGearId(creature.equippedGearId),
+        equippedGearUpgradeLevel:
+          typeof creature.equippedGearUpgradeLevel === 'number'
+            ? Math.max(0, Math.min(5, creature.equippedGearUpgradeLevel))
+            : 0,
       }),
     ),
   )

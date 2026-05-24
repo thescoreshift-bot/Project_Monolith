@@ -1,3 +1,4 @@
+import { getAbilityDisplayName } from '../data/abilities'
 import type { AbilityDefinition, AbilityEffect, StatStageKey } from '../data/abilityTypes'
 import type { CombatStats } from './combat'
 import type { SupportMasteryModifiers } from './supportMasteryEffects'
@@ -165,6 +166,7 @@ function applySingleEffect(
   logLines: string[]
 } {
   const logLines: string[] = []
+  const abilityName = getAbilityDisplayName(ability)
   const perkNote = (used: boolean) =>
     used ? ' (mastery perk improved the effect!)' : ''
 
@@ -201,7 +203,7 @@ function applySingleEffect(
       const stages = Math.max(1, effect.stages + stageBonus)
       const next = adjustStage(enemyStages, effect.stat, -stages)
       logLines.push(
-        `${attackerName}'s ${ability.name} lowered foe ${STAT_LABELS[effect.stat]} by ${stages}!${perkNote(stageBonus > 0)}`,
+        `${attackerName}'s ${abilityName} lowered foe ${STAT_LABELS[effect.stat]} by ${stages}!${perkNote(stageBonus > 0)}`,
       )
       return {
         userStages,
@@ -216,7 +218,7 @@ function applySingleEffect(
       if (Math.random() * 100 < chance) {
         const next = { ...defenderStatus, [effect.status]: true }
         logLines.push(
-          `${ability.name} inflicted ${effect.status} on the foe!${perkNote(statusBonus > 0)}`,
+          `${abilityName} inflicted ${effect.status} on the foe!${perkNote(statusBonus > 0)}`,
         )
         return {
           userStages,
@@ -226,7 +228,7 @@ function applySingleEffect(
           logLines,
         }
       }
-      logLines.push(`${ability.name} failed to inflict ${effect.status}.`)
+      logLines.push(`${abilityName} failed to inflict ${effect.status}.`)
       return { userStages, enemyStages, defenderStatus, attackerHp, logLines }
     }
     case 'heal': {
@@ -237,7 +239,7 @@ function applySingleEffect(
       )
       const nextHp = Math.min(attackerMaxHp, attackerHp + heal)
       logLines.push(
-        `${ability.name} restored ${heal} HP for ${attackerName}!${perkNote(healBonusPercent > 0)}`,
+        `${abilityName} restored ${heal} HP for ${attackerName}!${perkNote(healBonusPercent > 0)}`,
       )
       return {
         userStages,

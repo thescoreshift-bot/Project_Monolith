@@ -37,6 +37,7 @@ export type PartyCreature = {
   temporaryBattleBuffs?: TemporaryBattleBuff[]
   abilityMastery: AbilityMasteryMap
   equippedGearId?: string | null
+  equippedGearUpgradeLevel?: number
 } & CreaturePerkFields
 
 export type PartyXpResult = {
@@ -94,6 +95,10 @@ export function normalizePartyCreature(
     temporaryBattleBuffs: raw.temporaryBattleBuffs ?? [],
     abilityMastery: raw.abilityMastery ?? {},
     equippedGearId: normalizeEquippedGearId(raw.equippedGearId),
+    equippedGearUpgradeLevel:
+      typeof raw.equippedGearUpgradeLevel === 'number'
+        ? Math.max(0, Math.min(5, raw.equippedGearUpgradeLevel))
+        : 0,
   }),
   )
 }

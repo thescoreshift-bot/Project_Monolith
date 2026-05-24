@@ -3,14 +3,23 @@ import { APP_VERSION, APP_VERSION_LABEL } from './version'
 
 export type FeedbackKind = 'bug' | 'feedback'
 
+export type FeedbackSeverity = 'low' | 'medium' | 'high' | 'critical'
+
 export type FeedbackPayload = {
   kind: FeedbackKind
+  severity: FeedbackSeverity
   whatHappened: string
   expectedBehavior: string
   contact?: string
   screen: string
   region: string
   saveSlot: string
+  saveMode?: string
+  runMode?: string
+  partyHighestLevel?: number
+  mapSeed?: string
+  loggedInUsername?: string
+  browserInfo?: string
   appVersion: string
   createdAt: string
 }
@@ -26,9 +35,14 @@ export type FeedbackReportData = {
   expected?: string
   page_url?: string
   user_agent?: string
-  severity?: string
-  title?: string
-}
+    severity?: string
+    save_mode?: string
+    run_mode?: string
+    party_highest_level?: number
+    map_seed?: string
+    logged_in_username?: string
+    title?: string
+  }
 
 const LOCAL_FEEDBACK_KEY = 'project-monolith-feedback-log'
 
@@ -37,9 +51,18 @@ export function buildFeedbackReportText(payload: FeedbackPayload): string {
     '--- Project MONOLITH Tester Report ---',
     APP_VERSION_LABEL,
     `Type: ${payload.kind}`,
+    `Severity: ${payload.severity}`,
     `Screen: ${payload.screen}`,
     `Region: ${payload.region}`,
     `Save slot: ${payload.saveSlot}`,
+    payload.saveMode ? `Save mode: ${payload.saveMode}` : '',
+    payload.runMode ? `Run mode: ${payload.runMode}` : '',
+    payload.partyHighestLevel != null
+      ? `Party highest level: ${payload.partyHighestLevel}`
+      : '',
+    payload.mapSeed ? `Map/daily seed: ${payload.mapSeed}` : '',
+    payload.loggedInUsername ? `Logged in as: ${payload.loggedInUsername}` : '',
+    payload.browserInfo ? `Browser: ${payload.browserInfo}` : '',
     `When: ${payload.createdAt}`,
     '',
     'What happened:',
@@ -82,6 +105,12 @@ function buildReportData(payload: FeedbackPayload): FeedbackReportData {
     expected: payload.expectedBehavior || undefined,
     page_url: typeof window !== 'undefined' ? window.location.href : undefined,
     user_agent: getBrowserInfo(),
+    severity: payload.severity,
+    save_mode: payload.saveMode,
+    run_mode: payload.runMode,
+    party_highest_level: payload.partyHighestLevel,
+    map_seed: payload.mapSeed,
+    logged_in_username: payload.loggedInUsername,
     title: payload.kind === 'bug' ? 'Bug report' : 'Feedback',
   }
 }
@@ -103,6 +132,7 @@ function buildModernInsertRow(
     browser_info: getBrowserInfo(),
     report_data: buildReportData(payload),
     status: 'open',
+    severity: payload.severity,
   }
 }
 
@@ -182,7 +212,9 @@ function appendLocalFeedback(payload: FeedbackPayload): void {
 }
 
 export async function submitFeedback(
-  input: Omit<FeedbackPayload, 'appVersion' | 'createdAt'>,
+  input: Omit<FeedbackPayload, 'appVersion' | 'createdAt' | 'browserInfo'> & {
+    severity?: FeedbackSeverity
+  },
 ): Promise<{
   ok: boolean
   copyText: string
@@ -191,6 +223,8 @@ export async function submitFeedback(
 }> {
   const payload: FeedbackPayload = {
     ...input,
+    severity: input.severity ?? 'medium',
+    browserInfo: getBrowserInfo(),
     appVersion: APP_VERSION,
     createdAt: new Date().toISOString(),
   }

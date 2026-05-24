@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { HpBar } from './HpBar'
-import { QuestBoardPanel } from './QuestBoardPanel'
+import { ActiveRequestsPanel } from './ActiveRequestsPanel'
+import { MonolithForgePanel } from './MonolithForgePanel'
+import { RequestQuestBrokerPanel } from './RequestQuestBrokerPanel'
 import type { PartyMemberRef, PartyMemberStatus } from '../utils/recoveryStation'
 import {
   fullRecoveryCost,
@@ -10,43 +12,62 @@ import {
   isPartyFullyHealthy,
   REVIVE_FAINTED_COST,
 } from '../utils/recoveryStation'
-import type { QuestState, QuestRunContext } from '../utils/questSystem'
+import type { RequestQuestRunContext, RequestQuestState } from '../utils/requestQuestSystem'
+import { hasClaimableRequestQuests } from '../utils/requestQuestSystem'
 import type { PartyCreature } from '../utils/party'
 import type { RunCreature } from '../utils/progression'
+import type { TrainerInventory } from '../utils/inventorySystem'
+import { getPartyHighestLevel } from '../utils/regionRewards'
 
-type RecoveryTab = 'heal' | 'quests'
+type RecoveryTab = 'heal' | 'request' | 'active' | 'forge'
 
 export function RecoveryStationScreen({
   creature,
   recruits,
   partyMembers,
-  questState,
-  questCtx,
-  questMessage,
+  requestQuestState,
+  requestQuestCtx,
+  requestMessage,
+  canRefreshFree,
   logMessage,
   selectedReviveTarget,
   onSelectReviveTarget,
   onHealParty,
   onReviveSelected,
   onFullRecovery,
-  onAcceptQuest,
-  onClaimQuest,
+  onAcceptRequest,
+  onRefreshRequests,
+  onClaimRequest,
+  onAbandonRequest,
+  trainerInventory,
+  forgeMessage,
+  onForgeCraft,
+  onForgeUpgradeInventory,
+  onForgeUpgradeEquipped,
   onBack,
 }: {
   creature: RunCreature
   recruits: PartyCreature[]
   partyMembers: PartyMemberStatus[]
-  questState: QuestState
-  questCtx: QuestRunContext
-  questMessage: string | null
+  requestQuestState: RequestQuestState
+  requestQuestCtx: RequestQuestRunContext
+  requestMessage: string | null
+  canRefreshFree: boolean
   logMessage: string | null
   selectedReviveTarget: PartyMemberRef | null
   onSelectReviveTarget: (target: PartyMemberRef) => void
   onHealParty: () => void
   onReviveSelected: () => void
   onFullRecovery: () => void
-  onAcceptQuest: (questId: string) => void
-  onClaimQuest: (questId: string) => void
+  onAcceptRequest: (questId: string) => void
+  onRefreshRequests: () => void
+  onClaimRequest: (questId: string) => void
+  onAbandonRequest: (questId: string) => void
+  trainerInventory: TrainerInventory
+  forgeMessage: string | null
+  onForgeCraft: (recipeId: string) => void
+  onForgeUpgradeInventory: (instanceId: string) => void
+  onForgeUpgradeEquipped: (creatureKey: string) => void
   onBack: () => void
 }) {
   const [tab, setTab] = useState<RecoveryTab>('heal')
@@ -59,6 +80,7 @@ export function RecoveryStationScreen({
   const canAffordFull = creature.coins >= fullCost
   const canAffordRevive =
     selectedReviveTarget != null && creature.coins >= REVIVE_FAINTED_COST
+  const claimable = hasClaimableRequestQuests(requestQuestState)
 
   return (
     <main className="recovery-station-screen">
@@ -79,16 +101,37 @@ export function RecoveryStationScreen({
         </button>
         <button
           type="button"
-          className={`btn btn--small${tab === 'quests' ? ' btn--primary' : ''}`}
-          onClick={() => setTab('quests')}
+          className={`btn btn--small${tab === 'request' ? ' btn--primary' : ''}`}
+          onClick={() => setTab('request')}
         >
-          Quest Broker
+          Request Quests
+        </button>
+        <button
+          type="button"
+          className={`btn btn--small${tab === 'active' ? ' btn--primary' : ''}`}
+          onClick={() => setTab('active')}
+        >
+          Active Requests
+          {claimable && (
+            <span className="recovery-station-screen__tab-badge" aria-label="Reward ready">
+              !
+            </span>
+          )}
+        </button>
+        <button
+          type="button"
+          className={`btn btn--small${tab === 'forge' ? ' btn--primary' : ''}`}
+          onClick={() => setTab('forge')}
+        >
+          Monolith Forge
         </button>
       </nav>
 
-      <p className="recovery-station-screen__coins" role="status">
-        Coins: <strong>{creature.coins}</strong>
-      </p>
+      {tab !== 'forge' && (
+        <p className="recovery-station-screen__coins" role="status">
+          Coins: <strong>{creature.coins}</strong>
+        </p>
+      )}
 
       {tab === 'heal' ? (
         <>
@@ -189,13 +232,33 @@ export function RecoveryStationScreen({
             )}
           </section>
         </>
+      ) : tab === 'forge' ? (
+        <MonolithForgePanel
+          creature={creature}
+          recruits={recruits}
+          inventory={trainerInventory}
+          partyLevel={getPartyHighestLevel(creature, recruits)}
+          message={forgeMessage}
+          onCraft={onForgeCraft}
+          onUpgradeInventory={onForgeUpgradeInventory}
+          onUpgradeEquipped={onForgeUpgradeEquipped}
+        />
+      ) : tab === 'request' ? (
+        <RequestQuestBrokerPanel
+          state={requestQuestState}
+          ctx={requestQuestCtx}
+          message={requestMessage}
+          activeCount={requestQuestState.activeRequests.length}
+          canRefreshFree={canRefreshFree}
+          onAccept={onAcceptRequest}
+          onRefresh={onRefreshRequests}
+        />
       ) : (
-        <QuestBoardPanel
-          questState={questState}
-          ctx={questCtx}
-          message={questMessage}
-          onAccept={onAcceptQuest}
-          onClaim={onClaimQuest}
+        <ActiveRequestsPanel
+          state={requestQuestState}
+          message={requestMessage}
+          onClaim={onClaimRequest}
+          onAbandon={onAbandonRequest}
         />
       )}
 

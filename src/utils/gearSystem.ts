@@ -13,18 +13,24 @@ import {
 import type { ElementType, StarterStats } from '../data/starters'
 export type CreatureWithGear = {
   equippedGearId?: string | null
+  equippedGearUpgradeLevel?: number
 }
 
 export function getEquippedGear(creature: CreatureWithGear): GearItem | null {
   return getGearItem(creature.equippedGearId ?? null)
 }
 
+export function getEquippedGearUpgradeLevel(creature: CreatureWithGear): number {
+  return Math.max(0, creature.equippedGearUpgradeLevel ?? 0)
+}
+
 export function applyGearStatModifiers(
   stats: StarterStats,
   gear: GearItem | null,
+  upgradeLevel = 0,
 ): StarterStats {
   if (!gear) return stats
-  const m = gear.statModifiers
+  const m = getEffectiveGearStatModifiersForCombat(gear, upgradeLevel)
   return {
     hp: stats.hp + (m.maxHp ?? 0),
     atk: stats.atk + (m.atk ?? 0),
@@ -35,9 +41,46 @@ export function applyGearStatModifiers(
   }
 }
 
+function getEffectiveGearStatModifiersForCombat(
+  gear: GearItem,
+  upgradeLevel: number,
+): GearStatModifiers {
+  const base = gear.statModifiers
+  if (upgradeLevel <= 0) return base
+  const keys: (keyof GearStatModifiers)[] = [
+    'atk',
+    'def',
+    'spAtk',
+    'spDef',
+    'spd',
+    'maxHp',
+  ]
+  let primary: keyof GearStatModifiers | null = null
+  let best = 0
+  for (const k of keys) {
+    const v = base[k] ?? 0
+    if (v > best) {
+      best = v
+      primary = k
+    }
+  }
+  const bonus: GearStatModifiers = {}
+  if (primary) bonus[primary] = upgradeLevel
+  if (base.maxHp) bonus.maxHp = upgradeLevel * 2
+  return {
+    atk: (base.atk ?? 0) + (bonus.atk ?? 0),
+    def: (base.def ?? 0) + (bonus.def ?? 0),
+    spAtk: (base.spAtk ?? 0) + (bonus.spAtk ?? 0),
+    spDef: (base.spDef ?? 0) + (bonus.spDef ?? 0),
+    spd: (base.spd ?? 0) + (bonus.spd ?? 0),
+    maxHp: (base.maxHp ?? 0) + (bonus.maxHp ?? 0),
+  }
+}
+
 export function getGearDamageMultiplier(
   gear: GearItem | null,
   ability: Ability,
+  upgradeLevel = 0,
 ): number {
   if (!gear?.damageModifiers) return 1
   const mods = gear.damageModifiers
@@ -45,6 +88,7 @@ export function getGearDamageMultiplier(
   if (mods.all) bonus += mods.all
   const typeBonus = mods[ability.type as keyof GearDamageModifiers]
   if (typeof typeBonus === 'number') bonus += typeBonus
+  if (upgradeLevel > 0) bonus += Math.floor(upgradeLevel / 2) * 0.01
   return 1 + bonus
 }
 

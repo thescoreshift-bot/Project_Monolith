@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { getAbility } from '../data/abilities'
+import { getAbility, getAbilityDisplayName } from '../data/abilities'
 import {
   getAbilityDisplayCategory,
   getAbilityRole,
@@ -74,6 +74,8 @@ export function AbilityMasteryPanel({
   const resolvedId = getResolvedAbilityId(entry)
   const ability = getAbility(resolvedId)
   const baseAbility = getAbility(entry.abilityId)
+  const displayName = getAbilityDisplayName(ability)
+  const baseDisplayName = getAbilityDisplayName(baseAbility)
   const displayCategory = getAbilityDisplayCategory(ability)
   const abilityRole = getAbilityRole(ability)
   const mods = getCombatModifiersFromMastery(entry)
@@ -144,7 +146,7 @@ export function AbilityMasteryPanel({
       className={`ability-mastery-panel${compact ? ' ability-mastery-panel--compact' : ''}`}
     >
       <h4 className="ability-mastery-panel__name">
-        {ability.name}
+        {displayName}
         {resolvedId !== abilityId && entry.rank >= 5 ? (
           <span className="ability-mastery-panel__transformed"> (transformed)</span>
         ) : null}
@@ -216,11 +218,11 @@ export function AbilityMasteryPanel({
       {detailsOpen && (
         <div className="ability-mastery-panel__details">
           <p>
-            <strong>Base ability:</strong> {baseAbility.name}
+            <strong>Base ability:</strong> {baseDisplayName}
           </p>
           <p>
-            <strong>Current form:</strong> {ability.name}
-            {resolvedId !== entry.abilityId ? ` (evolved from ${baseAbility.name})` : ''}
+            <strong>Current form:</strong> {displayName}
+            {resolvedId !== entry.abilityId ? ` (evolved from ${baseDisplayName})` : ''}
           </p>
           <p>
             <strong>Mastery Lv. 5 evolution:</strong>{' '}

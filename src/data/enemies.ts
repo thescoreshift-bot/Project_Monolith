@@ -7,7 +7,10 @@ import {
   enemyKindToHpMultiplier,
 } from '../data/balance'
 import { getRegion } from './regions'
-import { rollEnemyLevelForNode } from '../utils/regionRewards'
+import {
+  getRegionEnemyLevelRange,
+  rollEnemyLevelForNode,
+} from '../utils/regionRewards'
 import { getCoinReward, getXpReward } from '../utils/rewards'
 import { gameRandom } from '../utils/seededRandom'
 
@@ -463,15 +466,34 @@ export function getEncounterKind(nodeType: NodeType): EncounterKind {
 export type EnemySpawnOptions = {
   fireBias?: boolean
   hpMult?: number
+  dailySeed?: string
 }
 
 export function getEnemyForNode(
-  node: { type: NodeType; badgeId?: string },
+  node: { type: NodeType; badgeId?: string; layer?: number },
   regionId = 'verdant-circuit',
   spawnOptions?: EnemySpawnOptions,
   partyHighestLevel?: number,
 ): Enemy {
-  const level = rollEnemyLevelForNode(regionId, node.type, partyHighestLevel)
+  const isDailyRun = Boolean(spawnOptions?.dailySeed)
+  const level = rollEnemyLevelForNode(regionId, node.type, {
+    partyHighestLevel,
+    mapLayer: node.layer ?? 0,
+    isDailyRun,
+  })
+
+  if (isDailyRun) {
+    console.log('Daily Run Enemy Scaling', {
+      dailySeed: spawnOptions?.dailySeed,
+      playerHighestLevel: partyHighestLevel,
+      currentRegion: regionId,
+      enemyLevelRange: getRegionEnemyLevelRange(regionId),
+      generatedEnemyLevel: level,
+      nodeType: node.type,
+      mapLayer: node.layer ?? 0,
+    })
+  }
+
   const hpMult = spawnOptions?.hpMult
   const encounterKind = getEncounterKind(node.type)
 

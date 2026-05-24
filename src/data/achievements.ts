@@ -9,6 +9,7 @@ export type AchievementCategory =
 
 export type AchievementReward =
   | { type: 'coins'; amount: number }
+  | { type: 'items'; items: { itemId: string; quantity: number }[] }
   | { type: 'gear'; gearId?: string; rarity?: 'uncommon' | 'rare' | 'epic'; random?: boolean }
   | { type: 'title'; titleId: string; titleName: string }
 
@@ -34,6 +35,9 @@ export type AchievementStatKeys = {
   dailyQuestsCompleted: number
   pvpWins: number
   itemsCollected: number
+  forgeItemsCrafted: number
+  forgeGearUpgrades: number
+  forgeAlphaCrafts: number
 }
 
 export const ACHIEVEMENT_DEFINITIONS: AchievementDefinition[] = [
@@ -72,6 +76,36 @@ export const ACHIEVEMENT_DEFINITIONS: AchievementDefinition[] = [
     required: 5,
     statKey: 'alphaDefeated',
     reward: { type: 'coins', amount: 150 },
+  },
+  {
+    id: 'first-craft',
+    title: 'First Craft',
+    description: 'Craft any item at the Monolith Forge.',
+    category: 'Progression',
+    required: 1,
+    statKey: 'forgeItemsCrafted',
+    reward: { type: 'coins', amount: 25 },
+  },
+  {
+    id: 'apprentice-forger',
+    title: 'Apprentice Forger',
+    description: 'Upgrade gear 3 times at the Monolith Forge.',
+    category: 'Progression',
+    required: 3,
+    statKey: 'forgeGearUpgrades',
+    reward: {
+      type: 'items',
+      items: [{ itemId: 'monolith-fragment', quantity: 2 }],
+    },
+  },
+  {
+    id: 'alpha-artisan',
+    title: 'Alpha Artisan',
+    description: 'Craft gear using an Alpha Claw.',
+    category: 'Progression',
+    required: 1,
+    statKey: 'forgeAlphaCrafts',
+    reward: { type: 'title', titleId: 'alpha-artisan', titleName: 'Alpha Artisan' },
   },
   {
     id: 'badge-hunter',

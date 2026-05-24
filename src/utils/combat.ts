@@ -1,4 +1,5 @@
 import type { Ability } from '../data/abilities'
+import { getAbilityDisplayName } from '../data/abilities'
 import { BALANCE } from '../data/balance'
 import { NOT_VERY_EFFECTIVE_MULTIPLIER } from '../data/typeChart'
 import type { EnemyStats } from '../data/enemies'
@@ -99,7 +100,7 @@ export function applyDamageFloor(
       attackerName: debug?.attackerName,
       attackerId: debug?.attackerId,
       abilityId: debug?.abilityId ?? ability.id,
-      abilityName: debug?.abilityName ?? ability.name,
+      abilityName: debug?.abilityName ?? getAbilityDisplayName(ability),
       abilityPower: ability.power,
       abilityCategory: ability.category,
       typeMultiplier,

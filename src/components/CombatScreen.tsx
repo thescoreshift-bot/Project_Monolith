@@ -41,7 +41,10 @@ type CombatScreenProps = {
   partyHighestLevel: number
   enemyStatStages?: Partial<Record<string, number>>
   playerStatStages?: Record<string, CombatStatStages>
+  combatEnded?: boolean
+  fleeDisabled?: boolean
   onUseAbility: (combatantKey: string, abilityId: string) => void
+  onFlee?: () => void
 }
 
 type PreviewSelection = {
@@ -206,7 +209,10 @@ export function CombatScreen({
   partyHighestLevel,
   enemyStatStages = {},
   playerStatStages = {},
+  combatEnded = false,
+  fleeDisabled = false,
   onUseAbility,
+  onFlee,
 }: CombatScreenProps) {
   const enemyStages = enemyStatStages as CombatStatStages
   const enemyStageLines = formatStatStageLine(enemyStages)
@@ -282,7 +288,10 @@ export function CombatScreen({
     : null
 
   const enemyPopups = popups.filter((p) => p.side === 'enemy')
-  const playerTurnActive = !combatLocked && activeCombatantKey !== null
+  const enemyFainted = enemy.currentHp <= 0
+  const actionsDisabled = combatLocked || combatEnded || enemyFainted
+  const playerTurnActive =
+    !actionsDisabled && activeCombatantKey !== null
 
   return (
     <main className="combat-screen combat-screen--battle">
@@ -290,8 +299,22 @@ export function CombatScreen({
       <div className="combat-screen__overlay" aria-hidden="true" />
 
       <header className="combat-screen__header">
-        <h1 className="combat-screen__title">Battle</h1>
-        <p className="combat-screen__hint">{turnHint}</p>
+        <div className="combat-screen__header-row">
+          <h1 className="combat-screen__title">Battle</h1>
+          {onFlee && (
+            <button
+              type="button"
+              className="btn btn--small btn--ghost combat-screen__flee"
+              disabled={fleeDisabled || actionsDisabled}
+              onClick={onFlee}
+            >
+              Flee
+            </button>
+          )}
+        </div>
+        <p className="combat-screen__hint">
+          {enemyFainted ? 'Victory!' : turnHint}
+        </p>
       </header>
 
       <div className="combat-battlefield">
@@ -351,7 +374,7 @@ export function CombatScreen({
                   >
                     {getActiveAbilityIds(c.creature).map((abilityId) => {
                       const isActiveTurn =
-                        !combatLocked && c.key === activeCombatantKey
+                        !actionsDisabled && c.key === activeCombatantKey
                       const isPreviewed =
                         preview?.combatantKey === c.key &&
                         preview.abilityId === abilityId

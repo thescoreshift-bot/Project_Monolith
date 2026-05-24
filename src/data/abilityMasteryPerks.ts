@@ -1,4 +1,4 @@
-import { getAbility, ABILITIES } from './abilities'
+import { getAbility, getAbilityDisplayName, ABILITIES } from './abilities'
 import type { AbilityDefinition } from './abilityTypes'
 import { SUPPORT_ABILITY_MASTERY_PERKS } from './supportAbilityMasteryPerks'
 
@@ -145,8 +145,7 @@ export function generateFallbackMasteryPerks(
   rank: number,
   count: number,
 ): AbilityMasteryPerk[] {
-  const ability = getAbility(abilityId)
-  const abilityName = ability.name
+  const abilityName = getAbilityDisplayName(abilityId)
 
   const templates: Record<
     AbilityRole,

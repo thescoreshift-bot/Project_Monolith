@@ -1,8 +1,9 @@
 import { isSupabaseConfigured, supabase } from '../lib/supabaseClient'
+import { resolveSaveDisplayName } from './saveSlotMeta'
 import {
   SAVE_VERSION,
   buildSaveSlotSummary,
-  loadRunFromSlot,
+  loadEnvelopeFromSlot,
   parseAndNormalizeSaveData,
   type MonolithSaveEnvelope,
   type RunSaveData,
@@ -39,13 +40,32 @@ type GameSaveRow = {
 export function buildSaveEnvelope(
   slotId: SaveSlotId,
   saveData: RunSaveData,
-  saveName?: string,
+  options?: {
+    saveName?: string
+    trainerName?: string
+    createdAt?: string
+    lastPlayed?: string
+  },
 ): MonolithSaveEnvelope {
+  const local = loadEnvelopeFromSlot(slotId)
+  const saveName = resolveSaveDisplayName(
+    slotId,
+    options?.saveName ?? local?.saveName,
+    options?.trainerName ?? local?.trainerName,
+  )
+  const trainerName =
+    options?.trainerName?.trim() ||
+    options?.saveName?.trim() ||
+    local?.trainerName?.trim() ||
+    local?.saveName?.trim() ||
+    saveName
   return {
     saveVersion: SAVE_VERSION,
     slotId,
-    lastPlayed: new Date().toISOString(),
-    saveName: saveName ?? saveData.runCreature.name,
+    lastPlayed: options?.lastPlayed ?? new Date().toISOString(),
+    saveName,
+    trainerName,
+    createdAt: options?.createdAt ?? local?.createdAt ?? new Date().toISOString(),
     data: saveData,
   }
 }
@@ -55,7 +75,12 @@ function rowToSummary(row: GameSaveRow): SaveSlotSummary {
   if (!normalized) {
     return buildSaveSlotSummary(row.slot_id as SaveSlotId, null)
   }
-  return buildSaveSlotSummary(row.slot_id as SaveSlotId, normalized.data, normalized.lastPlayed)
+  return buildSaveSlotSummary(row.slot_id as SaveSlotId, normalized.data, {
+    lastPlayed: normalized.lastPlayed,
+    saveName: normalized.saveName ?? row.save_name ?? undefined,
+    trainerName: normalized.trainerName ?? normalized.saveName,
+    createdAt: normalized.createdAt,
+  })
 }
 
 function parseEnvelope(raw: unknown): MonolithSaveEnvelope | null {
@@ -65,12 +90,23 @@ function parseEnvelope(raw: unknown): MonolithSaveEnvelope | null {
     const slotId = (obj.slotId === 1 || obj.slotId === 2 ? obj.slotId : 1) as SaveSlotId
     const data = parseAndNormalizeSaveData(obj.data)
     if (!data) return null
+    const saveName = resolveSaveDisplayName(
+      slotId,
+      typeof obj.saveName === 'string' ? obj.saveName : undefined,
+      typeof obj.trainerName === 'string' ? obj.trainerName : undefined,
+    )
+    const trainerName =
+      (typeof obj.trainerName === 'string' ? obj.trainerName : undefined)?.trim() ||
+      saveName
     return {
       saveVersion: typeof obj.saveVersion === 'number' ? obj.saveVersion : SAVE_VERSION,
       slotId,
       lastPlayed:
         typeof obj.lastPlayed === 'string' ? obj.lastPlayed : new Date().toISOString(),
-      saveName: typeof obj.saveName === 'string' ? obj.saveName : data.runCreature.name,
+      saveName,
+      trainerName,
+      createdAt:
+        typeof obj.createdAt === 'string' ? obj.createdAt : undefined,
       data,
     }
   }
@@ -157,7 +193,7 @@ export async function saveToCloudSlot(
     {
       user_id: userId,
       slot_id: slotId,
-      save_name: payload.saveName ?? null,
+      save_name: payload.trainerName ?? payload.saveName ?? null,
       save_data: payload,
     },
     { onConflict: 'user_id,slot_id' },
@@ -197,8 +233,7 @@ export async function uploadLocalSlotToCloud(
   if (cloudSlotId !== 1 && cloudSlotId !== 2) {
     return { ok: false, error: 'Invalid cloud slot.' }
   }
-  const data = loadRunFromSlot(localSlotId)
-  if (!data) return { ok: false, error: 'Local slot is empty.' }
-  const envelope = buildSaveEnvelope(cloudSlotId, data)
-  return saveToCloudSlot(cloudSlotId, envelope)
+  const envelope = loadEnvelopeFromSlot(localSlotId)
+  if (!envelope) return { ok: false, error: 'Local slot is empty.' }
+  return saveToCloudSlot(cloudSlotId, { ...envelope, slotId: cloudSlotId })
 }

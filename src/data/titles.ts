@@ -19,6 +19,12 @@ export const TITLE_DEFINITIONS: Record<string, TitleDefinition> = {
     description: 'You have stood before the pulse and lived.',
     perkId: 'monolith-resonance',
   },
+  'alpha-artisan': {
+    id: 'alpha-artisan',
+    name: 'Alpha Artisan',
+    description: 'Forged trophy gear from alpha claws at the Monolith Forge.',
+    perkId: 'scavenger-sense',
+  },
   'storm-caller': {
     id: 'storm-caller',
     name: 'Storm Caller',

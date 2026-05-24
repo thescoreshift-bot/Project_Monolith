@@ -1776,6 +1776,48 @@
   text-align: center;
 }
 
+.combat-screen__header-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  position: relative;
+}
+
+.combat-screen__flee {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.combat-flee-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(0, 0, 0, 0.65);
+}
+
+.combat-flee-modal__dialog {
+  max-width: 22rem;
+  padding: 1.25rem;
+  background: var(--mono-surface);
+  border: 1px solid var(--mono-border);
+  border-radius: 8px;
+  text-align: center;
+}
+
+.combat-flee-modal__actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: center;
+  margin-top: 1rem;
+}
+
 .combat-screen__title {
   margin: 0;
   font-size: clamp(1.25rem, 3vw, 1.75rem);
@@ -2667,6 +2709,12 @@
 .region-select-screen__party-level {
   margin: 0;
   font-size: 0.95rem;
+}
+
+.region-select-screen__hint {
+  margin: 0.5rem 0 0;
+  font-size: 0.9rem;
+  color: var(--mono-accent);
 }
 
 .map-region-info {
@@ -3846,6 +3894,61 @@
   margin: 0 1rem 1rem;
 }
 
+/* Trainer / save name */
+.trainer-name-screen {
+  max-width: 28rem;
+  margin: 0 auto;
+  padding: 2rem 1.5rem;
+}
+
+.trainer-name-screen__dialog {
+  background: var(--mono-surface);
+  border: 1px solid var(--mono-border);
+  border-radius: 8px;
+  padding: 1.5rem;
+}
+
+.trainer-name-screen__form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.trainer-name-screen__label {
+  font-size: 0.85rem;
+  color: var(--mono-text-dim);
+}
+
+.trainer-name-screen__input {
+  width: 100%;
+  padding: 0.65rem 0.75rem;
+  font: inherit;
+  background: var(--mono-bg);
+  border: 1px solid var(--mono-border);
+  border-radius: 4px;
+  color: inherit;
+}
+
+.trainer-name-screen__hint {
+  font-size: 0.8rem;
+  color: var(--mono-text-dim);
+  margin: 0;
+}
+
+.trainer-name-screen__error {
+  color: var(--mono-danger, #e55);
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.trainer-name-screen__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
 /* Character select */
 .character-select-screen {
   max-width: 52rem;
@@ -4161,7 +4264,208 @@
 }
 
 .app-version-label--map {
+  margin-top: 0;
+}
+
+.map-screen__footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
   margin-top: 1rem;
+}
+
+.map-screen__tester-toggle {
+  margin-left: auto;
+}
+
+.current-objective {
+  margin: 1rem 0;
+  padding: 0.85rem 1rem;
+  background: rgba(78, 232, 200, 0.08);
+  border: 1px solid var(--mono-accent-dim);
+  border-radius: 6px;
+}
+
+.current-objective__label {
+  margin: 0 0 0.35rem;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--mono-accent);
+}
+
+.current-objective__title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.current-objective__detail {
+  margin: 0.35rem 0 0;
+  font-size: 0.85rem;
+  color: var(--mono-text-dim);
+}
+
+.patch-notes-screen {
+  max-width: 36rem;
+  margin: 0 auto;
+  padding: 1.5rem;
+}
+
+.patch-notes-screen__list {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  margin: 1.5rem 0;
+}
+
+.patch-notes-entry {
+  padding: 1rem;
+  background: var(--mono-surface);
+  border: 1px solid var(--mono-border);
+  border-radius: 6px;
+}
+
+.patch-notes-entry__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.patch-notes-entry__version {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.patch-notes-entry__date {
+  font-size: 0.8rem;
+  color: var(--mono-text-dim);
+}
+
+.patch-notes-entry__changes {
+  margin: 0;
+  padding-left: 1.25rem;
+  font-size: 0.9rem;
+}
+
+.patch-notes-entry__changes li {
+  margin-bottom: 0.25rem;
+}
+
+.tester-info-panel {
+  position: fixed;
+  bottom: 0.75rem;
+  left: 0.75rem;
+  z-index: 150;
+  max-width: 16rem;
+  padding: 0.65rem 0.75rem;
+  font-size: 0.72rem;
+  background: rgba(12, 16, 24, 0.95);
+  border: 1px solid var(--mono-border);
+  border-radius: 6px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+}
+
+.tester-info-panel__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.35rem;
+}
+
+.tester-info-panel__title {
+  margin: 0;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--mono-accent);
+}
+
+.tester-info-panel__list {
+  margin: 0;
+  display: grid;
+  gap: 0.2rem;
+}
+
+.tester-info-panel__list div {
+  display: grid;
+  grid-template-columns: 7rem 1fr;
+  gap: 0.25rem;
+}
+
+.tester-info-panel__list dt {
+  margin: 0;
+  color: var(--mono-text-dim);
+}
+
+.tester-info-panel__list dd {
+  margin: 0;
+  word-break: break-word;
+}
+
+.tester-info-panel__mono {
+  font-family: ui-monospace, monospace;
+  font-size: 0.65rem;
+}
+
+.feedback-modal__auto {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.2rem 0.75rem;
+  margin: 0 0 1rem;
+  font-size: 0.8rem;
+}
+
+.feedback-modal__auto dt {
+  margin: 0;
+  color: var(--mono-text-dim);
+}
+
+.feedback-modal__auto dd {
+  margin: 0;
+}
+
+.settings-screen__toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+  font-size: 0.9rem;
+}
+
+.reward-panel__section {
+  margin-bottom: 1rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--mono-border);
+}
+
+.reward-panel__section:last-child {
+  border-bottom: none;
+}
+
+.reward-panel__section-title {
+  margin: 0 0 0.35rem;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--mono-accent-dim);
+}
+
+.reward-panel__section--highlight {
+  background: rgba(78, 232, 200, 0.05);
+  padding: 0.5rem;
+  border-radius: 4px;
+}
+
+.reward-screen__next-step {
+  margin: 0.5rem 0 0;
+  font-size: 0.95rem;
+  color: var(--mono-accent);
+  font-weight: 600;
 }
 
 .tutorial-overlay {
@@ -4516,8 +4820,75 @@
 
 .recovery-station-screen__tabs {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.5rem;
   margin: 1rem 0;
+}
+
+.recovery-station-screen__tab-badge,
+.map-screen__notify-badge,
+.quest-board__badge {
+  display: inline-flex;
+  margin-left: 0.35rem;
+  color: #ffb347;
+  font-weight: 700;
+}
+
+.quest-board__section-title {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0 0 0.5rem;
+  font-size: 0.95rem;
+}
+
+.quest-board__refresh {
+  margin: 0.75rem 0;
+}
+
+.quest-board__hint {
+  font-size: 0.85rem;
+  color: var(--mono-text-dim);
+  margin: 0.5rem 0;
+}
+
+.quest-board__empty {
+  color: var(--mono-text-dim);
+  font-size: 0.9rem;
+}
+
+.monolith-forge__tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0.75rem 0;
+}
+
+.monolith-forge__needs {
+  margin: 0.5rem 0;
+}
+
+.monolith-forge__need-list {
+  list-style: none;
+  margin: 0.25rem 0 0;
+  padding: 0;
+  font-size: 0.85rem;
+}
+
+.monolith-forge__need--missing {
+  color: #e88;
+}
+
+.monolith-forge__stat-lines {
+  list-style: none;
+  margin: 0.25rem 0;
+  padding: 0;
+  font-size: 0.8rem;
+  color: var(--mono-text-dim);
+}
+
+.monolith-forge__upgrade .panel-label {
+  margin-top: 1rem;
 }
 
 .quest-board__npc {

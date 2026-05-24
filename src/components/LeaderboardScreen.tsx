@@ -1,5 +1,6 @@
 import type { LeaderboardRow } from '../utils/leaderboardSystem'
 import {
+  formatLeaderboardSaveName,
   formatLeaderboardSeedLabel,
   isCampaignLeaderboardSeed,
   parseLeaderboardCheckpointMeta,
@@ -59,7 +60,7 @@ export function LeaderboardScreen({
       <p className="leaderboard-screen__note">
         {isCampaign
           ? 'Campaign tracks your furthest progression on a save slot. Defeats do not reset your entry — only improvements are posted.'
-          : 'Daily Run uses one life per attempt. Your best score for today is kept and ranked.'}
+          : 'Daily Run uses one life per attempt. Your best score for today is kept per save slot and ranked.'}
       </p>
 
       {!loggedIn && (
@@ -88,28 +89,39 @@ export function LeaderboardScreen({
               <tr>
                 <th>Rank</th>
                 <th>Player</th>
+                <th>Save / Trainer</th>
+                <th>Slot</th>
                 <th>Score</th>
-                <th>Region</th>
-                <th>Badges</th>
-                <th>Nodes</th>
+                <th>Checkpoint</th>
+                <th>Starter</th>
                 <th>Highest Lv</th>
-                <th>Evolutions</th>
+                <th>Badges</th>
                 <th>Status</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((row, index) => {
                 const meta = parseLeaderboardCheckpointMeta(row.final_team)
+                const checkpoint =
+                  meta?.checkpointLabel ??
+                  (row.nodes_cleared != null
+                    ? `${row.nodes_cleared} nodes`
+                    : '—')
+                const slotLabel =
+                  row.slot_id === 1 || row.slot_id === 2
+                    ? `Slot ${row.slot_id}`
+                    : '—'
                 return (
                   <tr key={row.id}>
                     <td>#{index + 1}</td>
                     <td>{row.display_name}</td>
-                    <td>{row.score}</td>
-                    <td>{row.region ?? '—'}</td>
-                    <td>{row.badges_earned}</td>
-                    <td>{meta?.nodesCleared ?? '—'}</td>
+                    <td>{formatLeaderboardSaveName(row)}</td>
+                    <td>{slotLabel}</td>
+                    <td>{row.score.toLocaleString()} pts</td>
+                    <td>{checkpoint}</td>
+                    <td>{row.starter_name ?? '—'}</td>
                     <td>{row.highest_level}</td>
-                    <td>{row.evolutions_count}</td>
+                    <td>{row.badges_earned}</td>
                     <td>{row.completed ? 'Cleared' : 'In progress'}</td>
                   </tr>
                 )

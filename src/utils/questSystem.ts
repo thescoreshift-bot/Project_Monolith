@@ -3,12 +3,15 @@ import { REGIONS } from '../data/regions'
 import type { QuestDefinition, QuestRewardTier } from '../data/quests'
 import { getQuestById, QUEST_DEFINITIONS } from '../data/quests'
 import type { TrainerInventory } from './inventorySystem'
-import { addItemToTrainerInventory } from './inventorySystem'
 import { getPartyHighestLevel } from './regionRewards'
-import { addXpToPartyCreature, type PartyCreature } from './party'
+import type { PartyCreature } from './party'
 import type { RunCreature } from './progression'
-import { addXp, addCoins } from './progression'
 import { rollShopGearOffers } from './gearSystem'
+import {
+  grantQuestReward,
+  type QuestRewardPayload,
+  type RunRewardState,
+} from './rewardGrants'
 
 export type QuestProgressEntry = {
   questId: string
@@ -30,6 +33,11 @@ export type QuestState = {
 export type QuestEventType =
   | 'battleWon'
   | 'enemyDefeated'
+  | 'alphaDefeated'
+  | 'eliteDefeated'
+  | 'gymTrainerDefeated'
+  | 'gymLeaderDefeated'
+  | 'bossDefeated'
   | 'nodeCleared'
   | 'abilityUsed'
   | 'creatureRecruited'
@@ -37,14 +45,19 @@ export type QuestEventType =
   | 'coinsCollected'
   | 'eventCompleted'
   | 'gearEquipped'
+  | 'itemCollected'
+  | 'gearCollected'
+  | 'questClaimed'
 
 export type QuestEventPayload = {
   nodeType?: string
   encounterKind?: string
   enemyKind?: string
+  enemyType?: string
   regionId?: string
   abilityType?: string
   amount?: number
+  itemId?: string
 }
 
 export type QuestRunContext = {
@@ -190,21 +203,25 @@ function matchesQuestEvent(
       return payload.enemyKind === 'normal' || event === 'battleWon'
     case 'clearBattleNodes':
       return event === 'nodeCleared' && payload.nodeType === 'battle'
-    case 'defeatElites':
-      return (
-        event === 'enemyDefeated' &&
-        (payload.encounterKind === 'elite' || payload.enemyKind === 'elite')
-      )
     case 'defeatAlpha':
       return (
-        event === 'enemyDefeated' &&
-        (payload.encounterKind === 'alphaNest' || payload.enemyKind === 'alpha')
+        event === 'alphaDefeated' ||
+        (event === 'enemyDefeated' &&
+          (payload.encounterKind === 'alphaNest' || payload.enemyKind === 'alpha'))
+      )
+    case 'defeatElites':
+      return (
+        event === 'eliteDefeated' ||
+        (event === 'enemyDefeated' &&
+          (payload.encounterKind === 'elite' || payload.enemyKind === 'elite'))
       )
     case 'winGymBattle':
       return (
-        event === 'battleWon' &&
-        (payload.encounterKind === 'gymTrainer' ||
-          payload.encounterKind === 'gymLeader')
+        event === 'gymTrainerDefeated' ||
+        event === 'gymLeaderDefeated' ||
+        (event === 'battleWon' &&
+          (payload.encounterKind === 'gymTrainer' ||
+            payload.encounterKind === 'gymLeader'))
       )
     case 'collectCoins':
       return event === 'coinsCollected'
@@ -265,6 +282,16 @@ export function updateQuestProgress(
   }
 
   return { state: next, newlyCompleted }
+}
+
+/** Central Recovery Station quest progress hook. */
+export function trackQuestProgressEvent(
+  state: QuestState,
+  event: QuestEventType,
+  payload: QuestEventPayload,
+  ctx: QuestRunContext,
+): QuestUpdateResult {
+  return updateQuestProgress(state, event, payload, ctx)
 }
 
 export function getRewardTier(
@@ -363,27 +390,18 @@ export function claimQuestReward(
   if (!quest || !entry || !entry.completed || entry.claimed) return null
 
   const reward = calculateQuestReward(quest, ctx, state.totalCompletedCount)
-  let starter = addCoins(ctx.starter, reward.coins)
-  if (reward.starterXp > 0) {
-    starter = addXp(starter, reward.starterXp).creature
+  const payload: QuestRewardPayload = {
+    coins: reward.coins,
+    xpToActiveParty: reward.starterXp,
+    xpToParty: reward.recruitXp,
+    consumables: reward.items,
+    gear: reward.gearId ? [reward.gearId] : undefined,
   }
-  let recruits = ctx.recruits
-  if (reward.recruitXp > 0) {
-    recruits = recruits.map((r) =>
-      addXpToPartyCreature(r, reward.recruitXp).creature,
-    )
-  }
-  let nextInventory = inventory
-  for (const item of reward.items) {
-    nextInventory = addItemToTrainerInventory(
-      nextInventory,
-      item.itemId,
-      item.quantity,
-    )
-  }
-  if (reward.gearId) {
-    nextInventory = addItemToTrainerInventory(nextInventory, reward.gearId, 1)
-  }
+  const granted = grantQuestReward(payload, {
+    starter: ctx.starter,
+    recruits: ctx.recruits,
+    inventory,
+  })
 
   const nextProgress = {
     ...state.progress,
@@ -401,12 +419,14 @@ export function claimQuestReward(
       progress: nextProgress,
       totalCompletedCount: state.totalCompletedCount + 1,
     },
-    starter,
-    recruits,
-    inventory: nextInventory,
-    rewardSummary: reward.summary,
+    starter: granted.runState.starter,
+    recruits: granted.runState.recruits,
+    inventory: granted.runState.inventory,
+    rewardSummary: granted.summary,
   }
 }
+
+export { grantQuestReward, type QuestRewardPayload, type RunRewardState }
 
 export function formatQuestProgress(entry: QuestProgressEntry): string {
   return `${entry.currentAmount} / ${entry.requiredAmount}`

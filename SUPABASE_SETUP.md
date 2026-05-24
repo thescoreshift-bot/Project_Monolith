@@ -171,6 +171,10 @@ create table if not exists public.daily_leaderboards (
   user_id uuid not null references auth.users(id) on delete cascade,
   display_name text not null,
   daily_seed text not null,
+  slot_id integer,
+  save_name text,
+  trainer_name text,
+  run_id text,
   score integer not null,
   region text,
   starter_name text,
@@ -178,10 +182,12 @@ create table if not exists public.daily_leaderboards (
   badges_earned integer default 0,
   highest_level integer default 1,
   evolutions_count integer default 0,
+  nodes_cleared integer default 0,
+  bosses_defeated integer default 0,
   completed boolean default false,
   created_at timestamptz default now(),
   updated_at timestamptz default now(),
-  unique(user_id, daily_seed)
+  unique(user_id, daily_seed, slot_id)
 );
 
 alter table public.daily_leaderboards enable row level security;
@@ -212,6 +218,41 @@ before update on public.daily_leaderboards
 for each row
 execute function public.update_updated_at_column();
 ```
+
+**If you already created `daily_leaderboards`**, run this migration once so each save slot can submit its own daily score and show save/trainer names:
+
+```sql
+alter table public.daily_leaderboards
+add column if not exists slot_id integer;
+
+alter table public.daily_leaderboards
+add column if not exists save_name text;
+
+alter table public.daily_leaderboards
+add column if not exists trainer_name text;
+
+alter table public.daily_leaderboards
+add column if not exists run_id text;
+
+alter table public.daily_leaderboards
+add column if not exists nodes_cleared integer default 0;
+
+alter table public.daily_leaderboards
+add column if not exists bosses_defeated integer default 0;
+
+-- Allow separate leaderboard rows per save slot (Slot 1 and Slot 2).
+alter table public.daily_leaderboards
+drop constraint if exists daily_leaderboards_user_id_daily_seed_key;
+
+alter table public.daily_leaderboards
+drop constraint if exists daily_leaderboards_user_id_daily_seed_slot_id_key;
+
+alter table public.daily_leaderboards
+add constraint daily_leaderboards_user_id_daily_seed_slot_id_key
+unique (user_id, daily_seed, slot_id);
+```
+
+Old rows without `slot_id` or `save_name` still load; the UI shows **Unnamed Save** when names are missing.
 
 ### PvP friend challenges
 

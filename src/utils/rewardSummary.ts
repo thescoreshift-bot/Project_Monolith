@@ -1,4 +1,4 @@
-import { getAbility } from '../data/abilities'
+import { getAbility, getAbilityDisplayName } from '../data/abilities'
 import { getMasteryEntry, getRankLabel } from './abilityMastery'
 import type { PartyCreature } from './party'
 import type { RunCreature } from './progression'
@@ -39,7 +39,7 @@ function diffCreatureMastery(
     const ability = getAbility(abilityId)
     lines.push({
       creatureName,
-      abilityName: ability.name,
+      abilityName: getAbilityDisplayName(ability),
       xpGained,
       rankUp,
       newRank: rankUp ? next.rank : undefined,

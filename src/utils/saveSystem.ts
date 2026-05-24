@@ -25,9 +25,15 @@ import {
   type QuestState,
 } from './questSystem'
 import {
+  normalizeRequestQuestState,
+  type RequestQuestState,
+} from './requestQuestSystem'
+import {
   normalizeRetentionState,
   type RetentionState,
 } from './retentionSystem'
+import { resolveSaveDisplayName } from './saveSlotMeta'
+import { getPartyHighestLevel } from './regionRewards'
 
 const LEGACY_SAVE_KEY = 'project-monolith-run'
 export const SAVE_VERSION = 8
@@ -46,21 +52,36 @@ export type MonolithSaveEnvelope = {
   slotId: SaveSlotId
   lastPlayed: string
   saveName?: string
+  trainerName?: string
+  createdAt?: string
+  tutorialCompleted?: boolean
   data: RunSaveData
+}
+
+export type SaveSlotMeta = {
+  saveName: string
+  trainerName: string
+  createdAt: string
+  tutorialCompleted?: boolean
 }
 
 export type SaveSlotSummary = {
   slotId: SaveSlotId
   isEmpty: boolean
   saveName?: string
+  trainerName?: string
   creatureName?: string
+  starterName?: string
+  starterType?: string
   level?: number
+  highestPartyLevel?: number
   regionId?: string
   regionName?: string
   badgeCount?: number
   partySize?: number
   coins?: number
   lastPlayed?: string
+  createdAt?: string
 }
 
 function getLocalSlotKey(slotId: SaveSlotId): string {
@@ -173,6 +194,7 @@ export type RunSaveData = {
   gearInventory?: string[]
   trainerInventory?: TrainerInventory
   questState?: QuestState
+  requestQuestState?: RequestQuestState
   retentionState?: RetentionState
 }
 
@@ -525,6 +547,7 @@ export function normalizeLoadedSaveData(
       parsed.gearInventory,
     ),
     questState: normalizeQuestState(parsed.questState),
+    requestQuestState: normalizeRequestQuestState(parsed.requestQuestState),
     retentionState: normalizeRetentionState(parsed.retentionState),
     version: SAVE_VERSION,
   }
@@ -536,6 +559,30 @@ export function parseAndNormalizeSaveData(raw: unknown): RunSaveData | null {
   return normalizeLoadedSaveData(raw as RunSaveData)
 }
 
+function enrichEnvelopeMeta(
+  slotId: SaveSlotId,
+  partial: {
+    saveName?: string
+    trainerName?: string
+    createdAt?: string
+    lastPlayed?: string
+  },
+): Pick<MonolithSaveEnvelope, 'saveName' | 'trainerName' | 'createdAt' | 'lastPlayed'> {
+  const saveName = resolveSaveDisplayName(
+    slotId,
+    partial.saveName,
+    partial.trainerName ?? partial.saveName,
+  )
+  const trainerName =
+    partial.trainerName?.trim() || partial.saveName?.trim() || saveName
+  return {
+    saveName,
+    trainerName,
+    createdAt: partial.createdAt ?? new Date().toISOString(),
+    lastPlayed: partial.lastPlayed ?? new Date().toISOString(),
+  }
+}
+
 function parseLocalSlotRaw(raw: string): MonolithSaveEnvelope | null {
   const parsed: unknown = JSON.parse(raw)
   if (!parsed || typeof parsed !== 'object') return null
@@ -544,59 +591,146 @@ function parseLocalSlotRaw(raw: string): MonolithSaveEnvelope | null {
     const slotId = (obj.slotId === 1 || obj.slotId === 2 ? obj.slotId : 1) as SaveSlotId
     const data = parseAndNormalizeSaveData(obj.data)
     if (!data) return null
+    const meta = enrichEnvelopeMeta(slotId, {
+      saveName: typeof obj.saveName === 'string' ? obj.saveName : undefined,
+      trainerName: typeof obj.trainerName === 'string' ? obj.trainerName : undefined,
+      createdAt: typeof obj.createdAt === 'string' ? obj.createdAt : undefined,
+      lastPlayed:
+        typeof obj.lastPlayed === 'string' ? obj.lastPlayed : new Date().toISOString(),
+    })
     return {
       saveVersion: typeof obj.saveVersion === 'number' ? obj.saveVersion : SAVE_VERSION,
       slotId,
-      lastPlayed:
-        typeof obj.lastPlayed === 'string' ? obj.lastPlayed : new Date().toISOString(),
-      saveName: typeof obj.saveName === 'string' ? obj.saveName : data.runCreature.name,
+      ...meta,
+      tutorialCompleted: obj.tutorialCompleted === true,
       data,
     }
   }
   const legacy = parseAndNormalizeSaveData(parsed)
   if (!legacy) return null
+  const slotId = 1 as SaveSlotId
+  const meta = enrichEnvelopeMeta(slotId, {
+    lastPlayed: new Date().toISOString(),
+  })
   return {
     saveVersion: SAVE_VERSION,
-    slotId: 1,
-    lastPlayed: new Date().toISOString(),
-    saveName: legacy.runCreature.name,
+    slotId,
+    ...meta,
+    tutorialCompleted: false,
     data: legacy,
   }
+}
+
+export function getSaveSlotMeta(slotId: SaveSlotId): SaveSlotMeta {
+  const envelope = loadEnvelopeFromSlot(slotId)
+  const saveName = resolveSaveDisplayName(
+    slotId,
+    envelope?.saveName,
+    envelope?.trainerName,
+  )
+  return {
+    saveName,
+    trainerName: envelope?.trainerName?.trim() || envelope?.saveName?.trim() || saveName,
+    createdAt: envelope?.createdAt ?? envelope?.lastPlayed ?? new Date().toISOString(),
+    tutorialCompleted: envelope?.tutorialCompleted === true,
+  }
+}
+
+export function isSaveSlotTutorialCompleted(slotId: SaveSlotId): boolean {
+  const envelope = loadEnvelopeFromSlot(slotId)
+  if (envelope?.tutorialCompleted) return true
+  return false
+}
+
+export function setSaveSlotTutorialCompleted(
+  slotId: SaveSlotId,
+  completed: boolean,
+): boolean {
+  const envelope = loadEnvelopeFromSlot(slotId)
+  if (!envelope) return false
+  return saveRunToSlot(slotId, envelope.data, {
+    saveName: envelope.saveName,
+    trainerName: envelope.trainerName,
+    createdAt: envelope.createdAt,
+    tutorialCompleted: completed,
+  })
+}
+
+export function updateEnvelopeTrainerName(slotId: SaveSlotId, name: string): boolean {
+  const envelope = loadEnvelopeFromSlot(slotId)
+  if (!envelope) return false
+  return saveRunToSlot(slotId, envelope.data, {
+    saveName: name,
+    trainerName: name,
+    createdAt: envelope.createdAt,
+  })
 }
 
 export function buildSaveSlotSummary(
   slotId: SaveSlotId,
   data: RunSaveData | null,
-  lastPlayed?: string,
+  envelopeMeta?: {
+    lastPlayed?: string
+    saveName?: string
+    trainerName?: string
+    createdAt?: string
+  },
 ): SaveSlotSummary {
   if (!data) {
     return { slotId, isEmpty: true }
   }
   const regionId = normalizeRegionId(data.currentRegion)
   const region = getRegion(regionId)
+  const starter = STARTERS.find((s) => s.id === data.starterId)
+  const saveName = resolveSaveDisplayName(
+    slotId,
+    envelopeMeta?.saveName,
+    envelopeMeta?.trainerName,
+  )
+  const trainerName =
+    envelopeMeta?.trainerName?.trim() ||
+    envelopeMeta?.saveName?.trim() ||
+    saveName
   return {
     slotId,
     isEmpty: false,
-    saveName: data.runCreature.name,
+    saveName,
+    trainerName,
     creatureName: data.runCreature.name,
+    starterName: starter?.name,
+    starterType: starter?.type,
     level: data.runCreature.level,
+    highestPartyLevel: getPartyHighestLevel(data.runCreature, data.partyRecruits),
     regionId,
     regionName: region?.name ?? regionId,
     badgeCount: data.earnedBadges.length,
     partySize: 1 + data.partyRecruits.length,
     coins: data.runCreature.coins,
-    lastPlayed,
+    lastPlayed: envelopeMeta?.lastPlayed,
+    createdAt: envelopeMeta?.createdAt,
   }
 }
 
-export function saveRunToSlot(slotId: SaveSlotId, data: RunSaveData): boolean {
+export function saveRunToSlot(
+  slotId: SaveSlotId,
+  data: RunSaveData,
+  meta?: Partial<SaveSlotMeta>,
+): boolean {
   try {
     migrateLegacySaveIfNeeded()
+    const existing = loadEnvelopeFromSlot(slotId)
+    const envelopeMeta = enrichEnvelopeMeta(slotId, {
+      saveName: meta?.saveName ?? existing?.saveName,
+      trainerName: meta?.trainerName ?? existing?.trainerName,
+      createdAt: meta?.createdAt ?? existing?.createdAt,
+      lastPlayed: new Date().toISOString(),
+    })
     const envelope: MonolithSaveEnvelope = {
       saveVersion: SAVE_VERSION,
       slotId,
-      lastPlayed: new Date().toISOString(),
-      saveName: data.runCreature.name,
+      ...envelopeMeta,
+      tutorialCompleted:
+        meta?.tutorialCompleted ?? existing?.tutorialCompleted ?? false,
       data: { ...data, version: SAVE_VERSION },
     }
     localStorage.setItem(getLocalSlotKey(slotId), JSON.stringify(envelope))
@@ -632,7 +766,12 @@ export function loadEnvelopeFromSlot(slotId: SaveSlotId): MonolithSaveEnvelope |
 export function getLocalSaveSlotSummary(slotId: SaveSlotId): SaveSlotSummary {
   const envelope = loadEnvelopeFromSlot(slotId)
   if (!envelope) return buildSaveSlotSummary(slotId, null)
-  return buildSaveSlotSummary(slotId, envelope.data, envelope.lastPlayed)
+  return buildSaveSlotSummary(slotId, envelope.data, {
+    lastPlayed: envelope.lastPlayed,
+    saveName: envelope.saveName,
+    trainerName: envelope.trainerName,
+    createdAt: envelope.createdAt,
+  })
 }
 
 export function getAllLocalSaveSlotSummaries(): { 1: SaveSlotSummary; 2: SaveSlotSummary } {

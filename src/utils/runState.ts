@@ -21,9 +21,8 @@ import type {
   PerkDraftQueueEntry,
 } from './creatureProgression'
 import type { RunCreature } from './progression'
-import {
-  createDefaultQuestState,
-} from './questSystem'
+import { createDefaultQuestState } from './questSystem'
+import { createDefaultRequestQuestState } from './requestQuestSystem'
 import { createDefaultRetentionState } from './retentionSystem'
 
 export type FreshMapState = {
@@ -122,6 +121,7 @@ export function createFreshSaveData(params: {
       keyItems: [...inv.keyItems],
     },
     questState: createDefaultQuestState(),
+    requestQuestState: createDefaultRequestQuestState(),
     retentionState: createDefaultRetentionState(),
   }
 }

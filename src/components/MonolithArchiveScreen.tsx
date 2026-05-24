@@ -26,9 +26,20 @@ import {
   getNextDailyStreakDay,
   getWeeklyResetRemaining,
   markArchiveViewed,
+  type RetentionRewardGrant,
   type RetentionState,
   type CreatureArchiveProgress,
 } from '../utils/retentionSystem'
+import { hasRetentionGrantValue } from '../utils/rewardGrants'
+
+function formatClaimRewardMessage(summary: string): string {
+  const parts = summary.split(', ').map((part) => {
+    const coinMatch = /^(\d+) coins$/.exec(part)
+    if (coinMatch) return `+${coinMatch[1]} coins`
+    return part
+  })
+  return `Quest reward claimed: ${parts.join(', ')}`
+}
 
 function isArchiveEntryUnlocked(
   entry: CreatureArchiveEntry,
@@ -52,7 +63,10 @@ type MonolithArchiveScreenProps = {
   partyLevel: number
   regionId: string
   onBack: () => void
-  onStateChange: (next: RetentionState) => void
+  onStateChange: (
+    next: RetentionState,
+    claimedReward?: RetentionRewardGrant | null,
+  ) => void
   onApplyRewardMessage: (msg: string) => void
 }
 
@@ -86,8 +100,9 @@ export function MonolithArchiveScreen({
 
   function handleClaimDaily() {
     const { state: next, reward } = claimDailyLoginReward(state)
-    onStateChange(next)
-    onApplyRewardMessage(`Daily reward claimed: ${reward.summary}`)
+    if (!hasRetentionGrantValue(reward)) return
+    onStateChange(next, reward)
+    onApplyRewardMessage(formatClaimRewardMessage(reward.summary))
   }
 
   function handleClaimQuest(questId: string, weekly: boolean) {
@@ -98,18 +113,22 @@ export function MonolithArchiveScreen({
       partyLevel,
       regionId,
     )
-    if (reward) {
-      onStateChange(next)
-      onApplyRewardMessage(`Quest reward claimed: ${reward.summary}`)
-    }
+    if (!reward) return
+    onStateChange(next, reward)
+    onApplyRewardMessage(formatClaimRewardMessage(reward.summary))
   }
 
   function handleClaimAchievement(id: string) {
     const { state: next, reward } = claimAchievement(state, id)
-    if (reward) {
-      onStateChange(next)
-      onApplyRewardMessage(`Achievement reward: ${reward.summary}`)
+    if (!reward) return
+    if (reward.titleId) {
+      onStateChange(next, null)
+      onApplyRewardMessage(`Quest reward claimed: ${reward.summary}`)
+      return
     }
+    if (!hasRetentionGrantValue(reward)) return
+    onStateChange(next, reward)
+    onApplyRewardMessage(formatClaimRewardMessage(reward.summary))
   }
 
   function openTab(next: ArchiveTab) {
@@ -168,6 +187,7 @@ export function MonolithArchiveScreen({
         {tab === 'dailyQuests' && (
           <QuestList
             quests={state.dailyQuests.quests}
+            retentionState={state}
             resetLabel={`Resets in ${getDailyResetRemaining()}`}
             partyLevel={partyLevel}
             regionId={regionId}
@@ -178,6 +198,7 @@ export function MonolithArchiveScreen({
         {tab === 'weeklyQuests' && (
           <QuestList
             quests={state.weeklyQuests.quests}
+            retentionState={state}
             resetLabel={`Resets in ${getWeeklyResetRemaining()}`}
             partyLevel={partyLevel}
             regionId={regionId}
@@ -429,12 +450,14 @@ function DailyRewardsPanel({
 
 function QuestList({
   quests,
+  retentionState,
   resetLabel,
   partyLevel,
   regionId,
   onClaim,
 }: {
   quests: RetentionState['dailyQuests']['quests']
+  retentionState: RetentionState
   resetLabel: string
   partyLevel: number
   regionId: string
@@ -447,7 +470,12 @@ function QuestList({
         {quests.map((q) => {
           const def = ARCHIVE_QUEST_BY_ID[q.questId]
           if (!def) return null
-          const preview = getDailyQuestRewardPreview(q.questId, partyLevel, regionId)
+          const preview = getDailyQuestRewardPreview(
+            q.questId,
+            partyLevel,
+            regionId,
+            retentionState,
+          )
           return (
             <li key={q.questId} className="archive-quest">
               <strong>{def.title}</strong>

@@ -24,6 +24,8 @@ export type AbilityEffect =
 export type AbilityDefinition = {
   id: string
   name: string
+  /** Optional override for UI; falls back to `name`. */
+  displayName?: string
   type: ElementType
   category: AbilityCategory
   target: AbilityTarget

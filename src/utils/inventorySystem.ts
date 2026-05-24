@@ -20,6 +20,9 @@ export type InventoryItem = {
   rarity: ItemRarity
   stackable: boolean
   maxStack?: number
+  /** Gear instance upgrade level (forge). */
+  upgradeLevel?: number
+  maxUpgradeLevel?: number
 }
 
 export type TrainerInventory = {
@@ -109,6 +112,8 @@ export function inventoryItemFromGear(gear: GearItem): InventoryItem {
     description: gear.description,
     rarity: gear.rarity,
     stackable: false,
+    upgradeLevel: 0,
+    maxUpgradeLevel: 5,
   }
 }
 
@@ -259,6 +264,18 @@ export function normalizeInventoryItem(raw: unknown): InventoryItem | null {
       (o.rarity as ItemRarity) ?? def?.rarity ?? gear!.rarity,
     stackable: Boolean(o.stackable ?? def?.stackable ?? false),
     maxStack: typeof o.maxStack === 'number' ? o.maxStack : def?.maxStack,
+    upgradeLevel:
+      typeof o.upgradeLevel === 'number'
+        ? Math.max(0, Math.min(5, o.upgradeLevel))
+        : category === 'gear'
+          ? 0
+          : undefined,
+    maxUpgradeLevel:
+      typeof o.maxUpgradeLevel === 'number'
+        ? Math.max(1, o.maxUpgradeLevel)
+        : category === 'gear'
+          ? 5
+          : undefined,
   }
 }
 
@@ -439,35 +456,60 @@ export type EquipGearResult<T> = {
   inventory: TrainerInventory
 }
 
-export function equipGearFromTrainerInventory<T extends { equippedGearId?: string | null }>(
-  creature: T,
-  inv: TrainerInventory,
-  gearInstanceId: string,
-): EquipGearResult<T> | null {
+export type CreatureGearFields = {
+  equippedGearId?: string | null
+  equippedGearUpgradeLevel?: number
+}
+
+export function equipGearFromTrainerInventory<
+  T extends CreatureGearFields,
+>(creature: T, inv: TrainerInventory, gearInstanceId: string): EquipGearResult<T> | null {
   const entry = inv.gear.find((g) => g.id === gearInstanceId)
   if (!entry) return null
   let nextInv = removeInventoryItemByInstanceId(inv, gearInstanceId, 1)
   const previousId = creature.equippedGearId ?? null
+  const previousUpgrade = creature.equippedGearUpgradeLevel ?? 0
   if (previousId) {
-    nextInv = addGearIdToTrainerInventory(nextInv, previousId)
+    const prevGear = getGearItem(previousId)
+    if (prevGear) {
+      const restored: InventoryItem = {
+        ...inventoryItemFromGear(prevGear),
+        upgradeLevel: previousUpgrade,
+        maxUpgradeLevel: 5,
+      }
+      nextInv = addInventoryItemEntry(nextInv, restored)
+    }
   }
   return {
-    creature: { ...creature, equippedGearId: entry.itemId },
+    creature: {
+      ...creature,
+      equippedGearId: entry.itemId,
+      equippedGearUpgradeLevel: entry.upgradeLevel ?? 0,
+    },
     inventory: nextInv,
   }
 }
 
-export function unequipGearToTrainerInventory<T extends { equippedGearId?: string | null }>(
-  creature: T,
-  inv: TrainerInventory,
-): EquipGearResult<T> {
+export function unequipGearToTrainerInventory<
+  T extends CreatureGearFields,
+>(creature: T, inv: TrainerInventory): EquipGearResult<T> {
   const previousId = creature.equippedGearId ?? null
   if (!previousId) {
     return { creature, inventory: inv }
   }
+  const gear = getGearItem(previousId)
+  let nextInv = inv
+  if (gear) {
+    const restored: InventoryItem = {
+      ...inventoryItemFromGear(gear),
+      upgradeLevel: creature.equippedGearUpgradeLevel ?? 0,
+      maxUpgradeLevel: 5,
+    }
+    nextInv = addInventoryItemEntry(nextInv, restored)
+  }
   return {
-    creature: { ...creature, equippedGearId: null },
-    inventory: addGearIdToTrainerInventory(inv, previousId),
+    creature: { ...creature, equippedGearId: null, equippedGearUpgradeLevel: 0 },
+    inventory: nextInv,
   }
 }
 

@@ -13,7 +13,11 @@ import type { DailyCheckpoint } from './dailyRunScoring'
 import { formatCheckpointLabel, compareCheckpoints } from './dailyRunScoring'
 
 import { getDailySeed } from './dailyRun'
-import type { SaveSlotId } from './saveSystem'
+import {
+  loadEnvelopeFromSlot,
+  type SaveSlotId,
+} from './saveSystem'
+import { resolveSaveDisplayName } from './saveSlotMeta'
 
 export function getDailyLeaderboardSeed(date = new Date()): string {
   return getDailySeed(date)
@@ -94,12 +98,54 @@ export type LeaderboardRow = {
   completed: boolean
   created_at: string
   updated_at: string
+  slot_id?: number | null
+  save_name?: string | null
+  trainer_name?: string | null
+  run_id?: string | null
+  nodes_cleared?: number | null
+  bosses_defeated?: number | null
+}
+
+export type LeaderboardSubmitSlot = {
+  slotId: SaveSlotId
+  saveName: string
+  trainerName: string
+}
+
+export function resolveLeaderboardSubmitSlot(
+  slotId: SaveSlotId,
+): LeaderboardSubmitSlot {
+  const envelope = loadEnvelopeFromSlot(slotId)
+  const saveName = resolveSaveDisplayName(
+    slotId,
+    envelope?.saveName,
+    envelope?.trainerName,
+  )
+  const trainerName =
+    envelope?.trainerName?.trim() || envelope?.saveName?.trim() || saveName
+  return { slotId, saveName, trainerName }
+}
+
+export function buildLeaderboardRunId(
+  userId: string,
+  seed: string,
+  slotId: SaveSlotId,
+): string {
+  return `${userId}-${seed}-${slotId}`
+}
+
+export function formatLeaderboardSaveName(row: LeaderboardRow): string {
+  const name = row.save_name?.trim() || row.trainer_name?.trim()
+  return name || 'Unnamed Save'
 }
 
 const TABLE = 'daily_leaderboards'
 
 export const LEADERBOARD_TABLE_MISSING_MESSAGE =
   'Leaderboard table is not set up yet. Please run the Supabase setup SQL in SUPABASE_SETUP.md (daily_leaderboards section).'
+
+const NO_ACTIVE_SLOT_MESSAGE =
+  'No active save slot selected. Load or create a save first.'
 
 function isTableMissingError(error: {
   code?: string
@@ -112,6 +158,20 @@ function isTableMissingError(error: {
     msg.includes('schema cache') ||
     msg.includes('could not find the table') ||
     (msg.includes('relation') && msg.includes('does not exist'))
+  )
+}
+
+function isMissingColumnError(error: {
+  code?: string
+  message?: string
+} | null | undefined): boolean {
+  if (!error) return false
+  const msg = (error.message ?? '').toLowerCase()
+  return (
+    msg.includes('slot_id') ||
+    msg.includes('save_name') ||
+    msg.includes('column') ||
+    error.code === 'PGRST204'
   )
 }
 
@@ -152,19 +212,37 @@ export async function fetchLeaderboard(
 
 export async function fetchPlayerLeaderboardEntry(
   dailySeed: string,
+  slotId?: SaveSlotId | null,
 ): Promise<LeaderboardRow | null> {
   if (!supabase) return null
   const { data: userData } = await supabase.auth.getUser()
   if (!userData.user) return null
 
-  const { data, error } = await supabase
+  let query = supabase
     .from(TABLE)
     .select('*')
     .eq('daily_seed', dailySeed)
     .eq('user_id', userData.user.id)
-    .maybeSingle()
 
-  if (error || !data) return null
+  if (slotId != null) {
+    query = query.eq('slot_id', slotId)
+  }
+
+  const { data, error } = await query.maybeSingle()
+
+  if (error) {
+    if (slotId != null && isMissingColumnError(error)) {
+      const { data: legacy } = await supabase
+        .from(TABLE)
+        .select('*')
+        .eq('daily_seed', dailySeed)
+        .eq('user_id', userData.user.id)
+        .maybeSingle()
+      return (legacy as LeaderboardRow) ?? null
+    }
+    return null
+  }
+  if (!data) return null
   return data as LeaderboardRow
 }
 
@@ -185,9 +263,11 @@ export async function submitLeaderboardScore(params: {
   badgesEarned: number
   evolutionsCount: number
   checkpoint?: DailyCheckpoint | null
-  /** Submit this score even if lower (must still beat existing on score or checkpoint). */
   forceBestScore?: number
   displayName?: string
+  slotId?: SaveSlotId | null
+  saveName?: string
+  trainerName?: string
 }): Promise<SubmitLeaderboardResult> {
   if (!isSupabaseConfigured() || !supabase) {
     return { ok: false, error: 'Supabase not configured.' }
@@ -197,6 +277,19 @@ export async function submitLeaderboardScore(params: {
   if (!userData.user) {
     return { ok: false, error: 'Login required to submit to leaderboard.' }
   }
+
+  if (params.slotId == null) {
+    return { ok: false, error: NO_ACTIVE_SLOT_MESSAGE }
+  }
+
+  const slotCtx =
+    params.saveName && params.trainerName
+      ? {
+          slotId: params.slotId,
+          saveName: params.saveName,
+          trainerName: params.trainerName,
+        }
+      : resolveLeaderboardSubmitSlot(params.slotId)
 
   let displayName = params.displayName?.trim()
   if (!displayName) {
@@ -222,7 +315,7 @@ export async function submitLeaderboardScore(params: {
   }
 
   const newScore = params.forceBestScore ?? params.scoreSnapshot.total
-  const existing = await fetchPlayerLeaderboardEntry(params.seed)
+  const existing = await fetchPlayerLeaderboardEntry(params.seed, slotCtx.slotId)
   if (existing) {
     const existingMeta = parseLeaderboardCheckpointMeta(existing.final_team)
     const existingCheckpoint: DailyCheckpoint | null = existingMeta
@@ -254,11 +347,39 @@ export async function submitLeaderboardScore(params: {
     }
   }
 
+  const checkpointMeta = params.checkpoint
+    ? {
+        nodes_cleared: params.checkpoint.nodesCleared,
+        bosses_defeated: params.checkpoint.bossesDefeated,
+      }
+    : {
+        nodes_cleared: existing?.nodes_cleared ?? 0,
+        bosses_defeated: existing?.bosses_defeated ?? 0,
+      }
+
+  const finalScore = Math.max(newScore, existing?.score ?? 0)
+  const runId = buildLeaderboardRunId(userData.user.id, params.seed, slotCtx.slotId)
+
+  console.log('Submitting leaderboard', {
+    userId: userData.user.id,
+    displayName,
+    slotId: slotCtx.slotId,
+    saveName: slotCtx.saveName,
+    trainerName: slotCtx.trainerName,
+    dailySeed: params.seed,
+    score: newScore,
+    bestScore: finalScore,
+  })
+
   const payload = {
     user_id: userData.user.id,
     display_name: displayName,
     daily_seed: params.seed,
-    score: Math.max(newScore, existing?.score ?? 0),
+    slot_id: slotCtx.slotId,
+    save_name: slotCtx.saveName,
+    trainer_name: slotCtx.trainerName,
+    run_id: runId,
+    score: finalScore,
     region: params.checkpoint?.region ?? params.regionId,
     starter_name: params.starter.name,
     final_team: buildLeaderboardTeamPayload(
@@ -273,14 +394,37 @@ export async function submitLeaderboardScore(params: {
     evolutions_count:
       params.checkpoint?.evolutionsCount ?? params.evolutionsCount,
     completed: params.scoreSnapshot.completed,
+    nodes_cleared: checkpointMeta.nodes_cleared,
+    bosses_defeated: checkpointMeta.bosses_defeated,
     updated_at: new Date().toISOString(),
   }
 
-  const { error } = await supabase.from(TABLE).upsert(payload, {
-    onConflict: 'user_id,daily_seed',
+  let { error } = await supabase.from(TABLE).upsert(payload, {
+    onConflict: 'user_id,daily_seed,slot_id',
   })
 
+  if (error && isMissingColumnError(error)) {
+    const legacyPayload = {
+      user_id: payload.user_id,
+      display_name: payload.display_name,
+      daily_seed: payload.daily_seed,
+      score: payload.score,
+      region: payload.region,
+      starter_name: payload.starter_name,
+      final_team: payload.final_team,
+      badges_earned: payload.badges_earned,
+      highest_level: payload.highest_level,
+      evolutions_count: payload.evolutions_count,
+      completed: payload.completed,
+      updated_at: payload.updated_at,
+    }
+    ;({ error } = await supabase.from(TABLE).upsert(legacyPayload, {
+      onConflict: 'user_id,daily_seed',
+    }))
+  }
+
   if (error) {
+    console.error('Leaderboard submit failed', error)
     if (isTableMissingError(error)) {
       return {
         ok: false,
@@ -305,6 +449,9 @@ export async function submitDailyLeaderboardScore(params: {
   checkpoint?: DailyCheckpoint | null
   forceBestScore?: number
   displayName?: string
+  slotId: SaveSlotId
+  saveName?: string
+  trainerName?: string
 }): Promise<SubmitLeaderboardResult> {
   return submitLeaderboardScore({
     seed: params.dailySeed,
@@ -317,16 +464,24 @@ export async function submitDailyLeaderboardScore(params: {
     checkpoint: params.checkpoint,
     forceBestScore: params.forceBestScore,
     displayName: params.displayName,
+    slotId: params.slotId,
+    saveName: params.saveName,
+    trainerName: params.trainerName,
   })
 }
 
 export function getPlayerRank(
   rows: LeaderboardRow[],
   userId: string | undefined,
+  slotId?: SaveSlotId | null,
 ): number | null {
   if (!userId) return null
-  const index = rows.findIndex((r) => r.user_id === userId)
+  const index = rows.findIndex(
+    (r) =>
+      r.user_id === userId &&
+      (slotId == null || r.slot_id == null || r.slot_id === slotId),
+  )
   return index >= 0 ? index + 1 : null
 }
 
-export { PROFILE_TABLE_MISSING_MESSAGE }
+export { PROFILE_TABLE_MISSING_MESSAGE, NO_ACTIVE_SLOT_MESSAGE }

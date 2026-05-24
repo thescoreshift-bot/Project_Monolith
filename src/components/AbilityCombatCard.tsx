@@ -1,4 +1,4 @@
-import { getAbility } from '../data/abilities'
+import { getAbility, getAbilityDisplayName } from '../data/abilities'
 import {
   NOT_VERY_EFFECTIVE_MULTIPLIER,
   SUPER_EFFECTIVE_MULTIPLIER,
@@ -48,6 +48,7 @@ export function AbilityCombatCard({
   const entry = getMasteryEntry({ abilityMastery: creature.abilityMastery }, abilityId)
   const resolvedId = getResolvedAbilityId(entry)
   const ability = getAbility(resolvedId)
+  const displayName = getAbilityDisplayName(ability)
   const displayCategory = getAbilityDisplayCategory(ability)
   const mods = getCombatModifiersFromMastery(entry)
   const partyLevel = partyHighestLevel ?? creature.level
@@ -97,7 +98,7 @@ export function AbilityCombatCard({
   const detailTitle =
     title ??
     [
-      ability.name,
+      displayName,
       `${ability.type} · ${displayCategory}`,
       rankLabel,
       `Mastery: ${getRankLabel(entry.rank)}`,
@@ -117,7 +118,7 @@ export function AbilityCombatCard({
       title={detailTitle}
     >
       <span className="ability-card__header-row">
-        <span className="ability-card__name">{ability.name}</span>
+        <span className="ability-card__name">{displayName}</span>
         <span className="ability-card__rank" title={`${getRankLabel(entry.rank)}`}>
           {getMasteryLevelShort(entry.rank)}
           {entry.rank >= MASTERY_MAX_RANK ? ' MAX' : ''}

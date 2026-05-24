@@ -1,5 +1,13 @@
-import { getAbility } from '../data/abilities'
+import { getAbility, getAbilityDisplayName } from '../data/abilities'
+import type { MasteryPathTag } from '../data/abilityMasteryPerks'
 import type { AbilityTransformQueueEntry } from '../utils/abilityMastery'
+
+const PATH_LABELS: Record<MasteryPathTag, string> = {
+  damage: 'Power',
+  status: 'Status',
+  utility: 'Support',
+  hybrid: 'Hybrid',
+}
 
 type AbilityTransformScreenProps = {
   creatureName: string
@@ -14,6 +22,8 @@ export function AbilityTransformScreen({
 }: AbilityTransformScreenProps) {
   const oldAbility = getAbility(entry.previousAbilityId)
   const newAbility = getAbility(entry.newAbilityId)
+  const oldName = getAbilityDisplayName(oldAbility)
+  const newName = entry.newName || getAbilityDisplayName(newAbility)
   const isFinal = entry.rank === 10
 
   return (
@@ -26,14 +36,14 @@ export function AbilityTransformScreen({
           <p className="screen-header__subtitle">
             {isFinal
               ? `${creatureName}'s ability has reached its final form!`
-              : `${creatureName}'s ${oldAbility.name} is changing!`}
+              : `${creatureName}'s ${oldName} is changing!`}
           </p>
         </header>
 
         <div className="ability-transform-screen__visual">
           <div className="ability-transform-screen__old">
             <span className="panel-label">Before</span>
-            <p className="ability-upgrade-screen__ability-name">{oldAbility.name}</p>
+            <p className="ability-upgrade-screen__ability-name">{oldName}</p>
             <p className="ability-upgrade-screen__meta">
               Power {oldAbility.power} · {oldAbility.description}
             </p>
@@ -43,13 +53,13 @@ export function AbilityTransformScreen({
           </div>
           <div className="ability-transform-screen__new">
             <span className="panel-label">After</span>
-            <p className="ability-upgrade-screen__ability-name">{newAbility.name}</p>
+            <p className="ability-upgrade-screen__ability-name">{newName}</p>
             <p className="ability-upgrade-screen__meta">
               Power {newAbility.power} · {newAbility.category} · {newAbility.type}
             </p>
             <p className="ability-upgrade-screen__desc">{entry.description}</p>
             <p className="ability-transform-screen__path">
-              Path: {entry.path}
+              Path: {PATH_LABELS[entry.path] ?? entry.path}
             </p>
           </div>
         </div>

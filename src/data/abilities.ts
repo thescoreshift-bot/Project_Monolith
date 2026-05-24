@@ -5,6 +5,7 @@ import type {
   AbilityTarget,
   AbilityCategory,
 } from './abilityTypes'
+import { sanitizeAbilityIdToDisplayName } from '../utils/abilityDisplay'
 
 export type Ability = AbilityDefinition
 
@@ -307,18 +308,23 @@ export const STARTER_ABILITY_IDS: Record<ElementType, string> = {
   Ground: 'stone-nudge',
 }
 
-export function getAbility(id: string): Ability {
-  return (
-    ABILITIES[id] ??
-    RUNTIME_ABILITIES[id] ?? {
-      id,
-      name: id,
-      type: 'Ground',
-      category: 'physical' as AbilityCategory,
-      target: 'enemy' as AbilityTarget,
-      power: 30,
-      accuracy: 100,
-      description: 'Unknown ability.',
-    }
-  )
+export function getRegisteredAbility(id: string): AbilityDefinition | undefined {
+  return ABILITIES[id] ?? RUNTIME_ABILITIES[id]
 }
+
+export function getAbility(id: string): Ability {
+  const found = getRegisteredAbility(id)
+  if (found) return found
+  return {
+    id,
+    name: sanitizeAbilityIdToDisplayName(id),
+    type: 'Ground',
+    category: 'physical' as AbilityCategory,
+    target: 'enemy' as AbilityTarget,
+    power: 30,
+    accuracy: 100,
+    description: 'Unknown ability.',
+  }
+}
+
+export { getAbilityDisplayName, sanitizeAbilityIdToDisplayName } from '../utils/abilityDisplay'

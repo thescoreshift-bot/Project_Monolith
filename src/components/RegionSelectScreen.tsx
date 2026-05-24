@@ -4,12 +4,14 @@ import { formatRewardMultiplier } from '../utils/regionRewards'
 type RegionSelectScreenProps = {
   regions: Region[]
   partyHighestLevel: number
+  hintMessage?: string | null
   onTravel: (regionId: string) => void
 }
 
 export function RegionSelectScreen({
   regions,
   partyHighestLevel,
+  hintMessage,
   onTravel,
 }: RegionSelectScreenProps) {
   return (
@@ -22,6 +24,11 @@ export function RegionSelectScreen({
         <p className="region-select-screen__party-level">
           Party highest level: <strong>{partyHighestLevel}</strong>
         </p>
+        {hintMessage && (
+          <p className="region-select-screen__hint" role="status">
+            {hintMessage}
+          </p>
+        )}
       </header>
 
       <div className="region-select-grid">
@@ -59,7 +66,7 @@ export function RegionSelectScreen({
               </dl>
               {underleveled && (
                 <p className="region-card__warning" role="status">
-                  Your party may be underleveled for this region.
+                  Warning: Your party may be underleveled.
                 </p>
               )}
               <button

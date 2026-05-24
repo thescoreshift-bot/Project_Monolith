@@ -22,6 +22,10 @@ import type { RunCreature } from './progression'
 import { addCoins } from './progression'
 import { getPartyHighestLevel } from './regionRewards'
 import { rollShopGearOffers } from './gearSystem'
+import { createSeededRng } from './seededRandom'
+import { formatQuestRewardSummary, retentionRewardToPayload } from './rewardGrants'
+
+export { retentionRewardToPayload, formatQuestRewardSummary }
 
 export type ArchiveQuestProgress = {
   questId: string
@@ -66,6 +70,9 @@ export type RetentionStats = {
   dailyQuestsCompleted: number
   pvpWins: number
   itemsCollected: number
+  forgeItemsCrafted: number
+  forgeGearUpgrades: number
+  forgeAlphaCrafts: number
 }
 
 export type PendingRetentionRewards = {
@@ -98,11 +105,14 @@ export type RetentionState = {
   newArchiveDiscoveries: number
 }
 
-export type RetentionRewardGrant = {
+export type RetentionRewardCore = {
   coins: number
   items: { itemId: string; quantity: number }[]
   gearIds: string[]
   titleId?: string
+}
+
+export type RetentionRewardGrant = RetentionRewardCore & {
   summary: string
 }
 
@@ -131,6 +141,10 @@ export type GameEventType =
   | 'leaderboardSubmitted'
   | 'pvpWon'
   | 'eliteOrAlphaDefeated'
+  | 'itemCrafted'
+  | 'gearCrafted'
+  | 'gearUpgraded'
+  | 'materialExchanged'
 
 export type GameEventPayload = {
   templateId?: string
@@ -145,6 +159,7 @@ export type GameEventPayload = {
   itemId?: string
   badgeId?: string
   starterTypeId?: string
+  usedAlphaClaw?: boolean
 }
 
 export type GameEventResult = {
@@ -222,6 +237,9 @@ function emptyStats(): RetentionStats {
     dailyQuestsCompleted: 0,
     pvpWins: 0,
     itemsCollected: 0,
+    forgeItemsCrafted: 0,
+    forgeGearUpgrades: 0,
+    forgeAlphaCrafts: 0,
   }
 }
 
@@ -388,38 +406,72 @@ export function saveRetentionToLocalSlot(slotId: 1 | 2, state: RetentionState): 
   }
 }
 
-function pickGearByRarity(rarity: GearRarity): string | undefined {
+function pickGearByRaritySeeded(
+  rarity: GearRarity,
+  rng: () => number,
+): string | undefined {
   const pool = GEAR_ITEM_LIST.filter((g) => g.rarity === rarity)
   if (pool.length === 0) return undefined
-  return pool[Math.floor(Math.random() * pool.length)]!.id
+  return pool[Math.floor(rng() * pool.length)]!.id
 }
 
-export function getDailyRewardPreview(streakDay: number): RetentionRewardGrant {
+export function formatRetentionRewardSummary(grant: RetentionRewardCore): string {
+  return formatQuestRewardSummary(retentionRewardToPayload(grant))
+}
+
+export function resolveDailyLoginReward(streakDay: number): RetentionRewardGrant {
   const day = ((Math.max(1, streakDay) - 1) % 7) + 1
+  const rng = createSeededRng(`daily-login-reward-${day}`)
+  let grant: RetentionRewardCore
+
   switch (day) {
     case 1:
-      return { coins: 50, items: [], gearIds: [], summary: '50 coins' }
+      grant = { coins: 50, items: [], gearIds: [] }
+      break
     case 2:
-      return { coins: 0, items: [{ itemId: 'small-potion', quantity: 2 }], gearIds: [], summary: '2× Small Potion' }
+      grant = {
+        coins: 0,
+        items: [{ itemId: 'small-potion', quantity: 2 }],
+        gearIds: [],
+      }
+      break
     case 3: {
-      const gearId = pickGearByRarity('common')
-      return { coins: 0, items: [], gearIds: gearId ? [gearId] : [], summary: gearId ? 'Random common gear' : 'Common gear (none available)' }
+      const gearId = pickGearByRaritySeeded('common', rng)
+      grant = { coins: 0, items: [], gearIds: gearId ? [gearId] : [] }
+      break
     }
     case 4:
-      return { coins: 100, items: [], gearIds: [], summary: '100 coins' }
+      grant = { coins: 100, items: [], gearIds: [] }
+      break
     case 5: {
-      const gearId = pickGearByRarity(Math.random() < 0.5 ? 'uncommon' : 'rare')
-      return { coins: 0, items: [], gearIds: gearId ? [gearId] : [], summary: 'Uncommon or rare gear chance' }
+      const rarity = rng() < 0.5 ? 'uncommon' : 'rare'
+      const gearId = pickGearByRaritySeeded(rarity, rng)
+      grant = { coins: 0, items: [], gearIds: gearId ? [gearId] : [] }
+      break
     }
     case 6:
-      return { coins: 0, items: [{ itemId: 'monolith-fragment', quantity: 3 }], gearIds: [], summary: '3× Monolith Fragment' }
+      grant = {
+        coins: 0,
+        items: [{ itemId: 'monolith-fragment', quantity: 3 }],
+        gearIds: [],
+      }
+      break
     case 7: {
-      const gearId = pickGearByRarity(Math.random() < 0.35 ? 'epic' : 'rare')
-      return { coins: 0, items: [], gearIds: gearId ? [gearId] : [], summary: 'Epic gear chest or rare gear' }
+      const rarity = rng() < 0.35 ? 'epic' : 'rare'
+      const gearId = pickGearByRaritySeeded(rarity, rng)
+      grant = { coins: 0, items: [], gearIds: gearId ? [gearId] : [] }
+      break
     }
     default:
-      return { coins: 50, items: [], gearIds: [], summary: '50 coins' }
+      grant = { coins: 50, items: [], gearIds: [] }
   }
+
+  return { ...grant, summary: formatRetentionRewardSummary(grant) }
+}
+
+/** @deprecated alias */
+export function getDailyRewardPreview(streakDay: number): RetentionRewardGrant {
+  return resolveDailyLoginReward(streakDay)
 }
 
 export function claimDailyLoginReward(state: RetentionState): {
@@ -428,7 +480,10 @@ export function claimDailyLoginReward(state: RetentionState): {
 } {
   const today = todayKey()
   if (state.dailyRewards.claimedToday || state.dailyRewards.lastClaimDate === today) {
-    return { state, reward: { coins: 0, items: [], gearIds: [], summary: 'Already claimed today' } }
+    return {
+      state,
+      reward: { coins: 0, items: [], gearIds: [], summary: 'Already claimed today' },
+    }
   }
 
   let streak = 1
@@ -445,7 +500,7 @@ export function claimDailyLoginReward(state: RetentionState): {
     }
   }
 
-  const reward = getDailyRewardPreview(streak)
+  const reward = resolveDailyLoginReward(streak)
   const next: RetentionState = {
     ...state,
     dailyRewards: {
@@ -453,14 +508,13 @@ export function claimDailyLoginReward(state: RetentionState): {
       currentStreak: streak,
       claimedToday: true,
     },
-    pendingRewards: mergePending(state.pendingRewards, reward),
   }
   return { state: next, reward }
 }
 
-function mergePending(
+export function mergePendingRetentionRewards(
   pending: PendingRetentionRewards,
-  reward: RetentionRewardGrant,
+  reward: RetentionRewardCore,
 ): PendingRetentionRewards {
   return {
     coins: pending.coins + reward.coins,
@@ -473,37 +527,57 @@ function scaleArchiveQuestReward(
   baseCoins: number,
   partyLevel: number,
   regionId: string,
-): RetentionRewardGrant {
+): RetentionRewardCore {
   const mult = 1 + Math.floor(partyLevel / 5) * 0.1
   const regionBonus = regionId.includes('3') ? 1.25 : regionId.includes('2') ? 1.1 : 1
   const coins = Math.round(baseCoins * mult * regionBonus)
-  return { coins, items: [], gearIds: [], summary: `${coins} coins` }
+  return { coins, items: [], gearIds: [] }
+}
+
+export function resolveArchiveQuestReward(
+  questId: string,
+  partyLevel: number,
+  regionId: string,
+  periodKey: string,
+): RetentionRewardGrant {
+  const q = ARCHIVE_QUEST_BY_ID[questId]
+  if (!q) return { coins: 0, items: [], gearIds: [], summary: '—' }
+
+  const rng = createSeededRng(`${periodKey}-${questId}-reward`)
+
+  if (q.weekly) {
+    const coins = Math.round(200 + partyLevel * 15)
+    const items = [{ itemId: 'monolith-fragment', quantity: 2 }]
+    const gearIds: string[] = []
+    const gearId =
+      rng() < 0.4
+        ? pickGearByRaritySeeded('rare', rng)
+        : pickGearByRaritySeeded('uncommon', rng)
+    if (gearId) gearIds.push(gearId)
+    const grant: RetentionRewardCore = { coins, items, gearIds }
+    return { ...grant, summary: formatRetentionRewardSummary(grant) }
+  }
+
+  const base = 30 + q.required * 8
+  const grant = scaleArchiveQuestReward(base, partyLevel, regionId)
+  if (rng() < 0.25) {
+    grant.items.push({ itemId: 'small-potion', quantity: 1 })
+  }
+  return { ...grant, summary: formatRetentionRewardSummary(grant) }
 }
 
 export function getDailyQuestRewardPreview(
   questId: string,
   partyLevel: number,
   regionId: string,
+  state?: RetentionState,
 ): RetentionRewardGrant {
   const q = ARCHIVE_QUEST_BY_ID[questId]
   if (!q) return { coins: 0, items: [], gearIds: [], summary: '—' }
-  if (q.weekly) {
-    const coins = Math.round(200 + partyLevel * 15)
-    const gearId = Math.random() < 0.4 ? pickGearByRarity('rare') : pickGearByRarity('uncommon')
-    return {
-      coins,
-      items: [{ itemId: 'monolith-fragment', quantity: 2 }],
-      gearIds: gearId ? [gearId] : [],
-      summary: `${coins} coins, materials, gear chance`,
-    }
-  }
-  const base = 30 + q.required * 8
-  const grant = scaleArchiveQuestReward(base, partyLevel, regionId)
-  if (Math.random() < 0.25) {
-    grant.items.push({ itemId: 'small-potion', quantity: 1 })
-    grant.summary += ', Small Potion'
-  }
-  return grant
+  const periodKey = q.weekly
+    ? (state?.weeklyQuests.weekKey ?? weekKey())
+    : (state?.dailyQuests.questDate ?? todayKey())
+  return resolveArchiveQuestReward(questId, partyLevel, regionId, periodKey)
 }
 
 export function claimArchiveQuest(
@@ -518,13 +592,18 @@ export function claimArchiveQuest(
   if (!entry || !entry.completed || entry.claimed) {
     return { state, reward: null }
   }
-  const reward = getDailyQuestRewardPreview(questId, partyLevel, regionId)
+  const periodKey = weekly ? state.weeklyQuests.weekKey : state.dailyQuests.questDate
+  const reward = resolveArchiveQuestReward(
+    questId,
+    partyLevel,
+    regionId,
+    periodKey,
+  )
   const nextList = list.map((q) =>
     q.questId === questId ? { ...q, claimed: true } : q,
   )
   let nextState: RetentionState = {
     ...state,
-    pendingRewards: mergePending(state.pendingRewards, reward),
     ...(weekly
       ? { weeklyQuests: { ...state.weeklyQuests, quests: nextList } }
       : { dailyQuests: { ...state.dailyQuests, quests: nextList } }),
@@ -545,18 +624,40 @@ export function claimArchiveQuest(
 function grantAchievementReward(def: AchievementDefinition): RetentionRewardGrant {
   const r = def.reward
   if (r.type === 'coins') {
-    return { coins: r.amount, items: [], gearIds: [], summary: `${r.amount} coins` }
+    const grant: RetentionRewardCore = {
+      coins: r.amount,
+      items: [],
+      gearIds: [],
+    }
+    return { ...grant, summary: formatRetentionRewardSummary(grant) }
+  }
+  if (r.type === 'items') {
+    const grant: RetentionRewardCore = {
+      coins: 0,
+      items: r.items.map((i) => ({ itemId: i.itemId, quantity: i.quantity })),
+      gearIds: [],
+    }
+    return { ...grant, summary: formatRetentionRewardSummary(grant) }
   }
   if (r.type === 'title') {
-    return { coins: 0, items: [], gearIds: [], titleId: r.titleId, summary: `Title: ${r.titleName}` }
+    return {
+      coins: 0,
+      items: [],
+      gearIds: [],
+      titleId: r.titleId,
+      summary: `Title: ${r.titleName}`,
+    }
   }
-  const gearId = r.gearId ?? (r.random ? pickGearByRarity(r.rarity ?? 'uncommon') : undefined)
-  return {
+  const rng = createSeededRng(`achievement-${def.id}-reward`)
+  const gearId =
+    r.gearId ??
+    (r.random ? pickGearByRaritySeeded(r.rarity ?? 'uncommon', rng) : undefined)
+  const grant: RetentionRewardCore = {
     coins: 0,
     items: [],
     gearIds: gearId ? [gearId] : [],
-    summary: gearId ? 'Gear reward' : 'Gear reward (none rolled)',
   }
+  return { ...grant, summary: formatRetentionRewardSummary(grant) }
 }
 
 export function claimAchievement(
@@ -575,7 +676,6 @@ export function claimAchievement(
       ...state.achievements,
       [achievementId]: { ...prog, claimed: true },
     },
-    pendingRewards: mergePending(state.pendingRewards, reward),
   }
   if (reward.titleId && !next.titles.includes(reward.titleId)) {
     next = {
@@ -943,6 +1043,44 @@ export function trackGameEvent(
         stats: { ...next.stats, pvpWins: next.stats.pvpWins + 1 },
       }
       next = updateQuestProgress(next, 'pvpWon', 1)
+      break
+    case 'itemCrafted':
+      next = {
+        ...next,
+        stats: {
+          ...next.stats,
+          forgeItemsCrafted: next.stats.forgeItemsCrafted + 1,
+        },
+      }
+      break
+    case 'gearCrafted':
+      next = {
+        ...next,
+        stats: {
+          ...next.stats,
+          forgeItemsCrafted: next.stats.forgeItemsCrafted + 1,
+        },
+      }
+      if (payload.usedAlphaClaw) {
+        next = {
+          ...next,
+          stats: {
+            ...next.stats,
+            forgeAlphaCrafts: next.stats.forgeAlphaCrafts + 1,
+          },
+        }
+      }
+      break
+    case 'gearUpgraded':
+      next = {
+        ...next,
+        stats: {
+          ...next.stats,
+          forgeGearUpgrades: next.stats.forgeGearUpgrades + 1,
+        },
+      }
+      break
+    case 'materialExchanged':
       break
     default:
       break

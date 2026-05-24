@@ -1,4 +1,4 @@
-import { getAbility } from '../data/abilities'
+import { getAbility, getAbilityDisplayName } from '../data/abilities'
 import { AbilityMasteryPanel } from './AbilityMasteryPanel'
 import type { PartyCreature } from '../utils/party'
 import type { RunCreature } from '../utils/progression'
@@ -24,6 +24,7 @@ export function MoveLearnScreen({
   onReplace,
 }: MoveLearnScreenProps) {
   const newAbility = getAbility(newAbilityId)
+  const newAbilityName = getAbilityDisplayName(newAbility)
   const activeIds = getActiveAbilityIds(creature)
   const slotsFull = activeIds.length >= 4
 
@@ -50,7 +51,7 @@ export function MoveLearnScreen({
         {!slotsFull ? (
           <div className="move-learn-screen__actions">
             <button type="button" className="btn btn--primary" onClick={onLearn}>
-              Learn {newAbility.name}
+              Learn {newAbilityName}
             </button>
             <button type="button" className="btn btn--ghost" onClick={onSkip}>
               Do not learn
@@ -64,6 +65,7 @@ export function MoveLearnScreen({
             <div className="move-learn-screen__forget-list">
               {activeIds.map((id) => {
                 const ability = getAbility(id)
+                const forgetName = getAbilityDisplayName(ability)
                 return (
                   <button
                     key={id}
@@ -72,10 +74,10 @@ export function MoveLearnScreen({
                     onClick={() => onReplace(id)}
                   >
                     <h2 className="ability-upgrade-card__name">
-                      Forget {ability.name}
+                      Forget {forgetName}
                     </h2>
                     <p className="ability-upgrade-card__desc">
-                      Replace with {newAbility.name}
+                      Replace with {newAbilityName}
                     </p>
                   </button>
                 )

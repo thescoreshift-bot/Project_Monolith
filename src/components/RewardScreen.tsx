@@ -1,5 +1,6 @@
 import { getBadge } from '../data/badges'
 import type { CreatureLevelUpLine, CreatureXpGainLine } from '../utils/battleRewards'
+import { formatRewardNextStep } from '../utils/currentObjective'
 import type {
   MasteryRewardLine,
   PendingChoiceSummary,
@@ -20,6 +21,8 @@ export type RewardScreenData = {
   itemsFound?: string[]
   materialsFound?: string[]
   pendingChoices: PendingChoiceSummary[]
+  questProgressLines?: string[]
+  questCompletedTitles?: string[]
 }
 
 type RewardScreenProps = {
@@ -28,6 +31,7 @@ type RewardScreenProps = {
 }
 
 export function RewardScreen({ reward, onContinue }: RewardScreenProps) {
+  const nextStep = formatRewardNextStep(reward.pendingChoices)
   const continueLabel = reward.bossVictory
     ? 'Continue'
     : reward.hasPerkDrafts
@@ -46,24 +50,38 @@ export function RewardScreen({ reward, onContinue }: RewardScreenProps) {
             Boss defeated! This region has been cleared.
           </p>
         )}
+        {nextStep && (
+          <p className="reward-screen__next-step" role="status">
+            {nextStep}
+          </p>
+        )}
       </header>
 
       <section className="reward-panel">
-        <div className="reward-panel__row">
-          <span className="panel-label">XP gained</span>
-          <ul className="reward-panel__xp-list">
-            {reward.xpLines.map((line) => (
-              <li key={`${line.name}-${line.note ?? 'full'}`}>
-                {line.name}: +{line.xpGained} XP
-                {line.note ? ` (${line.note})` : ''}
-              </li>
-            ))}
-          </ul>
+        <div className="reward-panel__section">
+          <h2 className="reward-panel__section-title">Coins</h2>
+          <p className="reward-panel__value">
+            {reward.coinsGained > 0 ? `+${reward.coinsGained} coins` : 'No coins this battle'}
+          </p>
         </div>
 
+        {reward.xpLines.length > 0 && (
+          <div className="reward-panel__section">
+            <h2 className="reward-panel__section-title">XP gained</h2>
+            <ul className="reward-panel__xp-list">
+              {reward.xpLines.map((line) => (
+                <li key={`${line.name}-${line.note ?? 'full'}`}>
+                  {line.name}: +{line.xpGained} XP
+                  {line.note ? ` (${line.note})` : ''}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
         {reward.levelUpLines.length > 0 && (
-          <div className="reward-panel__row reward-panel__row--highlight">
-            <span className="panel-label">Level ups</span>
+          <div className="reward-panel__section reward-panel__section--highlight">
+            <h2 className="reward-panel__section-title">Level ups</h2>
             <ul className="reward-panel__xp-list">
               {reward.levelUpLines.map((line) => (
                 <li key={line.name}>
@@ -75,8 +93,8 @@ export function RewardScreen({ reward, onContinue }: RewardScreenProps) {
         )}
 
         {reward.masteryLines.length > 0 && (
-          <div className="reward-panel__row">
-            <span className="panel-label">Ability mastery</span>
+          <div className="reward-panel__section">
+            <h2 className="reward-panel__section-title">Ability mastery</h2>
             <ul className="reward-panel__xp-list">
               {reward.masteryLines.map((line, i) => (
                 <li key={`${line.creatureName}-${line.abilityName}-${i}`}>
@@ -90,57 +108,65 @@ export function RewardScreen({ reward, onContinue }: RewardScreenProps) {
           </div>
         )}
 
-        <div className="reward-panel__row">
-          <span className="panel-label">Coins gained</span>
-          <p className="reward-panel__value">+{reward.coinsGained} coins</p>
-        </div>
-
-        {reward.loot && reward.loot !== 'None' && (
-          <div className="reward-panel__row">
-            <span className="panel-label">Reward</span>
-            <p className="reward-panel__value">{reward.loot}</p>
+        {(reward.gearFound ||
+          (reward.itemsFound && reward.itemsFound.length > 0) ||
+          (reward.materialsFound && reward.materialsFound.length > 0) ||
+          (reward.loot && reward.loot !== 'None')) && (
+          <div className="reward-panel__section reward-panel__section--highlight">
+            <h2 className="reward-panel__section-title">Items & gear</h2>
+            {reward.gearFound && <p className="reward-panel__value">Gear: {reward.gearFound}</p>}
+            {reward.itemsFound && reward.itemsFound.length > 0 && (
+              <ul className="reward-panel__xp-list">
+                {reward.itemsFound.map((name) => (
+                  <li key={name}>{name}</li>
+                ))}
+              </ul>
+            )}
+            {reward.materialsFound && reward.materialsFound.length > 0 && (
+              <ul className="reward-panel__xp-list">
+                {reward.materialsFound.map((name) => (
+                  <li key={`mat-${name}`}>{name}</li>
+                ))}
+              </ul>
+            )}
+            {reward.loot && reward.loot !== 'None' && !reward.gearFound && (
+              <p className="reward-panel__value">{reward.loot}</p>
+            )}
           </div>
         )}
 
-        {reward.itemsFound && reward.itemsFound.length > 0 && (
-          <div className="reward-panel__row reward-panel__row--highlight">
-            <span className="panel-label">Items found</span>
+        {reward.questProgressLines && reward.questProgressLines.length > 0 && (
+          <div className="reward-panel__section">
+            <h2 className="reward-panel__section-title">Quest progress</h2>
             <ul className="reward-panel__xp-list">
-              {reward.itemsFound.map((name) => (
-                <li key={name}>{name}</li>
+              {reward.questProgressLines.map((line) => (
+                <li key={line}>{line}</li>
               ))}
             </ul>
           </div>
         )}
 
-        {reward.gearFound && (
-          <div className="reward-panel__row reward-panel__row--highlight">
-            <span className="panel-label">Gear found</span>
-            <p className="reward-panel__value">{reward.gearFound}</p>
-          </div>
-        )}
-
-        {reward.materialsFound && reward.materialsFound.length > 0 && (
-          <div className="reward-panel__row reward-panel__row--highlight">
-            <span className="panel-label">Materials found</span>
+        {reward.questCompletedTitles && reward.questCompletedTitles.length > 0 && (
+          <div className="reward-panel__section reward-panel__section--highlight">
+            <h2 className="reward-panel__section-title">Quest completed</h2>
             <ul className="reward-panel__xp-list">
-              {reward.materialsFound.map((name) => (
-                <li key={`mat-${name}`}>{name}</li>
+              {reward.questCompletedTitles.map((title) => (
+                <li key={title}>{title} — claim at Recovery Station</li>
               ))}
             </ul>
           </div>
         )}
 
         {reward.recruitmentNote && (
-          <div className="reward-panel__row reward-panel__row--highlight">
-            <span className="panel-label">Recruitment</span>
+          <div className="reward-panel__section reward-panel__section--highlight">
+            <h2 className="reward-panel__section-title">Recruitment</h2>
             <p className="reward-panel__value">{reward.recruitmentNote}</p>
           </div>
         )}
 
         {reward.badgeEarned && getBadge(reward.badgeEarned) && (
-          <div className="reward-panel__row reward-panel__row--highlight">
-            <span className="panel-label">Badge earned</span>
+          <div className="reward-panel__section reward-panel__section--highlight">
+            <h2 className="reward-panel__section-title">Badge earned</h2>
             <p className="reward-panel__value">
               {getBadge(reward.badgeEarned)!.name}
             </p>
@@ -148,8 +174,8 @@ export function RewardScreen({ reward, onContinue }: RewardScreenProps) {
         )}
 
         {reward.pendingChoices.length > 0 && (
-          <div className="reward-panel__row reward-panel__row--queue">
-            <span className="panel-label">Up next (after Continue)</span>
+          <div className="reward-panel__section reward-panel__section--queue">
+            <h2 className="reward-panel__section-title">Pending choices</h2>
             <ul className="reward-panel__queue-list">
               {reward.pendingChoices.map((item) => (
                 <li key={item.label}>

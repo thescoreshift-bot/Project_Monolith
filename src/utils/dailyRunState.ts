@@ -1,9 +1,20 @@
 import type { MapNode, NodeVisitState } from '../data/nodeMap'
-import { getTodayDateKey } from './dailyRun'
+import { getDailyRunRegionId, getTodayDateKey, type DailyModifier } from './dailyRun'
 import type { DailyModifierId } from './dailyRun'
-import type { RunScoreTracker } from './runScore'
-import type { RunCreature } from './progression'
+import type {
+  AbilityMasteryPerkQueueEntry,
+  AbilityTransformQueueEntry,
+} from './abilityMastery'
+import type {
+  EvolutionQueueEntry,
+  PerkDraftQueueEntry,
+} from './creatureProgression'
+import type { PostBattleQueueEvent } from './postBattleQueue'
 import type { PartyCreature } from './party'
+import type { RunCreature } from './progression'
+import { getRegionEnemyLevelRange, type EnemyLevelRange } from './regionRewards'
+import { createFreshMapState } from './runState'
+import { createScoreTracker, type RunScoreTracker } from './runScore'
 import {
   type DailyAttemptRunState,
   type DailyCheckpoint,
@@ -71,6 +82,55 @@ function migrateLegacyToDayState(
     bestRunSummary: null,
     leaderboardSubmitted: legacy.leaderboardSubmitted,
     currentAttemptRunState: attempt,
+  }
+}
+
+export type FreshDailyRunSnapshot = {
+  dailySeed: string
+  regionId: string
+  mapNodes: MapNode[]
+  nodeStates: Record<string, NodeVisitState>
+  earnedBadges: string[]
+  completedRegionIds: string[]
+  partyRecruits: PartyCreature[]
+  activeHelperId: string | null
+  enemyLevelRange: EnemyLevelRange
+  scoreTracker: RunScoreTracker
+  pendingPerkDraftQueue: PerkDraftQueueEntry[]
+  pendingEvolutionQueue: EvolutionQueueEntry[]
+  pendingAbilityUpgradeQueue: AbilityMasteryPerkQueueEntry[]
+  pendingTransformQueue: AbilityTransformQueueEntry[]
+  pendingPostBattleQueue: PostBattleQueueEvent[]
+}
+
+/** Full in-memory reset for a new daily attempt (no normal-save region/party leakage). */
+export function createFreshDailyRunState(
+  dailySeed: string,
+  dailyModifier: DailyModifier | null = null,
+  options?: { generateMap?: boolean },
+): FreshDailyRunSnapshot {
+  const regionId = getDailyRunRegionId()
+  const generateMap = options?.generateMap ?? false
+  const map = generateMap
+    ? createFreshMapState(regionId, [], dailyModifier)
+    : { mapNodes: [] as MapNode[], nodeStates: {} as Record<string, NodeVisitState> }
+
+  return {
+    dailySeed,
+    regionId,
+    mapNodes: map.mapNodes,
+    nodeStates: map.nodeStates,
+    earnedBadges: [],
+    completedRegionIds: [],
+    partyRecruits: [],
+    activeHelperId: null,
+    enemyLevelRange: getRegionEnemyLevelRange(regionId),
+    scoreTracker: createScoreTracker(1),
+    pendingPerkDraftQueue: [],
+    pendingEvolutionQueue: [],
+    pendingAbilityUpgradeQueue: [],
+    pendingTransformQueue: [],
+    pendingPostBattleQueue: [],
   }
 }
 
