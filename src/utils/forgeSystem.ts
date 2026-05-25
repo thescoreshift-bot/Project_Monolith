@@ -238,9 +238,14 @@ function applyCraftResult(
       flags.craftedGear = true
       break
     }
-    case 'coins': {
-      nextStarter = addCoins(nextStarter, result.amount)
-      message = `Received ${result.amount} coins.`
+    case 'material': {
+      nextInv = addItemToTrainerInventory(
+        nextInv,
+        result.itemId,
+        result.quantity,
+      )
+      const name = getItemDefinition(result.itemId)?.name ?? result.itemId
+      message = `Received ${result.quantity}× ${name}.`
       break
     }
     case 'randomGear': {

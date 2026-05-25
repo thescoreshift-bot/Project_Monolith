@@ -115,29 +115,72 @@ function parseEnvelope(raw: unknown): MonolithSaveEnvelope | null {
   return buildSaveEnvelope(1, legacy)
 }
 
-async function requireLoggedInUserId(): Promise<string | null> {
-  if (!supabase) return null
-  const { data, error } = await supabase.auth.getUser()
-  if (error || !data.user) return null
-  return data.user.id
+function isRlsPolicyError(message: string): boolean {
+  return message.toLowerCase().includes('row-level security')
+}
+
+function formatCloudSaveError(message: string): string {
+  if (isRlsPolicyError(message)) {
+    return (
+      'Cloud save was blocked by database security (RLS). Sign out, sign in again, then retry. ' +
+      'If it still fails, run the game_saves RLS SQL in SUPABASE_SETUP.md in your Supabase SQL Editor.'
+    )
+  }
+  return message
+}
+
+/** Requires a live JWT session (not just a cached user) so RLS sees auth.uid(). */
+async function requireAuthenticatedUserId(): Promise<
+  { userId: string } | { error: string }
+> {
+  if (!supabase) return { error: 'Supabase not configured' }
+
+  let session = (await supabase.auth.getSession()).data.session
+  if (!session?.user) {
+    const refreshed = await supabase.auth.refreshSession()
+    session = refreshed.data.session
+  }
+  if (!session?.user) {
+    return { error: 'Not logged in. Sign in again before using cloud saves.' }
+  }
+  if (!session.access_token) {
+    return { error: 'Session expired. Sign out and sign in again.' }
+  }
+  return { userId: session.user.id }
 }
 
 export async function getCloudSaveSlot(
   slotId: SaveSlotId,
 ): Promise<MonolithSaveEnvelope | null> {
-  if (!supabase) return null
-  const userId = await requireLoggedInUserId()
-  if (!userId) return null
+  const result = await getCloudSaveSlotResult(slotId)
+  return result.envelope
+}
+
+export async function getCloudSaveSlotResult(
+  slotId: SaveSlotId,
+): Promise<{ envelope: MonolithSaveEnvelope | null; error?: string }> {
+  if (!supabase) return { envelope: null, error: 'Supabase not configured' }
+
+  const auth = await requireAuthenticatedUserId()
+  if ('error' in auth) return { envelope: null, error: auth.error }
 
   const { data, error } = await supabase
     .from(TABLE)
     .select('save_data')
-    .eq('user_id', userId)
+    .eq('user_id', auth.userId)
     .eq('slot_id', slotId)
     .maybeSingle()
 
-  if (error || !data) return null
-  return parseEnvelope(data.save_data)
+  if (error) {
+    return {
+      envelope: null,
+      error: formatCloudSaveError(error.message),
+    }
+  }
+  if (!data) return { envelope: null }
+  const envelope = parseEnvelope(data.save_data)
+  if (!envelope) return { envelope: null, error: 'Cloud save data is corrupted.' }
+  return { envelope }
 }
 
 export async function getAllCloudSaveSlots(): Promise<{
@@ -148,10 +191,13 @@ export async function getAllCloudSaveSlots(): Promise<{
   const empty2 = buildSaveSlotSummary(2, null)
   if (!supabase) return { 1: empty1, 2: empty2 }
 
-  const userId = await requireLoggedInUserId()
-  if (!userId) return { 1: empty1, 2: empty2 }
+  const auth = await requireAuthenticatedUserId()
+  if ('error' in auth) return { 1: empty1, 2: empty2 }
 
-  const { data, error } = await supabase.from(TABLE).select('*').eq('user_id', userId)
+  const { data, error } = await supabase
+    .from(TABLE)
+    .select('*')
+    .eq('user_id', auth.userId)
 
   if (error || !data) return { 1: empty1, 2: empty2 }
 
@@ -172,8 +218,8 @@ export async function saveToCloudSlot(
     return { ok: false, error: 'Supabase not configured' }
   }
 
-  const userId = await requireLoggedInUserId()
-  if (!userId) return { ok: false, error: 'Not logged in' }
+  const auth = await requireAuthenticatedUserId()
+  if ('error' in auth) return { ok: false, error: auth.error }
 
   if (slotId !== 1 && slotId !== 2) {
     return { ok: false, error: 'Invalid slot. Only slots 1 and 2 are allowed.' }
@@ -189,17 +235,36 @@ export async function saveToCloudSlot(
     lastPlayed: new Date().toISOString(),
   }
 
-  const { error } = await supabase.from(TABLE).upsert(
-    {
-      user_id: userId,
-      slot_id: slotId,
-      save_name: payload.trainerName ?? payload.saveName ?? null,
-      save_data: payload,
-    },
-    { onConflict: 'user_id,slot_id' },
-  )
+  const row = {
+    user_id: auth.userId,
+    slot_id: slotId,
+    save_name: payload.trainerName ?? payload.saveName ?? null,
+    save_data: payload,
+  }
 
-  if (error) return { ok: false, error: error.message }
+  const { data: existing, error: readError } = await supabase
+    .from(TABLE)
+    .select('id')
+    .eq('user_id', auth.userId)
+    .eq('slot_id', slotId)
+    .maybeSingle()
+
+  if (readError) {
+    return { ok: false, error: formatCloudSaveError(readError.message) }
+  }
+
+  const { error } = existing
+    ? await supabase
+        .from(TABLE)
+        .update({
+          save_name: row.save_name,
+          save_data: row.save_data,
+        })
+        .eq('user_id', auth.userId)
+        .eq('slot_id', slotId)
+    : await supabase.from(TABLE).insert(row)
+
+  if (error) return { ok: false, error: formatCloudSaveError(error.message) }
   return { ok: true }
 }
 
@@ -211,13 +276,13 @@ export async function loadFromCloudSlot(
 
 export async function deleteCloudSlot(slotId: SaveSlotId): Promise<boolean> {
   if (!supabase) return false
-  const userId = await requireLoggedInUserId()
-  if (!userId) return false
+  const auth = await requireAuthenticatedUserId()
+  if ('error' in auth) return false
 
   const { error } = await supabase
     .from(TABLE)
     .delete()
-    .eq('user_id', userId)
+    .eq('user_id', auth.userId)
     .eq('slot_id', slotId)
 
   return !error

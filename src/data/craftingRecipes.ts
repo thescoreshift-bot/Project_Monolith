@@ -14,7 +14,7 @@ export type MaterialRequirement =
 export type CraftResult =
   | { kind: 'consumable'; itemId: string }
   | { kind: 'gear'; gearId: string }
-  | { kind: 'coins'; amount: number }
+  | { kind: 'material'; itemId: string; quantity: number }
   | { kind: 'randomGear'; minRarity: GearRarity }
   | { kind: 'randomConsumable' }
 
@@ -30,6 +30,38 @@ export type CraftingRecipe = {
   minRegionIndex?: number
   rarity: GearRarity | 'common'
   repeatable: boolean
+}
+
+const MATERIAL_EXCHANGE_RATE = 5
+
+const EXCHANGEABLE_MATERIALS = [
+  { id: 'ember-scale', name: 'Ember Scale' },
+  { id: 'tide-pearl', name: 'Tide Pearl' },
+  { id: 'volt-thread', name: 'Volt Thread' },
+  { id: 'stone-chip', name: 'Stone Chip' },
+  { id: 'wild-seed', name: 'Wild Seed' },
+] as const
+
+function buildMaterialExchangeRecipes(): CraftingRecipe[] {
+  const recipes: CraftingRecipe[] = []
+  for (const from of EXCHANGEABLE_MATERIALS) {
+    for (const to of EXCHANGEABLE_MATERIALS) {
+      if (from.id === to.id) continue
+      recipes.push({
+        id: `exchange-${from.id}-to-${to.id}`,
+        name: `${from.name} → ${to.name}`,
+        category: 'exchange',
+        description: `Even swap: ${MATERIAL_EXCHANGE_RATE} ${from.name} for ${MATERIAL_EXCHANGE_RATE} ${to.name}.`,
+        requiredMaterials: [{ itemId: from.id, quantity: MATERIAL_EXCHANGE_RATE }],
+        coinCost: 0,
+        result: { kind: 'material', itemId: to.id, quantity: MATERIAL_EXCHANGE_RATE },
+        minLevel: 1,
+        rarity: 'common',
+        repeatable: true,
+      })
+    }
+  }
+  return recipes
 }
 
 export const CRAFTING_RECIPES: CraftingRecipe[] = [
@@ -58,78 +90,168 @@ export const CRAFTING_RECIPES: CraftingRecipe[] = [
     repeatable: true,
   },
   {
-    id: 'craft-stoneguard-charm',
-    name: 'Stoneguard Charm',
+    id: 'craft-forge-flameheart',
+    name: 'Forge Flameheart',
     category: 'gear',
-    description: 'Held gear: +4 DEF, +5 max HP.',
+    description:
+      'Epic held gear — outclasses route drops: ATK/SP.ATK + Fire +10%.',
     requiredMaterials: [
-      { itemId: 'stone-chip', quantity: 4 },
-      { itemId: 'monolith-fragment', quantity: 1 },
-    ],
-    coinCost: 25,
-    result: { kind: 'gear', gearId: 'stoneguard-charm' },
-    minLevel: 1,
-    rarity: 'uncommon',
-    repeatable: true,
-  },
-  {
-    id: 'craft-voltweave-band',
-    name: 'Voltweave Band',
-    category: 'gear',
-    description: 'Held gear: +4 SPD, Electric damage +3%.',
-    requiredMaterials: [
-      { itemId: 'volt-thread', quantity: 4 },
-      { itemId: 'monolith-fragment', quantity: 1 },
-    ],
-    coinCost: 25,
-    result: { kind: 'gear', gearId: 'voltweave-band' },
-    minLevel: 1,
-    rarity: 'uncommon',
-    repeatable: true,
-  },
-  {
-    id: 'craft-tide-pearl-pendant',
-    name: 'Tide Pearl Pendant',
-    category: 'gear',
-    description: 'Held gear: +4 SP.DEF, Water damage +3%.',
-    requiredMaterials: [
-      { itemId: 'tide-pearl', quantity: 4 },
-      { itemId: 'monolith-fragment', quantity: 1 },
-    ],
-    coinCost: 25,
-    result: { kind: 'gear', gearId: 'tide-pearl-pendant' },
-    minLevel: 1,
-    rarity: 'uncommon',
-    repeatable: true,
-  },
-  {
-    id: 'craft-thornseed-collar',
-    name: 'Thornseed Collar',
-    category: 'gear',
-    description: 'Held gear: +4 max HP, Grass damage +3%.',
-    requiredMaterials: [
-      { itemId: 'wild-seed', quantity: 4 },
-      { itemId: 'monolith-fragment', quantity: 1 },
-    ],
-    coinCost: 25,
-    result: { kind: 'gear', gearId: 'thornseed-collar' },
-    minLevel: 1,
-    rarity: 'uncommon',
-    repeatable: true,
-  },
-  {
-    id: 'craft-alpha-fang-charm',
-    name: 'Alpha Fang Charm',
-    category: 'gear',
-    description: 'Held gear: +6 ATK, all damage +4%.',
-    requiredMaterials: [
-      { itemId: 'material-alpha-claw', quantity: 2 },
+      { itemId: 'ember-scale', quantity: 6 },
       { itemId: 'monolith-fragment', quantity: 2 },
     ],
-    coinCost: 75,
-    result: { kind: 'gear', gearId: 'alpha-fang-charm' },
-    minLevel: 5,
-    rarity: 'rare',
+    coinCost: 40,
+    result: { kind: 'gear', gearId: 'forge-flameheart' },
+    minLevel: 8,
+    rarity: 'epic',
+    repeatable: true,
+  },
+  {
+    id: 'craft-forge-tideheart',
+    name: 'Forge Tideheart',
+    category: 'gear',
+    description:
+      'Epic held gear — outclasses route drops: SP.ATK/SP.DEF + Water +10%.',
+    requiredMaterials: [
+      { itemId: 'tide-pearl', quantity: 6 },
+      { itemId: 'monolith-fragment', quantity: 2 },
+    ],
+    coinCost: 40,
+    result: { kind: 'gear', gearId: 'forge-tideheart' },
+    minLevel: 8,
+    rarity: 'epic',
+    repeatable: true,
+  },
+  {
+    id: 'craft-forge-verdant-sigil',
+    name: 'Forge Verdant Sigil',
+    category: 'gear',
+    description:
+      'Epic held gear — outclasses route drops: ATK/DEF + Grass +10%.',
+    requiredMaterials: [
+      { itemId: 'wild-seed', quantity: 6 },
+      { itemId: 'monolith-fragment', quantity: 2 },
+    ],
+    coinCost: 40,
+    result: { kind: 'gear', gearId: 'forge-verdant-sigil' },
+    minLevel: 8,
+    rarity: 'epic',
+    repeatable: true,
+  },
+  {
+    id: 'craft-forge-stormcoil',
+    name: 'Forge Stormcoil',
+    category: 'gear',
+    description:
+      'Epic held gear — outclasses route drops: SPD/SP.ATK + Electric +10%.',
+    requiredMaterials: [
+      { itemId: 'volt-thread', quantity: 6 },
+      { itemId: 'monolith-fragment', quantity: 2 },
+    ],
+    coinCost: 40,
+    result: { kind: 'gear', gearId: 'forge-stormcoil' },
+    minLevel: 8,
+    rarity: 'epic',
+    repeatable: true,
+  },
+  {
+    id: 'craft-forge-bedrock-ward',
+    name: 'Forge Bedrock Ward',
+    category: 'gear',
+    description:
+      'Epic held gear — outclasses route drops: HP/DEF + Ground +10%.',
+    requiredMaterials: [
+      { itemId: 'stone-chip', quantity: 6 },
+      { itemId: 'monolith-fragment', quantity: 2 },
+    ],
+    coinCost: 40,
+    result: { kind: 'gear', gearId: 'forge-bedrock-ward' },
+    minLevel: 8,
+    rarity: 'epic',
+    repeatable: true,
+  },
+  {
+    id: 'craft-forge-solar-crown',
+    name: 'Forge Solar Crown',
+    category: 'gear',
+    description:
+      'Legendary held gear — stronger than shop crowns: Fire +14%, all +5%.',
+    requiredMaterials: [
+      { itemId: 'ember-scale', quantity: 8 },
+      { itemId: 'monolith-fragment', quantity: 4 },
+      { itemId: 'material-alpha-claw', quantity: 1 },
+    ],
+    coinCost: 100,
+    result: { kind: 'gear', gearId: 'forge-solar-crown' },
+    minLevel: 12,
+    rarity: 'legendary',
+    repeatable: true,
+  },
+  {
+    id: 'craft-forge-abyss-bind',
+    name: 'Forge Abyss Bind',
+    category: 'gear',
+    description:
+      'Legendary held gear — stronger than shop crowns: Water +14%, all +5%.',
+    requiredMaterials: [
+      { itemId: 'tide-pearl', quantity: 8 },
+      { itemId: 'monolith-fragment', quantity: 4 },
+      { itemId: 'material-alpha-claw', quantity: 1 },
+    ],
+    coinCost: 100,
+    result: { kind: 'gear', gearId: 'forge-abyss-bind' },
+    minLevel: 12,
+    rarity: 'legendary',
+    repeatable: true,
+  },
+  {
+    id: 'craft-forge-worldroot-relic',
+    name: 'Forge Worldroot Relic',
+    category: 'gear',
+    description:
+      'Legendary held gear — stronger than shop crowns: Grass +14%, all +5%.',
+    requiredMaterials: [
+      { itemId: 'wild-seed', quantity: 8 },
+      { itemId: 'monolith-fragment', quantity: 4 },
+      { itemId: 'material-alpha-claw', quantity: 1 },
+    ],
+    coinCost: 100,
+    result: { kind: 'gear', gearId: 'forge-worldroot-relic' },
+    minLevel: 12,
+    rarity: 'legendary',
+    repeatable: true,
+  },
+  {
+    id: 'craft-forge-voltaic-relic',
+    name: 'Forge Voltaic Relic',
+    category: 'gear',
+    description:
+      'Legendary held gear — stronger than shop crowns: Electric +14%, all +5%.',
+    requiredMaterials: [
+      { itemId: 'volt-thread', quantity: 8 },
+      { itemId: 'monolith-fragment', quantity: 4 },
+      { itemId: 'material-alpha-claw', quantity: 1 },
+    ],
+    coinCost: 100,
+    result: { kind: 'gear', gearId: 'forge-voltaic-relic' },
+    minLevel: 12,
+    rarity: 'legendary',
+    repeatable: true,
+  },
+  {
+    id: 'craft-forge-earthshaper-relic',
+    name: 'Forge Earthshaper Relic',
+    category: 'gear',
+    description:
+      'Legendary held gear — stronger than shop crowns: Ground +14%, all +5%.',
+    requiredMaterials: [
+      { itemId: 'stone-chip', quantity: 8 },
+      { itemId: 'monolith-fragment', quantity: 4 },
+      { itemId: 'material-alpha-claw', quantity: 1 },
+    ],
+    coinCost: 100,
+    result: { kind: 'gear', gearId: 'forge-earthshaper-relic' },
+    minLevel: 12,
+    rarity: 'legendary',
     repeatable: true,
   },
   {
@@ -145,78 +267,6 @@ export const CRAFTING_RECIPES: CraftingRecipe[] = [
     repeatable: true,
   },
   {
-    id: 'exchange-material-sell-bundle',
-    name: 'Material Sell Bundle',
-    category: 'exchange',
-    description: 'Sell five common route materials for coins.',
-    requiredMaterials: [{ kind: 'anyCommonMaterial', quantity: 5 }],
-    coinCost: 0,
-    result: { kind: 'coins', amount: 25 },
-    minLevel: 1,
-    rarity: 'common',
-    repeatable: true,
-  },
-  {
-    id: 'exchange-alpha-trophy',
-    name: 'Alpha Trophy Exchange',
-    category: 'exchange',
-    description: 'Trade an Alpha Claw for 50 coins.',
-    requiredMaterials: [{ itemId: 'material-alpha-claw', quantity: 1 }],
-    coinCost: 0,
-    result: { kind: 'coins', amount: 50 },
-    minLevel: 1,
-    rarity: 'rare',
-    repeatable: true,
-  },
-  {
-    id: 'exchange-tide-pearl-coins',
-    name: 'Pearl Bulk Sale',
-    category: 'exchange',
-    description: 'Tide Pearl x5 → 25 coins.',
-    requiredMaterials: [{ itemId: 'tide-pearl', quantity: 5 }],
-    coinCost: 0,
-    result: { kind: 'coins', amount: 25 },
-    minLevel: 1,
-    rarity: 'common',
-    repeatable: true,
-  },
-  {
-    id: 'exchange-volt-thread-coins',
-    name: 'Thread Bulk Sale',
-    category: 'exchange',
-    description: 'Volt Thread x5 → 30 coins.',
-    requiredMaterials: [{ itemId: 'volt-thread', quantity: 5 }],
-    coinCost: 0,
-    result: { kind: 'coins', amount: 30 },
-    minLevel: 1,
-    rarity: 'common',
-    repeatable: true,
-  },
-  {
-    id: 'exchange-wild-seed-coins',
-    name: 'Seed Bulk Sale',
-    category: 'exchange',
-    description: 'Wild Seed x5 → 25 coins.',
-    requiredMaterials: [{ itemId: 'wild-seed', quantity: 5 }],
-    coinCost: 0,
-    result: { kind: 'coins', amount: 25 },
-    minLevel: 1,
-    rarity: 'common',
-    repeatable: true,
-  },
-  {
-    id: 'exchange-stone-chip-coins',
-    name: 'Chip Bulk Sale',
-    category: 'exchange',
-    description: 'Stone Chip x5 → 25 coins.',
-    requiredMaterials: [{ itemId: 'stone-chip', quantity: 5 }],
-    coinCost: 0,
-    result: { kind: 'coins', amount: 25 },
-    minLevel: 1,
-    rarity: 'common',
-    repeatable: true,
-  },
-  {
     id: 'exchange-fragment-consumable',
     name: 'Fragment Distill',
     category: 'exchange',
@@ -228,6 +278,7 @@ export const CRAFTING_RECIPES: CraftingRecipe[] = [
     rarity: 'uncommon',
     repeatable: true,
   },
+  ...buildMaterialExchangeRecipes(),
 ]
 
 export function getCraftingRecipeById(id: string): CraftingRecipe | undefined {

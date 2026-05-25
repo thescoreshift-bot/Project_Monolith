@@ -77,7 +77,8 @@ export function MonolithForgePanel({
       <div className="quest-board__npc">
         <h2 className="quest-board__npc-name">Monolith Forge</h2>
         <p className="quest-board__npc-text">
-          Use route materials to craft gear, upgrade held items, and trade rare resources.
+          Craft epic and legendary gear stronger than route drops. Swap excess materials
+          evenly at the exchange — no coin sales.
         </p>
       </div>
 

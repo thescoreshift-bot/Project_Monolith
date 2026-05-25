@@ -357,7 +357,7 @@ import {
   buildSaveEnvelope,
   deleteCloudSlot,
   getAllCloudSaveSlots,
-  loadFromCloudSlot,
+  getCloudSaveSlotResult,
   saveToCloudSlot,
   uploadLocalSlotToCloud,
 } from './utils/cloudSaveSystem'
@@ -2674,7 +2674,12 @@ function App() {
     runModeRef.current = 'normal'
     let saved: RunSaveData | null = null
     if (mode === 'cloud') {
-      const envelope = await loadFromCloudSlot(slotId)
+      const cloudLoad = await getCloudSaveSlotResult(slotId)
+      if (cloudLoad.error) {
+        window.alert(cloudLoad.error)
+        return
+      }
+      const envelope = cloudLoad.envelope
       if (!envelope) {
         window.alert('Could not load cloud save. The slot may be empty or corrupted.')
         return

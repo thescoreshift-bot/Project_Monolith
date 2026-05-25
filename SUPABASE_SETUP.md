@@ -460,6 +460,44 @@ Open the URL Vite prints (usually `http://localhost:5173`).
 
 ---
 
+## Fix game_saves RLS (run if you see “violates row-level security policy”)
+
+Paste in **SQL Editor** if cloud upload/save fails with an RLS error (safe to re-run):
+
+```sql
+alter table public.game_saves enable row level security;
+
+grant select, insert, update, delete on table public.game_saves to authenticated;
+
+drop policy if exists "Users can read their own saves" on public.game_saves;
+drop policy if exists "Users can insert their own saves" on public.game_saves;
+drop policy if exists "Users can update their own saves" on public.game_saves;
+drop policy if exists "Users can delete their own saves" on public.game_saves;
+
+create policy "Users can read their own saves"
+on public.game_saves for select to authenticated
+using (auth.uid() = user_id);
+
+create policy "Users can insert their own saves"
+on public.game_saves for insert to authenticated
+with check (auth.uid() = user_id);
+
+create policy "Users can update their own saves"
+on public.game_saves for update to authenticated
+using (auth.uid() = user_id)
+with check (auth.uid() = user_id);
+
+create policy "Users can delete their own saves"
+on public.game_saves for delete to authenticated
+using (auth.uid() = user_id);
+```
+
+Then sign out in the game, sign in again, and retry **Continue** or **Upload Local Save to Cloud**.
+
+In **Table Editor → game_saves**, confirm rows exist for your account (`user_id` matches **Authentication → Users**).
+
+---
+
 ## Troubleshooting
 
 | Problem | Fix |
@@ -468,4 +506,5 @@ Open the URL Vite prints (usually `http://localhost:5173`).
 | "Invalid API key" | Use anon/publishable key from **Settings → API**, not service role. |
 | Register works but login fails | Disable email confirmation for testing, or confirm email from inbox. |
 | Saves not appearing | Run the SQL above; check **Table Editor** → `game_saves`. |
-| RLS errors | Ensure user is logged in; policies must use `authenticated` role. |
+| RLS errors on `game_saves` | Sign out and sign in again. Run the **Fix game_saves RLS** SQL below. Never use the service role key in the app. |
+| Local saves “gone” but cloud should have data | `localStorage` is per browser + origin (`localhost` ≠ Vercel URL). Cloud saves need the **same login account** (new sign-up = new `user_id`). |
