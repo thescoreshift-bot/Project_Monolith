@@ -70,6 +70,13 @@ function appendEvolutionThresholds(
   }
 }
 
+export type DistributeBattleXpOptions = {
+  /** Multiply region-scaled base XP (Council gauntlet scaling). */
+  xpMultiplier?: number
+  /** Replace base XP entirely (after region scale if encounter kind used). */
+  xpOverride?: number
+}
+
 export function distributeBattleXp(
   encounterKind: EncounterKind,
   regionId: string,
@@ -79,8 +86,14 @@ export function distributeBattleXp(
   preReviveHp: { starterHp: number; helperHp: number | null },
   starterLevelBefore: number,
   recruitLevelsBefore: Record<string, number>,
+  options?: DistributeBattleXpOptions,
 ): BattleXpResult {
-  const baseXp = getXpReward(encounterKind, regionId)
+  const rawBase =
+    options?.xpOverride ?? getXpReward(encounterKind, regionId)
+  const baseXp = Math.max(
+    1,
+    Math.floor(rawBase * (options?.xpMultiplier ?? 1)),
+  )
   const helper = getActiveCombatHelper(recruits, activeHelperId)
   const xpLines: CreatureXpGainLine[] = []
   const levelUpLines: CreatureLevelUpLine[] = []

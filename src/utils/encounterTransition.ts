@@ -21,6 +21,7 @@ export type EncounterDisplayType =
   | 'gymTrainer'
   | 'gymLeader'
   | 'boss'
+  | 'council'
 
 export type EncounterAudioProfile = 'battleRandom' | 'eliteBoss'
 
@@ -72,6 +73,7 @@ export function resolveEncounterDisplayType(
   if (encounterKind === 'gymTrainer') return 'gymTrainer'
   if (encounterKind === 'gymLeader') return 'gymLeader'
   if (encounterKind === 'boss') return 'boss'
+  if (encounterKind === 'council') return 'council'
   return 'normal'
 }
 
@@ -83,6 +85,7 @@ const MESSAGES: Record<EncounterDisplayType, string> = {
   gymTrainer: 'Trainer Challenge',
   gymLeader: 'Badge Trial Initiated',
   boss: 'MONOLITH GUARDIAN AWAKENS',
+  council: 'MONOLITH COUNCIL CHALLENGE',
 }
 
 const TYPE_LABELS: Record<EncounterDisplayType, string> = {
@@ -93,6 +96,7 @@ const TYPE_LABELS: Record<EncounterDisplayType, string> = {
   gymTrainer: 'Gym Trainer',
   gymLeader: 'Badge Trial',
   boss: 'Monolith Guardian',
+  council: 'Monolith Council',
 }
 
 export function buildEncounterTransitionView(
@@ -107,7 +111,7 @@ export function buildEncounterTransitionView(
   const useTrainerPortrait = isGym && Boolean(display.trainerPortraitUrl)
 
   const intensity: EncounterTransitionView['intensity'] =
-    displayType === 'boss'
+    displayType === 'boss' || displayType === 'council'
       ? 'boss'
       : displayType === 'normal'
         ? 'normal'
@@ -136,9 +140,12 @@ export function buildEncounterTransitionView(
     showFlash:
       displayType === 'alpha' ||
       displayType === 'eventAlpha' ||
-      displayType === 'boss',
+      displayType === 'boss' ||
+      displayType === 'council',
     hidePortraitDetail:
-      displayType === 'boss' || displayType === 'eventAlpha',
+      displayType === 'boss' ||
+      displayType === 'eventAlpha' ||
+      displayType === 'council',
   }
 }
 
@@ -160,6 +167,7 @@ export function getEncounterPhaseSchedule(
 
   switch (displayType) {
     case 'boss':
+    case 'council':
       return [
         { phase: 'start', atMs: 0 },
         { phase: 'warning', atMs: 280 },

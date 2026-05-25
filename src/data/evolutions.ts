@@ -1,8 +1,7 @@
-import type { PerkCategory } from './perks'
-import type { StatModifiers } from './perks'
+import type { EvolutionBranchCategory, StatModifiers } from './perks'
 import { ALL_RECRUIT_EVOLUTION_FORMS } from './recruitEvolutions'
 
-export type EvolutionBranchCategory = PerkCategory
+export type { EvolutionBranchCategory } from './perks'
 
 export type EvolutionForm = {
   id: string

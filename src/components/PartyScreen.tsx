@@ -301,10 +301,12 @@ function CreatureCard({
                           [{modLines.join(', ')}]
                         </span>
                       )}
-                      <span className="party-creature__perk-evo">
-                        {' '}
-                        · {getPerkEvolutionScoreLabel(perk)}
-                      </span>
+                      {getPerkEvolutionScoreLabel(perk) ? (
+                        <span className="party-creature__perk-evo">
+                          {' '}
+                          · {getPerkEvolutionScoreLabel(perk)}
+                        </span>
+                      ) : null}
                     </li>
                   )
                 })}

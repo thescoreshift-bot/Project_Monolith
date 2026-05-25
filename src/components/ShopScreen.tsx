@@ -1,14 +1,29 @@
+import { useMemo } from 'react'
 import { getGearItem } from '../data/gearItems'
-import { SHOP_ITEMS, type ShopItemId } from '../data/shopItems'
+import { getItemDefinition } from '../data/items'
 import { formatGearSummary } from '../utils/gearSystem'
+import {
+  getShopItemOwnership,
+  type TrainerInventory,
+} from '../utils/inventorySystem'
+import {
+  formatPurchaseCostLabel,
+  getGearPurchasePrice,
+  getItemPurchasePrice,
+  shopTypeToPurchaseSource,
+} from '../utils/itemPurchasePrice'
+import { isPremiumShopType, type PersistedShopInventory } from '../utils/shopGeneration'
+import type { PartyCreature } from '../utils/party'
 import type { RunCreature } from '../utils/progression'
+import { ShopItemCard } from './ShopItemCard'
 
 type ShopScreenProps = {
   creature: RunCreature
+  recruits: PartyCreature[]
+  inventory: TrainerInventory
+  shopInventory: PersistedShopInventory
   shopLog: string[]
-  gearOffers: string[]
-  variant?: 'market' | 'relic'
-  onBuyConsumable: (itemId: ShopItemId) => void
+  onBuyItem: (itemId: string) => void
   onBuyGear: (gearId: string) => void
   onOpenInventory?: () => void
   onLeave: () => void
@@ -16,30 +31,118 @@ type ShopScreenProps = {
 
 export function ShopScreen({
   creature,
+  recruits,
+  inventory,
+  shopInventory,
   shopLog,
-  gearOffers,
-  variant = 'market',
-  onBuyConsumable,
+  onBuyItem,
   onBuyGear,
   onOpenInventory,
   onLeave,
 }: ShopScreenProps) {
-  const isRelic = variant === 'relic'
-  const gearItems = gearOffers
+  const isRelic = isPremiumShopType(shopInventory.shopType)
+  const ownershipCtx = useMemo(
+    () => ({ inventory, starter: creature, recruits }),
+    [inventory, creature, recruits],
+  )
+
+  const gearItems = shopInventory.gearIds
     .map((id) => getGearItem(id))
     .filter((g): g is NonNullable<typeof g> => g !== null)
+
+  const catalogItems = shopInventory.itemIds
+    .map((id) => getItemDefinition(id))
+    .filter((d): d is NonNullable<typeof d> => d !== null)
+
+  const consumables = catalogItems.filter((d) => d.category === 'consumable')
+  const materials = catalogItems.filter((d) => d.category === 'material')
+  const otherItems = catalogItems.filter(
+    (d) => d.category !== 'consumable' && d.category !== 'material',
+  )
+
+  const titleForType = (): { title: string; subtitle: string } => {
+    switch (shopInventory.shopType) {
+      case 'reliquary':
+        return {
+          title: 'Ash Reliquary',
+          subtitle: 'Rare relic gear and monolith-touched finds — stock varies each visit.',
+        }
+      case 'curator':
+      case 'monolithVendor':
+        return {
+          title: 'Monolith Curator',
+          subtitle: 'Crafting materials and archive relics for the forge.',
+        }
+      case 'wanderingTrader':
+        return {
+          title: 'Wandering Trader',
+          subtitle: 'Traveling supplies, tonics, and odd materials.',
+        }
+      case 'cache':
+        return {
+          title: 'Supply Cache',
+          subtitle: 'Stashed consumables and practical gear.',
+        }
+      case 'alphaVendor':
+        return {
+          title: 'Alpha Vendor',
+          subtitle: 'Alpha-hunt gear and claw materials.',
+        }
+      case 'driftMarket':
+        return {
+          title: 'Drift Market',
+          subtitle: 'Rotating gear, supplies, and materials before the path closes.',
+        }
+      default:
+        return {
+          title: isRelic ? 'Relic Vault' : 'Drift Market',
+          subtitle: isRelic
+            ? 'Premium epic, mythic, and legendary gear — prices are steep.'
+            : 'Spend coins on supplies and held gear before the path closes.',
+        }
+    }
+  }
+
+  const { title, subtitle } = titleForType()
+  const purchaseSource = shopTypeToPurchaseSource(shopInventory.shopType)
+
+  function renderCatalogItem(def: (typeof catalogItems)[0]) {
+    const ownership = getShopItemOwnership(
+      ownershipCtx.inventory,
+      def.id,
+      ownershipCtx.starter,
+      ownershipCtx.recruits,
+    )
+    const cost = getItemPurchasePrice(def, purchaseSource)
+    const canBuy = cost != null && creature.coins >= cost
+    return (
+      <ShopItemCard
+        key={def.id}
+        name={def.name}
+        rarity={def.rarity}
+        cost={cost ?? 0}
+        costLabel={formatPurchaseCostLabel(cost)}
+        description={def.description}
+        category={def.category}
+        ownership={ownership}
+      >
+        <button
+          type="button"
+          className="btn btn--small btn--primary"
+          onClick={() => onBuyItem(def.id)}
+          disabled={!canBuy}
+        >
+          {cost == null ? 'Unavailable' : 'Buy'}
+        </button>
+      </ShopItemCard>
+    )
+  }
 
   return (
     <main className="shop-screen">
       <header className="screen-header">
-        <h1 className="screen-header__title">
-          {isRelic ? 'Relic Vault' : 'Drift Market'}
-        </h1>
-        <p className="screen-header__subtitle">
-          {isRelic
-            ? 'Premium epic, mythic, and legendary gear tuned to your element — prices are steep.'
-            : 'Spend coins on supplies and held gear before the path closes.'}
-        </p>
+        <h1 className="screen-header__title">{title}</h1>
+        <p className="screen-header__subtitle">{subtitle}</p>
       </header>
 
       <p className="shop-screen__coins">
@@ -47,34 +150,30 @@ export function ShopScreen({
         <strong>{creature.coins}</strong>
       </p>
 
-      {!isRelic && (
+      {consumables.length > 0 && (
         <section className="shop-screen__section" aria-labelledby="consumables-heading">
           <h2 id="consumables-heading" className="shop-screen__section-title">
             Consumables
           </h2>
-          <div className="shop-items">
-            {SHOP_ITEMS.map((item) => (
-              <article key={item.id} className="shop-item">
-                <header className="shop-item__header">
-                  <h3 className="shop-item__name">{item.name}</h3>
-                  <span className={`shop-item__rarity shop-item__rarity--${item.rarity}`}>
-                    {item.rarity}
-                  </span>
-                  <span className="shop-item__cost">{item.cost} coins</span>
-                </header>
-                <p className="shop-item__desc">{item.description}</p>
-                <p className="shop-item__category">consumable</p>
-                <button
-                  type="button"
-                  className="btn btn--small btn--primary"
-                  onClick={() => onBuyConsumable(item.id)}
-                  disabled={creature.coins < item.cost}
-                >
-                  Buy
-                </button>
-              </article>
-            ))}
-          </div>
+          <div className="shop-items">{consumables.map(renderCatalogItem)}</div>
+        </section>
+      )}
+
+      {materials.length > 0 && (
+        <section className="shop-screen__section" aria-labelledby="materials-heading">
+          <h2 id="materials-heading" className="shop-screen__section-title">
+            Materials
+          </h2>
+          <div className="shop-items">{materials.map(renderCatalogItem)}</div>
+        </section>
+      )}
+
+      {otherItems.length > 0 && (
+        <section className="shop-screen__section" aria-labelledby="other-items-heading">
+          <h2 id="other-items-heading" className="shop-screen__section-title">
+            Special items
+          </h2>
+          <div className="shop-items">{otherItems.map(renderCatalogItem)}</div>
         </section>
       )}
 
@@ -86,31 +185,39 @@ export function ShopScreen({
           <p className="shop-screen__empty">No gear in stock this visit.</p>
         ) : (
           <div className="shop-items">
-            {gearItems.map((gear) => (
-              <article key={gear.id} className="shop-item shop-item--gear">
-                <header className="shop-item__header">
-                  <h3 className="shop-item__name">{gear.name}</h3>
-                  <span className={`shop-item__rarity shop-item__rarity--${gear.rarity}`}>
-                    {gear.rarity}
-                  </span>
-                  <span className="shop-item__cost">{gear.price} coins</span>
-                </header>
-                <p className="shop-item__desc">{gear.description}</p>
-                <ul className="shop-item__stats">
-                  {formatGearSummary(gear).map((line) => (
-                    <li key={line}>{line}</li>
-                  ))}
-                </ul>
-                <button
-                  type="button"
-                  className="btn btn--small btn--primary"
-                  onClick={() => onBuyGear(gear.id)}
-                  disabled={creature.coins < gear.price}
+            {gearItems.map((gear) => {
+              const ownership = getShopItemOwnership(
+                ownershipCtx.inventory,
+                gear.id,
+                ownershipCtx.starter,
+                ownershipCtx.recruits,
+                { trackEquipped: true },
+              )
+              const cost = getGearPurchasePrice(gear, purchaseSource)
+              const canBuy = cost != null && creature.coins >= cost
+              return (
+                <ShopItemCard
+                  key={gear.id}
+                  name={gear.name}
+                  rarity={gear.rarity}
+                  cost={cost ?? 0}
+                  costLabel={formatPurchaseCostLabel(cost)}
+                  description={gear.description}
+                  ownership={ownership}
+                  variant="gear"
+                  stats={formatGearSummary(gear)}
                 >
-                  Buy
-                </button>
-              </article>
-            ))}
+                  <button
+                    type="button"
+                    className="btn btn--small btn--primary"
+                    onClick={() => onBuyGear(gear.id)}
+                    disabled={!canBuy}
+                  >
+                    {cost == null ? 'Unavailable' : 'Buy'}
+                  </button>
+                </ShopItemCard>
+              )
+            })}
           </div>
         )}
       </section>

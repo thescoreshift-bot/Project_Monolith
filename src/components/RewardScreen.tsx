@@ -23,6 +23,13 @@ export type RewardScreenData = {
   pendingChoices: PendingChoiceSummary[]
   questProgressLines?: string[]
   questCompletedTitles?: string[]
+  councilGauntletStep?: {
+    fightNumber: number
+    totalFights: number
+    trialName: string
+    nextTrialName?: string
+    gauntletComplete: boolean
+  }
 }
 
 type RewardScreenProps = {
@@ -32,19 +39,37 @@ type RewardScreenProps = {
 
 export function RewardScreen({ reward, onContinue }: RewardScreenProps) {
   const nextStep = formatRewardNextStep(reward.pendingChoices)
-  const continueLabel = reward.bossVictory
-    ? 'Continue'
-    : reward.hasPerkDrafts
+  const council = reward.councilGauntletStep
+  const continueLabel = council
+    ? council.gauntletComplete
+      ? 'Continue to Council rewards'
+      : 'Continue to Council intermission'
+    : reward.bossVictory
       ? 'Continue'
-      : 'Continue Run'
+      : reward.hasPerkDrafts
+        ? 'Continue'
+        : 'Continue Run'
 
   return (
     <main className="reward-screen">
       <header className="screen-header">
-        <h1 className="screen-header__title">Victory!</h1>
+        <h1 className="screen-header__title">
+          {council ? 'Council trial cleared!' : 'Victory!'}
+        </h1>
         <p className="screen-header__subtitle">
-          {reward.enemyName} was defeated.
+          {council
+            ? `${reward.enemyName} — fight ${council.fightNumber} / ${council.totalFights}`
+            : `${reward.enemyName} was defeated.`}
         </p>
+        {council && (
+          <p className="reward-screen__council-note" role="status">
+            {council.gauntletComplete
+              ? 'Final Warden defeated — claim your region Council rewards next.'
+              : council.nextTrialName
+                ? `Next up: ${council.nextTrialName}. You will recover 20% max HP before the next fight.`
+                : 'Continue when ready for the next Council trial.'}
+          </p>
+        )}
         {reward.bossVictory && (
           <p className="reward-screen__boss-note" role="status">
             Boss defeated! This region has been cleared.

@@ -48,7 +48,14 @@ export function createScoreTracker(starterLevel = 1): RunScoreTracker {
 
 export function recordBattleVictory(
   tracker: RunScoreTracker,
-  kind: 'battle' | 'elite' | 'alphaNest' | 'gymTrainer' | 'gymLeader' | 'boss',
+  kind:
+    | 'battle'
+    | 'elite'
+    | 'alphaNest'
+    | 'gymTrainer'
+    | 'gymLeader'
+    | 'boss'
+    | 'council',
 ): void {
   switch (kind) {
     case 'battle':
@@ -68,6 +75,9 @@ export function recordBattleVictory(
       break
     case 'boss':
       tracker.bossesDefeated += 1
+      break
+    case 'council':
+      tracker.elitesWon += 1
       break
   }
 }

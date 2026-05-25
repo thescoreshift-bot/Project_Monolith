@@ -20,6 +20,12 @@ import {
   type CreatureWithGear,
 } from './gearSystem'
 import { recalculateStats, type RunCreature } from './progression'
+import {
+  aggregatePerkCombatEffects,
+  getPerkDamageMultiplier,
+  getTypeDamageMultFromPerks,
+} from './perkCombat'
+import type { EnemyKind } from '../data/enemies'
 
 export type CombatFighter = RunCreature | PartyCreature
 
@@ -181,14 +187,22 @@ export function getDefenderStatsForAttack(
   ability: Ability,
   attackerPerks: string[],
 ): Pick<StarterStats, 'atk' | 'def' | 'spAtk' | 'spDef'> {
-  if (
-    creatureHasCombatTag(attackerPerks, 'piercing_instinct') &&
-    ability.category === 'physical'
-  ) {
-    return {
-      ...defender,
-      def: Math.max(0, defender.def - 5),
+  const effects = aggregatePerkCombatEffects(attackerPerks)
+  let def = defender.def
+  let spDef = defender.spDef
+  if (ability.category === 'physical') {
+    if (effects.ignoreDefFlat) {
+      def = Math.max(0, def - effects.ignoreDefFlat)
     }
+    if (effects.ignoreDefPercent) {
+      def = Math.max(0, Math.floor(def * (1 - effects.ignoreDefPercent)))
+    }
+  }
+  if (effects.ignoreDefPercent) {
+    spDef = Math.max(0, Math.floor(spDef * (1 - effects.ignoreDefPercent)))
+  }
+  if (def !== defender.def || spDef !== defender.spDef) {
+    return { ...defender, def, spDef }
   }
   return defender
 }
@@ -198,6 +212,13 @@ export function getAttackerDamageMultiplier(
   earnedBadges: string[],
   selectedPerks: string[],
   attacker?: CombatFighter | null,
+  context?: {
+    defenderHpRatio?: number
+    typeMultiplier?: number
+    encounterKind?: EnemyKind
+    consecutiveDamageHits?: number
+    rhythmHitIndex?: number
+  },
 ): number {
   let mult = getDamageMultiplierForAbility(ability, earnedBadges)
 
@@ -211,6 +232,28 @@ export function getAttackerDamageMultiplier(
   const typeTag = TYPE_DAMAGE_TAGS[ability.type]
   if (typeTag && creatureHasCombatTag(selectedPerks, typeTag)) {
     mult += 0.1
+  }
+
+  const effects = aggregatePerkCombatEffects(selectedPerks)
+  mult += getTypeDamageMultFromPerks(ability.type, effects)
+
+  if (context && attacker) {
+    const perkMult = getPerkDamageMultiplier(
+      ability,
+      attacker.type,
+      effects,
+      {
+        defenderHpRatio: context.defenderHpRatio ?? 1,
+        typeMultiplier: context.typeMultiplier ?? 1,
+        encounterKind: context.encounterKind ?? 'normal',
+        isPhysical: ability.category === 'physical',
+        consecutiveDamageHits: context.consecutiveDamageHits ?? 0,
+        rhythmHitIndex: context.rhythmHitIndex ?? 0,
+      },
+    )
+    mult *= perkMult
+  } else if (effects.damageDealtMult) {
+    mult *= 1 + effects.damageDealtMult
   }
 
   if (attacker) {
@@ -231,8 +274,17 @@ export function getFirstStrikeBonus(
   alreadyUsed: boolean,
 ): number {
   if (alreadyUsed) return 0
-  if (creatureHasCombatTag(selectedPerks, 'first_strike')) return 8
-  return 0
+  const effects = aggregatePerkCombatEffects(selectedPerks)
+  return effects.firstStrikeBonus ?? 0
+}
+
+export function getFirstStrikeDamageMult(
+  selectedPerks: string[],
+  alreadyUsed: boolean,
+): number {
+  if (alreadyUsed) return 0
+  const effects = aggregatePerkCombatEffects(selectedPerks)
+  return effects.firstStrikeDamageMult ?? 0
 }
 
 export function getDamageMultiplierForAbility(

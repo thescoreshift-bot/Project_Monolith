@@ -1,7 +1,7 @@
 import type { CreatureArchiveEntry } from './creatureArchive'
 import type { EvolutionForm } from './evolutions'
 import { ALL_EVOLUTION_FORMS, getEvolutionForStarter, getEvolutionFormById } from './evolutions'
-import type { PerkCategory } from './perks'
+import type { EvolutionBranchCategory } from './perks'
 import {
   getEvolutionForRecruit,
   ALL_RECRUIT_EVOLUTION_FORMS,
@@ -15,7 +15,7 @@ import {
 import type { ElementType, Starter } from './starters'
 import type { EvolutionHistoryEntry } from '../utils/progression'
 
-const NPC_BRANCH_PRIORITY: PerkCategory[] = [
+const NPC_BRANCH_PRIORITY: EvolutionBranchCategory[] = [
   'offense',
   'defense',
   'utility',
@@ -23,7 +23,7 @@ const NPC_BRANCH_PRIORITY: PerkCategory[] = [
   'evolution',
 ]
 
-function defaultNpcEvolutionBranch(type: ElementType): PerkCategory {
+function defaultNpcEvolutionBranch(type: ElementType): EvolutionBranchCategory {
   switch (type) {
     case 'Fire':
       return 'offense'
@@ -59,7 +59,7 @@ function getFormForNpc(
   evolutionKey: string,
   type: ElementType,
   stage: number,
-  branch: PerkCategory,
+  branch: EvolutionBranchCategory,
 ): EvolutionForm | undefined {
   const recruitBase = normalizeRecruitTemplateId(evolutionKey)
   return (
@@ -173,7 +173,7 @@ export function getStarterPortraitForType(type: ElementType): string | null {
 export function getEvolutionPortraitUrl(
   evolutionKey: string,
   stage: number,
-  branchCategory: PerkCategory,
+  branchCategory: EvolutionBranchCategory,
 ): string | null {
   const form =
     getEvolutionForRecruit(evolutionKey, stage, branchCategory) ??
@@ -202,7 +202,7 @@ export function getEvolutionPortraitUrl(
 export function getRecruitEvolutionPortraitUrl(
   templateId: string,
   stage: number,
-  branchCategory: PerkCategory,
+  branchCategory: EvolutionBranchCategory,
 ): string | null {
   const base = normalizeRecruitTemplateId(templateId)
   return getEvolutionPortraitUrl(base, stage, branchCategory)
@@ -325,7 +325,7 @@ export function getPortraitForArchiveEntry(entry: CreatureArchiveEntry): string 
 export function getPortraitForEvolutionForm(form: {
   fromStarterType: string
   stage: number
-  branchCategory: PerkCategory
+  branchCategory: EvolutionBranchCategory
   portraitUrl?: string
 }): string | null {
   if (form.portraitUrl) return form.portraitUrl

@@ -38,6 +38,10 @@ export type AchievementStatKeys = {
   forgeItemsCrafted: number
   forgeGearUpgrades: number
   forgeAlphaCrafts: number
+  councilUnlocked: number
+  councilCompleted: number
+  councilFightsWon: number
+  wardensDefeated: number
 }
 
 export const ACHIEVEMENT_DEFINITIONS: AchievementDefinition[] = [
@@ -160,6 +164,36 @@ export const ACHIEVEMENT_DEFINITIONS: AchievementDefinition[] = [
     required: 25,
     statKey: 'itemsCollected',
     reward: { type: 'coins', amount: 200 },
+  },
+  {
+    id: 'council-challenger',
+    title: 'Council Challenger',
+    description: 'Unlock The Monolith Council in any region.',
+    category: 'Progression',
+    required: 1,
+    statKey: 'councilUnlocked',
+    reward: { type: 'coins', amount: 50 },
+  },
+  {
+    id: 'council-initiate-achievement',
+    title: 'Council Initiate',
+    description: 'Complete your first region Monolith Council.',
+    category: 'Progression',
+    required: 1,
+    statKey: 'councilCompleted',
+    reward: { type: 'title', titleId: 'council-initiate', titleName: 'Council Initiate' },
+  },
+  {
+    id: 'warden-breaker',
+    title: 'Warden Breaker',
+    description: 'Defeat a Monolith Warden in the Council gauntlet.',
+    category: 'Bosses',
+    required: 1,
+    statKey: 'wardensDefeated',
+    reward: {
+      type: 'items',
+      items: [{ itemId: 'monolith-fragment', quantity: 2 }],
+    },
   },
 ]
 

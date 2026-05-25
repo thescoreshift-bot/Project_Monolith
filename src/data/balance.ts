@@ -26,6 +26,7 @@ export const BALANCE = {
     gymTrainer: 1.4,
     gymLeader: 1.6,
     boss: 2,
+    council: 1.35,
   } satisfies Record<EncounterKind, number>,
   enemyKindHpMultipliers: {
     normal: 1,

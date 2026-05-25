@@ -1,5 +1,5 @@
 import type { TemporaryBattleBuff } from './battleBuffs'
-import type { Perk, PerkCategory } from '../data/perks'
+import type { EvolutionBranchCategory, Perk, PerkCategory } from '../data/perks'
 import { getPerk, PERKS } from '../data/perks'
 import { getPerkCombatTag } from '../data/creaturePerks'
 import type { Starter, StarterStats } from '../data/starters'
@@ -9,6 +9,7 @@ import {
 } from './abilityMastery'
 import { creatureHasCombatTag } from '../data/creaturePerks'
 import { normalizeCreatureAbilities } from './creatureAbilities'
+import { aggregatePerkCombatEffects } from './perkCombat'
 
 export type EvolutionScores = {
   offense: number
@@ -28,7 +29,7 @@ export type BattleBuffs = {
 export type EvolutionHistoryEntry = {
   level: number
   stage: number
-  branchCategory: PerkCategory
+  branchCategory: EvolutionBranchCategory
   previousName: string
   newName: string
   evolutionId: string
@@ -75,8 +76,27 @@ const EVOLUTION_SCORE_BY_RARITY: Record<
   number
 > = {
   common: 1,
+  uncommon: 1,
   rare: 2,
+  epic: 2,
   legendary: 3,
+}
+
+function evolutionPathForCategory(
+  category: Perk['category'],
+): keyof EvolutionScores {
+  switch (category) {
+    case 'offense':
+      return 'offense'
+    case 'defense':
+      return 'defense'
+    case 'speed':
+      return 'speed'
+    case 'evolution':
+      return 'evolution'
+    default:
+      return 'utility'
+  }
 }
 
 export function getXpToNextLevel(level: number): number {
@@ -164,6 +184,20 @@ export function recalculateStats(
     if (statModifiers.maxHp) stats.hp += statModifiers.maxHp
   }
 
+  const effects = aggregatePerkCombatEffects(perkIds)
+  if (effects.maxHpPercent) {
+    stats.hp = Math.round(stats.hp * (1 + effects.maxHpPercent))
+  }
+  if (effects.defPercent) {
+    stats.def = Math.round(stats.def * (1 + effects.defPercent))
+  }
+  if (effects.spDefPercent) {
+    stats.spDef = Math.round(stats.spDef * (1 + effects.spDefPercent))
+  }
+  if (effects.spdPercent) {
+    stats.spd = Math.round(stats.spd * (1 + effects.spdPercent))
+  }
+
   return stats
 }
 
@@ -178,13 +212,21 @@ export function getEvolutionScoreGain(perk: Perk): number {
   return EVOLUTION_SCORE_BY_RARITY[perk.rarity]
 }
 
-export function getPerkEvolutionScoreLabel(perk: Perk): string {
-  const gain = getEvolutionScoreGain(perk)
+export function getPerkEvolutionScoreLabel(perk: Perk): string | null {
   if (getPerkCombatTag(perk.id) === 'adaptive_core' || perk.id === 'adaptive-core') {
-    return 'All paths +1'
+    return 'Also all evolution paths +1'
   }
-  const label = perk.category.charAt(0).toUpperCase() + perk.category.slice(1)
-  return `${label} +${gain}`
+  if (perk.secondaryEvolutionPath) {
+    const path =
+      perk.secondaryEvolutionPath.charAt(0).toUpperCase() +
+      perk.secondaryEvolutionPath.slice(1)
+    return `Also ${path} path +1`
+  }
+  if (perk.category === 'evolution') {
+    const gain = getEvolutionScoreGain(perk)
+    return `Evolution +${gain}`
+  }
+  return null
 }
 
 export function applyEvolutionScore(
@@ -203,7 +245,11 @@ export function applyEvolutionScore(
     return next
   }
 
-  next[perk.category] += gain
+  const mainPath = evolutionPathForCategory(perk.category)
+  next[mainPath] += gain
+  if (perk.secondaryEvolutionPath) {
+    next[perk.secondaryEvolutionPath] += 1
+  }
   return next
 }
 

@@ -73,6 +73,10 @@ export type RetentionStats = {
   forgeItemsCrafted: number
   forgeGearUpgrades: number
   forgeAlphaCrafts: number
+  councilUnlocked: number
+  councilCompleted: number
+  councilFightsWon: number
+  wardensDefeated: number
 }
 
 export type PendingRetentionRewards = {
@@ -145,6 +149,12 @@ export type GameEventType =
   | 'gearCrafted'
   | 'gearUpgraded'
   | 'materialExchanged'
+  | 'monolithCouncilUnlocked'
+  | 'councilFightWon'
+  | 'councilTrialCompleted'
+  | 'councilCompleted'
+  | 'monolithWardenDefeated'
+  | 'regionCompleted'
 
 export type GameEventPayload = {
   templateId?: string
@@ -240,6 +250,10 @@ function emptyStats(): RetentionStats {
     forgeItemsCrafted: 0,
     forgeGearUpgrades: 0,
     forgeAlphaCrafts: 0,
+    councilUnlocked: 0,
+    councilCompleted: 0,
+    councilFightsWon: 0,
+    wardensDefeated: 0,
   }
 }
 
@@ -1081,6 +1095,58 @@ export function trackGameEvent(
       }
       break
     case 'materialExchanged':
+      break
+    case 'monolithCouncilUnlocked':
+      next = {
+        ...next,
+        stats: { ...next.stats, councilUnlocked: next.stats.councilUnlocked + 1 },
+      }
+      break
+    case 'councilFightWon':
+      next = {
+        ...next,
+        stats: { ...next.stats, councilFightsWon: next.stats.councilFightsWon + 1 },
+      }
+      break
+    case 'councilTrialCompleted':
+      break
+    case 'councilCompleted':
+      next = {
+        ...next,
+        stats: { ...next.stats, councilCompleted: next.stats.councilCompleted + 1 },
+      }
+      if (payload.regionId) {
+        next = {
+          ...next,
+          collectionLog: {
+            ...next.collectionLog,
+            regionsCleared: {
+              ...next.collectionLog.regionsCleared,
+              [payload.regionId]: true,
+            },
+          },
+        }
+      }
+      break
+    case 'monolithWardenDefeated':
+      next = {
+        ...next,
+        stats: { ...next.stats, wardensDefeated: next.stats.wardensDefeated + 1 },
+      }
+      break
+    case 'regionCompleted':
+      if (payload.regionId) {
+        next = {
+          ...next,
+          collectionLog: {
+            ...next.collectionLog,
+            regionsCleared: {
+              ...next.collectionLog.regionsCleared,
+              [payload.regionId]: true,
+            },
+          },
+        }
+      }
       break
     default:
       break

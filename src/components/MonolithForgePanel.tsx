@@ -11,6 +11,7 @@ import {
   formatMaterialLabel,
   getGearUpgradeCost,
 } from '../utils/forgeSystem'
+import { getRecipeCraftCoinCost } from '../utils/itemPurchasePrice'
 import { formatGearSummary } from '../utils/gearSystem'
 import type { TrainerInventory } from '../utils/inventorySystem'
 type ForgeTab = 'consumable' | 'gear' | 'upgrade' | 'exchange'
@@ -307,8 +308,9 @@ function NeedList({
       })
     }
   }
-  if (recipe.coinCost > 0) {
-    lines.push({ label: 'Coins', have: coins, need: recipe.coinCost })
+  const craftCoinCost = getRecipeCraftCoinCost(recipe)
+  if (craftCoinCost > 0) {
+    lines.push({ label: 'Coins', have: coins, need: craftCoinCost })
   }
 
   return (
@@ -318,7 +320,7 @@ function NeedList({
         {lines.map((line) => {
           const isMissing =
             line.have < line.need ||
-            (line.label === 'Coins' && coins < recipe.coinCost)
+            (line.label === 'Coins' && coins < craftCoinCost)
           return (
             <li
               key={line.label}

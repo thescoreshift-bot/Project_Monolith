@@ -5,6 +5,7 @@ type RegionSelectScreenProps = {
   regions: Region[]
   partyHighestLevel: number
   hintMessage?: string | null
+  councilStatusBanner?: string | null
   onTravel: (regionId: string) => void
 }
 
@@ -12,6 +13,7 @@ export function RegionSelectScreen({
   regions,
   partyHighestLevel,
   hintMessage,
+  councilStatusBanner,
   onTravel,
 }: RegionSelectScreenProps) {
   return (
@@ -27,6 +29,11 @@ export function RegionSelectScreen({
         {hintMessage && (
           <p className="region-select-screen__hint" role="status">
             {hintMessage}
+          </p>
+        )}
+        {councilStatusBanner && (
+          <p className="region-select-screen__council-banner" role="status">
+            {councilStatusBanner}
           </p>
         )}
       </header>

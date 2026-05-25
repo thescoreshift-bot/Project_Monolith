@@ -18,8 +18,10 @@ import type { PartyCreature } from '../utils/party'
 import type { RunCreature } from '../utils/progression'
 import type { TrainerInventory } from '../utils/inventorySystem'
 import { getPartyHighestLevel } from '../utils/regionRewards'
+import { CouncilScoutPanel } from './CouncilScoutPanel'
+import type { MonolithCouncilSaveState } from '../utils/monolithCouncilState'
 
-type RecoveryTab = 'heal' | 'request' | 'active' | 'forge'
+type RecoveryTab = 'heal' | 'request' | 'active' | 'forge' | 'council'
 
 export function RecoveryStationScreen({
   creature,
@@ -44,6 +46,11 @@ export function RecoveryStationScreen({
   onForgeCraft,
   onForgeUpgradeInventory,
   onForgeUpgradeEquipped,
+  councilScoutUnlocked,
+  monolithCouncilState,
+  currentRegionId,
+  earnedBadges,
+  completedRegionIds,
   onBack,
 }: {
   creature: RunCreature
@@ -68,6 +75,11 @@ export function RecoveryStationScreen({
   onForgeCraft: (recipeId: string) => void
   onForgeUpgradeInventory: (instanceId: string) => void
   onForgeUpgradeEquipped: (creatureKey: string) => void
+  councilScoutUnlocked?: boolean
+  monolithCouncilState?: MonolithCouncilSaveState
+  currentRegionId?: string
+  earnedBadges?: string[]
+  completedRegionIds?: string[]
   onBack: () => void
 }) {
   const [tab, setTab] = useState<RecoveryTab>('heal')
@@ -125,6 +137,15 @@ export function RecoveryStationScreen({
         >
           Monolith Forge
         </button>
+        {councilScoutUnlocked && monolithCouncilState && currentRegionId && (
+          <button
+            type="button"
+            className={`btn btn--small${tab === 'council' ? ' btn--primary' : ''}`}
+            onClick={() => setTab('council')}
+          >
+            Council Scout
+          </button>
+        )}
       </nav>
 
       {tab !== 'forge' && (
@@ -252,6 +273,17 @@ export function RecoveryStationScreen({
           canRefreshFree={canRefreshFree}
           onAccept={onAcceptRequest}
           onRefresh={onRefreshRequests}
+        />
+      ) : tab === 'council' &&
+        councilScoutUnlocked &&
+        monolithCouncilState &&
+        currentRegionId &&
+        earnedBadges ? (
+        <CouncilScoutPanel
+          currentRegionId={currentRegionId}
+          councilState={monolithCouncilState}
+          earnedBadges={earnedBadges}
+          completedRegionIds={completedRegionIds ?? []}
         />
       ) : (
         <ActiveRequestsPanel

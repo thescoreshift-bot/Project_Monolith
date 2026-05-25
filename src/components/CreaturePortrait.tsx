@@ -1,7 +1,14 @@
 import { useState } from 'react'
 import type { ElementType } from '../data/starters'
 
-export type CreaturePortraitSize = 'sm' | 'md' | 'lg' | 'combat'
+export type CreaturePortraitSize =
+  | 'sm'
+  | 'md'
+  | 'lg'
+  | 'combat'
+  | 'combat-lg'
+  | 'combat-party'
+  | 'encounter'
 
 type CreaturePortraitProps = {
   type: ElementType | string

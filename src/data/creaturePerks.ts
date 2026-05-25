@@ -30,6 +30,11 @@ type PerkDraft = {
   effect: string
   statModifiers?: StatModifiers
   combatTag?: string
+  weight?: number
+  maxStacks?: number
+  stackGroup?: string
+  unique?: boolean
+  secondaryEvolutionPath?: Perk['secondaryEvolutionPath']
 }
 
 const COMBAT_TAG_BY_SPECIES_PERK: Record<string, string> = {}
@@ -46,6 +51,11 @@ function sp(
     description: draft.description,
     effect: draft.effect,
     statModifiers: draft.statModifiers,
+    weight: draft.weight,
+    maxStacks: draft.maxStacks,
+    stackGroup: draft.stackGroup,
+    unique: draft.unique,
+    secondaryEvolutionPath: draft.secondaryEvolutionPath,
   }
   if (draft.combatTag) {
     COMBAT_TAG_BY_SPECIES_PERK[perk.id] = draft.combatTag
@@ -60,7 +70,10 @@ const CINDEREX: Perk[] = [
   sp('fire', { slug: 'flash-ignition', name: 'Flash Ignition', rarity: 'rare', category: 'speed', description: 'Cinderex opens combat with a blazing rush.', effect: 'First ability each combat deals +8 bonus damage.', combatTag: 'first_strike' }),
   sp('fire', { slug: 'rekindle', name: 'Rekindle', rarity: 'common', category: 'utility', description: 'Cinderex steadies its flame after each win.', effect: 'Restore 8 HP after winning combat.', combatTag: 'second_wind' }),
   sp('fire', { slug: 'ember-drift', name: 'Ember Drift', rarity: 'common', category: 'speed', description: 'Cinderex weaves through heat shimmer.', effect: '+6 SPD.', statModifiers: { spd: 6 } }),
-  sp('fire', { slug: 'primal-ember', name: 'Primal Ember', rarity: 'legendary', category: 'evolution', description: 'Cinderex\'s flame yearns for a primal form.', effect: 'Greatly increases evolution score toward primal paths.', combatTag: 'primal_mutation' }),
+  sp('fire', { slug: 'ember-predator', name: 'Ember Predator', rarity: 'rare', category: 'offense', description: 'Cinderex hunts with blazing focus.', effect: '+8% damage vs foes above half HP.', combatTag: 'predator_instinct', weight: 12 }),
+  sp('fire', { slug: 'flame-core', name: 'Flame Core', rarity: 'uncommon', category: 'offense', description: 'Core heat empowers Fire strikes.', effect: 'Fire damage +8%.', combatTag: 'ember_core', weight: 13 }),
+  sp('fire', { slug: 'scorching-finisher', name: 'Scorching Finisher', rarity: 'rare', category: 'offense', description: 'Cinderex burns down wounded prey.', effect: '+12% damage vs foes below 35% HP.', combatTag: 'finisher', weight: 11 }),
+  sp('fire', { slug: 'primal-ember', name: 'Primal Ember', rarity: 'epic', category: 'offense', description: 'Cinderex\'s flame yearns for a primal form.', effect: '+5% all damage. Also +1 Offense evolution path.', combatTag: 'primal_mutation', secondaryEvolutionPath: 'offense' }),
   sp('fire', { slug: 'ash-footwork', name: 'Ash Footwork', rarity: 'rare', category: 'speed', description: 'Cinderex sidesteps through ember clouds.', effect: '12% chance to completely dodge an enemy attack.', combatTag: 'evasive_reflex' }),
 ]
 
@@ -71,7 +84,9 @@ const AQUALIS: Perk[] = [
   sp('water', { slug: 'mist-recovery', name: 'Mist Recovery', rarity: 'common', category: 'utility', description: 'Aqualis mists itself after victories.', effect: 'Restore 8 HP after winning combat.', combatTag: 'second_wind' }),
   sp('water', { slug: 'rest-tide', name: 'Rest Tide', rarity: 'common', category: 'utility', description: 'Aqualis draws calm from Rest nodes.', effect: 'Restore 20 HP when completing a Rest node.', combatTag: 'field_recovery' }),
   sp('water', { slug: 'hex-slow', name: 'Hex Slow', rarity: 'rare', category: 'utility', description: 'Aqualis leaves foes struggling in undertow.', effect: 'Status effects gain 15% increased potency.', combatTag: 'status_focus' }),
-  sp('water', { slug: 'monolith-tide', name: 'Monolith Tide', rarity: 'rare', category: 'evolution', description: 'Aqualis resonates with Monolith currents.', effect: 'Strengthens connection to Monolith evolutions.', combatTag: 'monolith_resonance' }),
+  sp('water', { slug: 'tidal-flow', name: 'Tidal Flow', rarity: 'uncommon', category: 'offense', description: 'Aqualis rides currents for harder Water hits.', effect: 'Water damage +8%.', combatTag: 'water_damage_bonus', weight: 12 }),
+  sp('water', { slug: 'deep-current', name: 'Deep Current', rarity: 'rare', category: 'utility', description: 'Undertow strengthens control.', effect: '+8% debuff accuracy. Also +1 Utility path.', combatTag: 'utility_instinct', secondaryEvolutionPath: 'utility' }),
+  sp('water', { slug: 'monolith-tide', name: 'Monolith Tide', rarity: 'rare', category: 'mastery', description: 'Aqualis resonates with Monolith currents.', effect: '+5% mastery XP. Also +1 Evolution path.', combatTag: 'monolith_resonance', secondaryEvolutionPath: 'evolution' }),
   sp('water', { slug: 'still-waters', name: 'Still Waters', rarity: 'rare', category: 'defense', description: 'Aqualis takes less damage while healthy.', effect: '10% damage reduction when HP is above half.', combatTag: 'thick_scales' }),
 ]
 
@@ -81,7 +96,10 @@ const FLORAMOSS: Perk[] = [
   sp('grass', { slug: 'spore-weave', name: 'Spore Weave', rarity: 'rare', category: 'offense', description: 'Floramoss weaves toxic spores into Grass moves.', effect: 'Grass abilities deal 10% bonus damage.', combatTag: 'grass_damage_bonus' }),
   sp('grass', { slug: 'canopy-guard', name: 'Canopy Guard', rarity: 'common', category: 'defense', description: 'Floramoss raises a leaf barrier.', effect: '+5 SP.DEF.', statModifiers: { spDef: 5 } }),
   sp('grass', { slug: 'pollen-rest', name: 'Pollen Rest', rarity: 'common', category: 'utility', description: 'Floramoss releases restorative pollen after wins.', effect: 'Restore 8 HP after winning combat.', combatTag: 'second_wind' }),
-  sp('grass', { slug: 'overgrowth-path', name: 'Overgrowth Path', rarity: 'legendary', category: 'evolution', description: 'Floramoss blooms toward wild evolution branches.', effect: 'Opens rare and unusual evolution branches later.', combatTag: 'strange_catalyst' }),
+  sp('grass', { slug: 'spore-shield', name: 'Spore Shield', rarity: 'uncommon', category: 'defense', description: 'Floramoss spores absorb blows.', effect: 'Reduce incoming damage by 6%.', combatTag: 'guarded_stance' }),
+  sp('grass', { slug: 'thorn-pressure', name: 'Thorn Pressure', rarity: 'rare', category: 'offense', description: 'Thorns punish debuffed foes.', effect: 'Debuffed enemies take +6% damage from you.', combatTag: 'pressure_point' }),
+  sp('grass', { slug: 'pollen-recovery', name: 'Pollen Recovery', rarity: 'common', category: 'utility', description: 'Pollen restores after buffs.', effect: 'Heal 2% max HP after using a buff.', combatTag: 'rooted_growth' }),
+  sp('grass', { slug: 'overgrowth-path', name: 'Overgrowth Path', rarity: 'epic', category: 'utility', description: 'Floramoss blooms toward wild branches.', effect: '+8% debuff accuracy. Also +1 Evolution path.', combatTag: 'strange_catalyst', secondaryEvolutionPath: 'evolution' }),
   sp('grass', { slug: 'bind-instinct', name: 'Bind Instinct', rarity: 'rare', category: 'utility', description: 'Floramoss tightens status pressure on foes.', effect: 'Status effects gain 15% increased potency.', combatTag: 'status_focus' }),
   sp('grass', { slug: 'grove-patience', name: 'Grove Patience', rarity: 'common', category: 'utility', description: 'Floramoss recovers at Rest clearings.', effect: 'Restore 20 HP when completing a Rest node.', combatTag: 'field_recovery' }),
 ]
@@ -92,7 +110,10 @@ const VOLTARA: Perk[] = [
   sp('electric', { slug: 'arc-focus', name: 'Arc Focus', rarity: 'common', category: 'offense', description: 'Voltara channels voltage into special bursts.', effect: '+5 SP.ATK.', statModifiers: { spAtk: 5 } }),
   sp('electric', { slug: 'opening-jolt', name: 'Opening Jolt', rarity: 'rare', category: 'speed', description: 'Voltara leads with a crackling first hit.', effect: 'First ability each combat deals +8 bonus damage.', combatTag: 'first_strike' }),
   sp('electric', { slug: 'capacitor-heal', name: 'Capacitor Heal', rarity: 'common', category: 'utility', description: 'Voltara recycles charge after victories.', effect: 'Restore 8 HP after winning combat.', combatTag: 'second_wind' }),
-  sp('electric', { slug: 'storm-adapt', name: 'Storm Adapt', rarity: 'rare', category: 'evolution', description: 'Voltara adapts toward many storm forms.', effect: 'Slightly improves all evolution scores.', combatTag: 'adaptive_core' }),
+  sp('electric', { slug: 'trickster-spark', name: 'Trickster Spark', rarity: 'uncommon', category: 'offense', description: 'Voltara sparks with extra crit chance.', effect: 'Electric +6% damage; +4% crit.', combatTag: 'static_charge' }),
+  sp('electric', { slug: 'static-momentum', name: 'Static Momentum', rarity: 'rare', category: 'speed', description: 'Victory leaves static in your steps.', effect: '+5% SPD after winning combat.', combatTag: 'momentum_spd' }),
+  sp('electric', { slug: 'chain-mischief', name: 'Chain Mischief', rarity: 'rare', category: 'offense', description: 'Chained shocks hit harder.', effect: 'Every third Electric hit deals +6% damage.', combatTag: 'battle_rhythm' }),
+  sp('electric', { slug: 'storm-adapt', name: 'Storm Adapt', rarity: 'rare', category: 'defense', description: 'Voltara adapts toward many storm forms.', effect: '+3% max HP and +2% DEF/SPD. All paths +1.', combatTag: 'adaptive_core', secondaryEvolutionPath: 'evolution' }),
   sp('electric', { slug: 'shock-dodge', name: 'Shock Dodge', rarity: 'rare', category: 'speed', description: 'Voltara blinks through static afterimages.', effect: '12% chance to completely dodge an enemy attack.', combatTag: 'evasive_reflex' }),
   sp('electric', { slug: 'crit-surge', name: 'Crit Surge', rarity: 'common', category: 'offense', description: 'Voltara spikes voltage on lucky hits.', effect: '8% chance for attacks to deal 50% bonus damage.', combatTag: 'critical_spark' }),
 ]
@@ -105,7 +126,10 @@ const TERRADON: Perk[] = [
   sp('ground', { slug: 'rumble-start', name: 'Rumble Start', rarity: 'rare', category: 'offense', description: 'Terradon opens with a crushing shove.', effect: 'Physical attacks ignore 5 of the target DEF.', combatTag: 'piercing_instinct' }),
   sp('ground', { slug: 'dust-recovery', name: 'Dust Recovery', rarity: 'common', category: 'utility', description: 'Terradon settles dust and steadies HP after wins.', effect: 'Restore 8 HP after winning combat.', combatTag: 'second_wind' }),
   sp('ground', { slug: 'cave-rest', name: 'Cave Rest', rarity: 'common', category: 'utility', description: 'Terradon beds down at Rest nodes.', effect: 'Restore 20 HP when completing a Rest node.', combatTag: 'field_recovery' }),
-  sp('ground', { slug: 'monolith-stone', name: 'Monolith Stone', rarity: 'rare', category: 'evolution', description: 'Terradon hears the Monolith in bedrock.', effect: 'Strengthens connection to Monolith evolutions.', combatTag: 'monolith_resonance' }),
+  sp('ground', { slug: 'stone-jaw', name: 'Stone Jaw', rarity: 'uncommon', category: 'offense', description: 'Terradon crushes with bedrock jaws.', effect: 'Physical abilities deal +10% damage.', combatTag: 'heavy_impact' }),
+  sp('ground', { slug: 'bedrock-guard', name: 'Bedrock Guard', rarity: 'rare', category: 'defense', description: 'Bedrock plating absorbs blows.', effect: '+6% DEF; 4% less damage taken.', combatTag: 'stonewall' }),
+  sp('ground', { slug: 'crystal-pulse', name: 'Crystal Pulse', rarity: 'uncommon', category: 'defense', description: 'Crystal veins restore each turn.', effect: 'Heal 3% max HP at end of turn.', combatTag: 'recovery_pulse' }),
+  sp('ground', { slug: 'monolith-stone', name: 'Monolith Stone', rarity: 'rare', category: 'mastery', description: 'Terradon hears the Monolith in bedrock.', effect: '+5% mastery XP. Also +1 Evolution path.', combatTag: 'monolith_resonance', secondaryEvolutionPath: 'evolution' }),
 ]
 
 const BRISTLEBUG: Perk[] = [
@@ -114,7 +138,7 @@ const BRISTLEBUG: Perk[] = [
   sp('bristlebug', { slug: 'needle-rush', name: 'Needle Rush', rarity: 'common', category: 'speed', description: 'Bristlebug skitters between strikes.', effect: '+6 SPD.', statModifiers: { spd: 6 } }),
   sp('bristlebug', { slug: 'sting-focus', name: 'Sting Focus', rarity: 'rare', category: 'utility', description: 'Bristlebug applies nastier toxins.', effect: 'Status effects gain 15% increased potency.', combatTag: 'status_focus' }),
   sp('bristlebug', { slug: 'molt-recovery', name: 'Molt Recovery', rarity: 'common', category: 'utility', description: 'Bristlebug sheds stress after victories.', effect: 'Restore 8 HP after winning combat.', combatTag: 'second_wind' }),
-  sp('bristlebug', { slug: 'hive-instinct', name: 'Hive Instinct', rarity: 'rare', category: 'evolution', description: 'Bristlebug mutates toward stranger forms.', effect: 'Slightly improves all evolution scores.', combatTag: 'adaptive_core' }),
+  sp('bristlebug', { slug: 'hive-instinct', name: 'Hive Instinct', rarity: 'rare', category: 'defense', description: 'Bristlebug mutates toward stranger forms.', effect: '+3% max HP and +2% DEF/SPD. All paths +1.', combatTag: 'adaptive_core', secondaryEvolutionPath: 'evolution' }),
 ]
 
 const ASHLING: Perk[] = [
@@ -123,7 +147,7 @@ const ASHLING: Perk[] = [
   sp('ashling', { slug: 'kindling-rush', name: 'Kindling Rush', rarity: 'rare', category: 'speed', description: 'Ashling opens with a hot snap.', effect: 'First ability each combat deals +8 bonus damage.', combatTag: 'first_strike' }),
   sp('ashling', { slug: 'warm-coals', name: 'Warm Coals', rarity: 'common', category: 'utility', description: 'Ashling glows brighter after each win.', effect: 'Restore 8 HP after winning combat.', combatTag: 'second_wind' }),
   sp('ashling', { slug: 'fire-spark', name: 'Fire Spark', rarity: 'rare', category: 'offense', description: 'Ashling\'s flames bite a little harder.', effect: 'Fire abilities deal 10% bonus damage.', combatTag: 'fire_damage_bonus' }),
-  sp('ashling', { slug: 'flare-mutation', name: 'Flare Mutation', rarity: 'legendary', category: 'evolution', description: 'Ashling\'s flame twists toward primal paths.', effect: 'Greatly increases evolution score toward primal paths.', combatTag: 'primal_mutation' }),
+  sp('ashling', { slug: 'flare-mutation', name: 'Flare Mutation', rarity: 'epic', category: 'offense', description: 'Ashling\'s flame twists toward primal paths.', effect: '+5% all damage. Also +1 Offense path.', combatTag: 'primal_mutation', secondaryEvolutionPath: 'offense' }),
 ]
 
 const PEBBLEMAW: Perk[] = [
@@ -132,7 +156,7 @@ const PEBBLEMAW: Perk[] = [
   sp('pebblemaw', { slug: 'rock-slide', name: 'Rock Slide', rarity: 'rare', category: 'offense', description: 'Pebblemaw shoves with landslide force.', effect: 'Ground abilities deal 10% bonus damage.', combatTag: 'ground_damage_bonus' }),
   sp('pebblemaw', { slug: 'shoulder-barge', name: 'Shoulder Barge', rarity: 'rare', category: 'offense', description: 'Pebblemaw ignores armor with raw mass.', effect: 'Physical attacks ignore 5 of the target DEF.', combatTag: 'piercing_instinct' }),
   sp('pebblemaw', { slug: 'dust-nap', name: 'Dust Nap', rarity: 'common', category: 'utility', description: 'Pebblemaw settles gravel dust after wins.', effect: 'Restore 8 HP after winning combat.', combatTag: 'second_wind' }),
-  sp('pebblemaw', { slug: 'bedrock-sense', name: 'Bedrock Sense', rarity: 'rare', category: 'evolution', description: 'Pebblemaw senses deeper stone forms ahead.', effect: 'Strengthens connection to Monolith evolutions.', combatTag: 'monolith_resonance' }),
+  sp('pebblemaw', { slug: 'bedrock-sense', name: 'Bedrock Sense', rarity: 'rare', category: 'mastery', description: 'Pebblemaw senses deeper stone forms ahead.', effect: '+5% mastery XP. Also +1 Evolution path.', combatTag: 'monolith_resonance', secondaryEvolutionPath: 'evolution' }),
 ]
 
 const DRIFTWISP: Perk[] = [
@@ -141,7 +165,7 @@ const DRIFTWISP: Perk[] = [
   sp('driftwisp', { slug: 'foam-veil', name: 'Foam Veil', rarity: 'common', category: 'defense', description: 'Driftwisp wraps itself in foam.', effect: '+5 SP.DEF.', statModifiers: { spDef: 5 } }),
   sp('driftwisp', { slug: 'mist-heal', name: 'Mist Heal', rarity: 'common', category: 'utility', description: 'Driftwisp condenses mist after victories.', effect: 'Restore 8 HP after winning combat.', combatTag: 'second_wind' }),
   sp('driftwisp', { slug: 'undertow', name: 'Undertow', rarity: 'rare', category: 'utility', description: 'Driftwisp\'s hexes linger on foes.', effect: 'Status effects gain 15% increased potency.', combatTag: 'status_focus' }),
-  sp('driftwisp', { slug: 'deep-current', name: 'Deep Current', rarity: 'rare', category: 'evolution', description: 'Driftwisp adapts toward many tide forms.', effect: 'Slightly improves all evolution scores.', combatTag: 'adaptive_core' }),
+  sp('driftwisp', { slug: 'deep-current', name: 'Deep Current', rarity: 'rare', category: 'defense', description: 'Driftwisp adapts toward many tide forms.', effect: '+3% max HP and +2% DEF/SPD. All paths +1.', combatTag: 'adaptive_core', secondaryEvolutionPath: 'evolution' }),
 ]
 
 const VOLTIMP: Perk[] = [
@@ -150,7 +174,7 @@ const VOLTIMP: Perk[] = [
   sp('voltimp', { slug: 'overload-bite', name: 'Overload Bite', rarity: 'rare', category: 'offense', description: 'Voltimp overloads Electric attacks.', effect: 'Electric abilities deal 10% bonus damage.', combatTag: 'electric_damage_bonus' }),
   sp('voltimp', { slug: 'static-slip', name: 'Static Slip', rarity: 'rare', category: 'speed', description: 'Voltimp slips away on static discharge.', effect: '12% chance to completely dodge an enemy attack.', combatTag: 'evasive_reflex' }),
   sp('voltimp', { slug: 'recharge', name: 'Recharge', rarity: 'common', category: 'utility', description: 'Voltimp recharges after each win.', effect: 'Restore 8 HP after winning combat.', combatTag: 'second_wind' }),
-  sp('voltimp', { slug: 'storm-seed', name: 'Storm Seed', rarity: 'legendary', category: 'evolution', description: 'Voltimp\'s charge unlocks unusual evolutions.', effect: 'Opens rare and unusual evolution branches later.', combatTag: 'strange_catalyst' }),
+  sp('voltimp', { slug: 'storm-seed', name: 'Storm Seed', rarity: 'epic', category: 'utility', description: 'Voltimp\'s charge unlocks unusual evolutions.', effect: '+8% debuff accuracy. Also +1 Evolution path.', combatTag: 'strange_catalyst', secondaryEvolutionPath: 'evolution' }),
 ]
 
 export const CREATURE_PERK_POOLS: Record<CreatureSpeciesKey, Perk[]> = {
@@ -181,6 +205,10 @@ const LEGACY_COMBAT_TAGS: Record<string, string> = {
   'second-wind': 'second_wind',
   'field-recovery': 'field_recovery',
   'piercing-instinct': 'piercing_instinct',
+  'thick-scales': 'thick_scales',
+  'guarded-stance': 'guarded_stance',
+  'critical-spark': 'critical_spark',
+  'evasive-reflex': 'evasive_reflex',
   'status-focus': 'status_focus',
   'primal-mutation': 'primal_mutation',
   'adaptive-core': 'adaptive_core',
@@ -220,13 +248,9 @@ export function resolveCreatureSpeciesKey(input: {
   return TYPE_FALLBACK[input.type]
 }
 
-export function pickPerksForCreature(
-  speciesKey: CreatureSpeciesKey,
-  excludeIds: string[] = [],
-  count = 3,
-): Perk[] {
-  const pool = CREATURE_PERK_POOLS[speciesKey] ?? CREATURE_PERK_POOLS[TYPE_FALLBACK.Fire]
-  const available = pool.filter((p) => !excludeIds.includes(p.id))
-  const shuffled = [...available].sort(() => Math.random() - 0.5)
-  return shuffled.slice(0, Math.min(count, shuffled.length))
-}
+export {
+  pickPerksForCreature,
+  inferCreatureRole,
+  getPerkStackLabel,
+} from '../utils/perkSelection'
+export type { PickPerkContext } from '../utils/perkSelection'

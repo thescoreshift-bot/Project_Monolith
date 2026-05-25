@@ -91,23 +91,56 @@ function getLabels(regionId: string): Record<NodeType, string[]> {
     gymTrainer: gymLabels.gymTrainer,
     gymLeader: gymLabels.gymLeader,
     boss: [region.bossName, `${region.name} Apex`, 'Monolith Throne'],
+    monolithCouncil: ['Monolith Council', 'Council Gate', 'Verdant Council'],
   }
 }
 
-function getTypeWeights(modifier?: DailyModifier | null): { type: NodeType; weight: number }[] {
-  if (!modifier?.restWeightMult) return TYPE_WEIGHTS
-  return TYPE_WEIGHTS.map((t) =>
-    t.type === 'rest'
-      ? { ...t, weight: Math.max(1, Math.round(t.weight * modifier.restWeightMult!)) }
-      : t,
-  )
+function getTypeWeights(
+  modifier?: DailyModifier | null,
+  depthRatio = 0,
+): { type: NodeType; weight: number }[] {
+  let weights = TYPE_WEIGHTS
+  if (!modifier?.restWeightMult) {
+    weights = TYPE_WEIGHTS
+  } else {
+    weights = TYPE_WEIGHTS.map((t) =>
+      t.type === 'rest'
+        ? {
+            ...t,
+            weight: Math.max(1, Math.round(t.weight * modifier.restWeightMult!)),
+          }
+        : t,
+    )
+  }
+  if (depthRatio >= 0.35) {
+    weights = weights.map((t) => {
+      if (t.type === 'elite') return { ...t, weight: t.weight + 5 }
+      if (t.type === 'alphaNest') return { ...t, weight: t.weight + 4 }
+      if (t.type === 'event') return { ...t, weight: t.weight + 4 }
+      if (t.type === 'relicShop') return { ...t, weight: t.weight + 2 }
+      if (t.type === 'battle') return { ...t, weight: Math.max(10, t.weight - 5) }
+      return t
+    })
+  }
+  if (depthRatio >= 0.65) {
+    weights = weights.map((t) => {
+      if (t.type === 'elite') return { ...t, weight: t.weight + 3 }
+      if (t.type === 'alphaNest') return { ...t, weight: t.weight + 2 }
+      if (t.type === 'rest') return { ...t, weight: Math.max(4, t.weight - 2) }
+      return t
+    })
+  }
+  return weights
 }
 
 function pickWeightedType(
   exclude: NodeType[] = [],
   modifier?: DailyModifier | null,
+  depthRatio = 0,
 ): NodeType {
-  const pool = getTypeWeights(modifier).filter((t) => !exclude.includes(t.type))
+  const pool = getTypeWeights(modifier, depthRatio).filter(
+    (t) => !exclude.includes(t.type),
+  )
   const total = pool.reduce((s, t) => s + t.weight, 0)
   let roll = gameRandom() * total
   for (const entry of pool) {
@@ -219,10 +252,15 @@ export function generateMap(
           type = pickWeightedType(
             ['gymLeader', 'gymTrainer', 'boss'],
             dailyModifier,
+            layer / Math.max(1, contentRows),
           )
         }
       } else {
-        type = pickWeightedType(['gymLeader', 'gymTrainer', 'boss'], dailyModifier)
+        type = pickWeightedType(
+          ['gymLeader', 'gymTrainer', 'boss'],
+          dailyModifier,
+          layer / Math.max(1, contentRows),
+        )
       }
 
       const gymLabel =

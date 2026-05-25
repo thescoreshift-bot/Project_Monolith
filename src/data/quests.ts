@@ -11,6 +11,8 @@ export type QuestType =
   | 'healAtRecoveryStation'
   | 'completeEvents'
   | 'equipGear'
+  | 'winCouncilFight'
+  | 'completeCouncil'
 
 export type QuestCategory =
   | 'tutorial'
@@ -223,6 +225,34 @@ export const QUEST_DEFINITIONS: QuestDefinition[] = [
     category: 'repeatable',
     rewardPreview: 'XP, coins',
     abilityType: 'Fire',
+  },
+  {
+    id: 'council-trial',
+    title: 'Council Trial',
+    description: 'Win 1 Monolith Council fight.',
+    type: 'winCouncilFight',
+    target: 'any',
+    requiredAmount: 1,
+    rewardTier: 2,
+    minLevel: 10,
+    minRegionIndex: 1,
+    repeatable: true,
+    category: 'progression',
+    rewardPreview: 'Coins, XP',
+  },
+  {
+    id: 'council-gauntlet',
+    title: 'Council Gauntlet',
+    description: 'Complete a full Monolith Council challenge.',
+    type: 'completeCouncil',
+    target: 'any',
+    requiredAmount: 1,
+    rewardTier: 3,
+    minLevel: 12,
+    minRegionIndex: 1,
+    repeatable: false,
+    category: 'progression',
+    rewardPreview: 'Rare rewards',
   },
 ]
 

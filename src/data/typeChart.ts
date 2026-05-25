@@ -41,6 +41,32 @@ export function isSuperEffective(
   return getTypeEffectivenessMultiplier(attackType, defenderType) >= SUPER_EFFECTIVE_MULTIPLIER
 }
 
+/** Attack types that deal increased damage to this defender type. */
+export function getSuperEffectiveTypesAgainst(
+  defenderType: ElementType,
+): ElementType[] {
+  const out: ElementType[] = []
+  for (const [attackType, defenders] of Object.entries(SUPER_EFFECTIVE) as [
+    ElementType,
+    ElementType[] | undefined,
+  ][]) {
+    if (defenders?.includes(defenderType)) out.push(attackType)
+  }
+  return out
+}
+
+/** Attack types that deal reduced damage to this defender type. */
+export function getResistedTypesAgainst(defenderType: ElementType): ElementType[] {
+  const out: ElementType[] = []
+  for (const [attackType, defenders] of Object.entries(NOT_VERY_EFFECTIVE) as [
+    ElementType,
+    ElementType[] | undefined,
+  ][]) {
+    if (defenders?.includes(defenderType)) out.push(attackType)
+  }
+  return out
+}
+
 export function formatTypeEffectivenessLabel(multiplier: number): string | null {
   if (multiplier >= SUPER_EFFECTIVE_MULTIPLIER) {
     return `Super Effective x${SUPER_EFFECTIVE_MULTIPLIER}`

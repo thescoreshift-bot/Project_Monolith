@@ -19,6 +19,10 @@ import {
 } from '../utils/regionRewards'
 import { getCoinReward, getXpReward } from '../utils/rewards'
 import { gameRandom } from '../utils/seededRandom'
+import {
+  rollEnemyCombatModifier,
+  type EnemyCombatModifier,
+} from './enemyModifiers'
 
 export type EnemyStats = {
   atk: number
@@ -46,6 +50,8 @@ export type EnemyTemplate = {
 
 export type Enemy = EnemyTemplate & {
   currentHp: number
+  combatModifier?: EnemyCombatModifier
+  shieldHp?: number
 }
 
 export type EncounterKind =
@@ -55,6 +61,7 @@ export type EncounterKind =
   | 'gymTrainer'
   | 'gymLeader'
   | 'boss'
+  | 'council'
 
 export type EncounterRewards = {
   xp: number
@@ -353,16 +360,48 @@ export function spawnEnemy(
     : 1
   const kindMult = enemyKindToHpMultiplier(template.kind)
   const hpScale = (options?.hpMult ?? 1) * (level <= 3 ? 1 : 1)
+  const lateHpBonus =
+    level > 10 && (options?.encounterKind === 'battle' || !options?.encounterKind)
+      ? 1 + Math.min(0.55, (level - 10) * 0.04)
+      : 1
   const maxHp = Math.max(
     1,
-    Math.round(template.maxHp * ratio * hpScale * encounterMult * kindMult),
+    Math.round(
+      template.maxHp * ratio * hpScale * encounterMult * kindMult * lateHpBonus,
+    ),
   )
+  const combatModifier = rollEnemyCombatModifier(level, template.kind)
+  let shieldHp = 0
+  if (combatModifier?.startingShieldPercent) {
+    shieldHp = Math.max(
+      1,
+      Math.round(maxHp * combatModifier.startingShieldPercent),
+    )
+  }
+  if (combatModifier?.defPenaltyPercent) {
+    stats.def = Math.max(
+      1,
+      Math.round(stats.def * (1 - combatModifier.defPenaltyPercent)),
+    )
+    stats.spDef = Math.max(
+      1,
+      Math.round(stats.spDef * (1 - combatModifier.defPenaltyPercent)),
+    )
+  }
+  if (combatModifier?.spdBonusPercent) {
+    stats.spd = Math.max(
+      1,
+      Math.round(stats.spd * (1 + combatModifier.spdBonusPercent)),
+    )
+  }
   return {
     ...template,
     level,
     stats,
     maxHp,
     currentHp: maxHp,
+    combatModifier,
+    shieldHp: shieldHp > 0 ? shieldHp : undefined,
   }
 }
 

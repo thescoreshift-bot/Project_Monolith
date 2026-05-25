@@ -11,6 +11,22 @@ type EncounterTransitionOverlayProps = {
   onComplete: () => void
 }
 
+function portraitSizeForView(
+  view: EncounterTransitionView,
+): 'encounter' | 'combat-lg' | 'combat' {
+  if (view.intensity === 'boss' || view.displayType === 'council') {
+    return 'encounter'
+  }
+  if (
+    view.displayType === 'alpha' ||
+    view.displayType === 'eventAlpha' ||
+    view.displayType === 'gymLeader'
+  ) {
+    return 'combat-lg'
+  }
+  return 'combat-lg'
+}
+
 export function EncounterTransitionOverlay({
   view,
   onComplete,
@@ -19,6 +35,12 @@ export function EncounterTransitionOverlay({
   const completedRef = useRef(false)
   const onCompleteRef = useRef(onComplete)
   onCompleteRef.current = onComplete
+
+  const portraitSize = portraitSizeForView(view)
+  const isGymChallenge =
+    view.displayType === 'gymTrainer' ||
+    view.displayType === 'gymLeader' ||
+    view.displayType === 'council'
 
   const finish = () => {
     if (completedRef.current) return
@@ -63,20 +85,23 @@ export function EncounterTransitionOverlay({
       {view.showFlash && (
         <div className="encounter-overlay__flash" aria-hidden="true" />
       )}
+      {view.displayType === 'boss' || view.displayType === 'council' ? (
+        <div className="encounter-overlay__corruption" aria-hidden="true" />
+      ) : null}
 
       <div className="encounter-overlay__content">
         <p className="encounter-overlay__type-label">{view.typeLabel}</p>
         <h2 className="encounter-overlay__message">{view.message}</h2>
 
         <div
-          className={`encounter-overlay__enemy${view.hidePortraitDetail ? ' encounter-overlay__enemy--silhouette-only' : ''}${view.useTrainerPortrait ? ' encounter-overlay__enemy--trainer' : ''}`}
+          className={`encounter-overlay__enemy${view.hidePortraitDetail ? ' encounter-overlay__enemy--silhouette-only' : ''}${view.useTrainerPortrait ? ' encounter-overlay__enemy--trainer' : ''}${isGymChallenge ? ' encounter-overlay__enemy--challenge' : ''}`}
         >
           <div className="encounter-overlay__enemy-frame">
             <CreaturePortrait
               type={view.enemyType}
               portraitUrl={view.portraitUrl}
               alt={view.enemyName}
-              size="combat"
+              size={portraitSize}
               idle={phase === 'reveal' || phase === 'dissolve'}
               className={`encounter-overlay__portrait${view.useTrainerPortrait ? ' creature-portrait--trainer-body' : ''}`}
             />
@@ -84,13 +109,21 @@ export function EncounterTransitionOverlay({
           </div>
           <p className="encounter-overlay__enemy-name">{view.enemyName}</p>
           {view.sendsOutCreatureName ? (
-            <p className="encounter-overlay__sends-out">
-              sends out <strong>{view.sendsOutCreatureName}</strong>
-            </p>
+            <div className="encounter-overlay__duo-hint">
+              <p className="encounter-overlay__sends-out">
+                sends out <strong>{view.sendsOutCreatureName}</strong>
+              </p>
+              {view.displayType === 'council' ? (
+                <p className="encounter-overlay__duo-note">2v2 Council battle</p>
+              ) : null}
+            </div>
           ) : null}
           <p className="encounter-overlay__enemy-type">{view.enemyType}</p>
         </div>
 
+        <p className="encounter-overlay__entering" role="status">
+          Entering combat…
+        </p>
         <p className="encounter-overlay__hint">Tap or click to skip</p>
       </div>
 

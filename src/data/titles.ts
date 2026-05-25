@@ -31,6 +31,12 @@ export const TITLE_DEFINITIONS: Record<string, TitleDefinition> = {
     description: 'Lightning answers when you raise your hand.',
     perkId: 'arc-surge',
   },
+  'council-initiate': {
+    id: 'council-initiate',
+    name: 'Council Initiate',
+    description: 'Recognized by The Monolith Council after your first gauntlet victory.',
+    perkId: 'monolith-resonance',
+  },
 }
 
 export function getTitleDefinition(

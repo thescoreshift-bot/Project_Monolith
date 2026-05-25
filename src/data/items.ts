@@ -179,6 +179,17 @@ export const ITEMS: Record<string, ItemDefinition> = {
     maxStack: 99,
     sellValue: 15,
   },
+  'verdant-council-emblem': {
+    id: 'verdant-council-emblem',
+    name: 'Verdant Council Emblem',
+    category: 'material',
+    rarity: 'rare',
+    description:
+      'Proof you stood before The Verdant Council and prevailed. Progression keepsake.',
+    stackable: false,
+    maxStack: 1,
+    sellValue: 0,
+  },
   'material-alpha-claw': {
     id: 'material-alpha-claw',
     name: 'Alpha Claw',

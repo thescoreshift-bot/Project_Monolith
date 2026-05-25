@@ -32,6 +32,8 @@ function baseCoinReward(type: CoinRewardType): number {
       return 50
     case 'boss':
       return 75
+    case 'council':
+      return randomInRange(18, 28)
     case 'eventSmall':
       return randomInRange(10, 20)
     case 'eventMedium':
@@ -57,6 +59,8 @@ function baseXpReward(type: XpRewardType): number {
       return 75
     case 'boss':
       return 100
+    case 'council':
+      return 55
     default:
       return 20
   }

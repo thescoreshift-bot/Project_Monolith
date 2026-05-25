@@ -163,11 +163,46 @@ export function parseBattleLogFeedback(
   if (statMatch) {
     const stat = statMatch[1].toUpperCase()
     const rising = lower.includes('rose by')
+    const onEnemy = lower.includes('foe') && !lower.includes("'s")
     events.push({
       id: nextFeedbackId(),
       text: rising ? `${stat} Up` : `${stat} Down`,
       kind: 'stat',
-      side: lower.includes('foe') && !lower.includes("'s") ? 'enemy' : 'player',
+      side: onEnemy ? 'enemy' : 'player',
+    })
+    if (rising && !onEnemy) {
+      events.push({
+        id: nextFeedbackId(),
+        text: 'Buff applied',
+        kind: 'stat',
+        side: 'player',
+      })
+    }
+    if (!rising && onEnemy) {
+      events.push({
+        id: nextFeedbackId(),
+        text: 'Debuff applied',
+        kind: 'stat',
+        side: 'enemy',
+      })
+    }
+  }
+
+  if (lower.includes('mastery') && (lower.includes('rank') || lower.includes('level'))) {
+    events.push({
+      id: nextFeedbackId(),
+      text: 'Mastery Level Up!',
+      kind: 'info',
+      side: 'player',
+    })
+  }
+
+  if (lower.includes('quest') && (lower.includes('complete') || lower.includes('progress'))) {
+    events.push({
+      id: nextFeedbackId(),
+      text: 'Quest Complete!',
+      kind: 'info',
+      side: 'player',
     })
   }
 

@@ -20,6 +20,7 @@ import {
 } from './inventorySystem'
 import { normalizePartyCreature, type PartyCreature } from './party'
 import type { RunCreature } from './progression'
+import { normalizeCouncilState } from './monolithCouncilState'
 import {
   normalizeQuestState,
   type QuestState,
@@ -118,6 +119,8 @@ export type SavableScreen =
   | 'moveLearn'
   | 'abilityTransform'
   | 'inventory'
+  | 'monolithCouncil'
+  | 'councilIntermission'
 
 export type SavedXpLine = {
   name: string
@@ -179,6 +182,13 @@ export type RunSaveData = {
   pendingPerkDrafts?: number
   pendingPerkDraftQueue: PerkDraftQueueEntry[]
   shopLog: string[]
+  /** Per-map-node generated stock (persists for revisit before complete). */
+  shopInventoriesByNodeId?: Record<
+    string,
+    { gearIds: string[]; itemIds: string[]; shopType: string }
+  >
+  /** Recent epic+ gear ids to reduce repeat premium offers. */
+  shopRareOfferHistory?: string[]
   restChoiceMade: boolean
   currentEventId: string | null
   rewardInfo: SavedRewardInfo | null
@@ -196,6 +206,7 @@ export type RunSaveData = {
   questState?: QuestState
   requestQuestState?: RequestQuestState
   retentionState?: RetentionState
+  monolithCouncilState?: import('./monolithCouncilState').MonolithCouncilSaveState
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -322,6 +333,8 @@ const SAVABLE_SCREENS: SavableScreen[] = [
   'moveLearn',
   'abilityTransform',
   'inventory',
+  'monolithCouncil',
+  'councilIntermission',
 ]
 
 function isSavableScreen(value: unknown): value is SavableScreen {
@@ -423,6 +436,27 @@ function validateRunSaveData(value: unknown): value is RunSaveData {
     }
   }
   if (!Array.isArray(value.shopLog) || !value.shopLog.every(isString)) return false
+  if (value.shopInventoriesByNodeId !== undefined) {
+    if (!isRecord(value.shopInventoriesByNodeId)) return false
+    for (const entry of Object.values(value.shopInventoriesByNodeId)) {
+      if (!isRecord(entry)) return false
+      if (
+        !Array.isArray(entry.gearIds) ||
+        !entry.gearIds.every(isString) ||
+        !Array.isArray(entry.itemIds) ||
+        !entry.itemIds.every(isString)
+      ) {
+        return false
+      }
+    }
+  }
+  if (
+    value.shopRareOfferHistory !== undefined &&
+    (!Array.isArray(value.shopRareOfferHistory) ||
+      !value.shopRareOfferHistory.every(isString))
+  ) {
+    return false
+  }
   if (typeof value.restChoiceMade !== 'boolean') return false
   if (value.currentEventId !== null && !isString(value.currentEventId)) return false
   if (!Array.isArray(value.draftPerkIds) || !value.draftPerkIds.every(isString)) {
@@ -549,6 +583,9 @@ export function normalizeLoadedSaveData(
     questState: normalizeQuestState(parsed.questState),
     requestQuestState: normalizeRequestQuestState(parsed.requestQuestState),
     retentionState: normalizeRetentionState(parsed.retentionState),
+    monolithCouncilState: normalizeCouncilState(parsed.monolithCouncilState),
+    shopInventoriesByNodeId: parsed.shopInventoriesByNodeId ?? {},
+    shopRareOfferHistory: parsed.shopRareOfferHistory ?? [],
     version: SAVE_VERSION,
   }
 }

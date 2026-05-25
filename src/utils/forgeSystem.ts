@@ -19,6 +19,7 @@ import {
   removeInventoryItemByInstanceId,
 } from './inventorySystem'
 import { rollShopGearOffers } from './gearSystem'
+import { getRecipeCraftCoinCost } from './itemPurchasePrice'
 
 export const DEFAULT_MAX_GEAR_UPGRADE = 5
 
@@ -107,14 +108,15 @@ export function checkRecipeAffordability(
       if (c.have < c.need) missingMaterials.push(c)
     }
   }
+  const coinsNeed = getRecipeCraftCoinCost(recipe)
   return {
     canCraft:
       missingMaterials.length === 0 &&
-      coins >= recipe.coinCost &&
+      coins >= coinsNeed &&
       partyLevel >= recipe.minLevel,
     missingMaterials,
     coinsHave: coins,
-    coinsNeed: recipe.coinCost,
+    coinsNeed,
     meetsLevel: partyLevel >= recipe.minLevel,
   }
 }
@@ -285,10 +287,11 @@ export function craftRecipe(
   const recipe = getCraftingRecipeById(recipeId)
   if (!recipe) return { ok: false, reason: 'Unknown recipe.' }
 
+  const craftCoinCost = getRecipeCraftCoinCost(recipe)
   const check = checkRecipeAffordability(recipe, inventory, starter.coins, partyLevel)
   if (!check.meetsLevel) return { ok: false, reason: 'Party level too low for this recipe.' }
   if (!check.canCraft) {
-    if (starter.coins < recipe.coinCost) {
+    if (starter.coins < craftCoinCost) {
       return { ok: false, reason: 'Not enough coins.' }
     }
     return { ok: false, reason: 'Missing required materials.' }
@@ -296,7 +299,7 @@ export function craftRecipe(
 
   let nextInv = consumeRecipeMaterials(inventory, recipe)
   let nextStarter =
-    recipe.coinCost > 0 ? spendCoins(starter, recipe.coinCost) : starter
+    craftCoinCost > 0 ? spendCoins(starter, craftCoinCost) : starter
 
   const applied = applyCraftResult(nextStarter, nextInv, recipe, regionId)
   return {

@@ -1,16 +1,18 @@
 import type { Ability } from '../data/abilities'
 import type { EncounterKind } from '../data/enemies'
-import { getRegion } from '../data/regions'
 import {
   GEAR_ITEM_LIST,
   getGearItem,
-  RELIC_GEAR_BY_TYPE,
   type GearDamageModifiers,
   type GearItem,
   type GearRarity,
   type GearStatModifiers,
 } from '../data/gearItems'
 import type { ElementType, StarterStats } from '../data/starters'
+import {
+  generateShopInventory,
+  type GenerateShopInventoryParams,
+} from './shopGeneration'
 export type CreatureWithGear = {
   equippedGearId?: string | null
   equippedGearUpgradeLevel?: number
@@ -134,36 +136,37 @@ function filterGearByRarities(rarities: GearRarity[]): GearItem[] {
   return GEAR_ITEM_LIST.filter((g) => set.has(g.rarity))
 }
 
-/** Three random gear offers for a shop visit, scaled by region difficulty. */
-export function rollShopGearOffers(regionId: string): string[] {
-  const region = getRegion(regionId)
-  const difficulty = region?.difficulty ?? 1
-  let pool: GearItem[]
-  if (difficulty <= 1) {
-    pool = filterGearByRarities(['common', 'uncommon'])
-  } else if (difficulty === 2) {
-    pool = filterGearByRarities(['common', 'uncommon', 'rare'])
-  } else {
-    pool = filterGearByRarities(['uncommon', 'rare', 'epic'])
-  }
-  if (pool.length === 0) pool = GEAR_ITEM_LIST
-
-  const picked = new Set<string>()
-  const offers: string[] = []
-  let attempts = 0
-  while (offers.length < 3 && attempts < 40) {
-    attempts++
-    const item = pickRandom(pool)
-    if (!item || picked.has(item.id)) continue
-    picked.add(item.id)
-    offers.push(item.id)
-  }
-  return offers
+/** Three gear offers for rewards / legacy callers (seeded drift-market-style roll). */
+export function rollShopGearOffers(
+  regionId: string,
+  options?: Partial<GenerateShopInventoryParams>,
+): string[] {
+  return generateShopInventory({
+    shopType: options?.shopType ?? 'driftMarket',
+    region: regionId,
+    playerLevel: options?.playerLevel ?? 12,
+    partyTypes: options?.partyTypes ?? ['Fire', 'Water', 'Grass'],
+    seed: options?.seed ?? `gear-offer-${regionId}`,
+    previousShopHistory: options?.previousShopHistory,
+    ...options,
+  }).gearIds
 }
 
-/** All three premium gear pieces for the starter's element (epic, mythic, legendary). */
-export function rollRelicShopOffers(starterType: ElementType): string[] {
-  return [...RELIC_GEAR_BY_TYPE[starterType]]
+/** Premium relic-style gear offers (varied epic+ pool, not fixed starter trio). */
+export function rollRelicShopOffers(
+  starterType: ElementType,
+  options?: Partial<GenerateShopInventoryParams>,
+): string[] {
+  return generateShopInventory({
+    shopType: 'reliquary',
+    region: options?.region ?? 'verdant-circuit',
+    playerLevel: options?.playerLevel ?? 15,
+    partyTypes: options?.partyTypes ?? [starterType],
+    seed: options?.seed ?? `relic-offer-${starterType}`,
+    rarityBias: 'premium',
+    previousShopHistory: options?.previousShopHistory,
+    ...options,
+  }).gearIds
 }
 
 /** Random gear at or above a minimum rarity for event rewards. */
@@ -186,6 +189,7 @@ const DROP_TABLES: Record<EncounterKind, DropTable> = {
   gymTrainer: { chance: 0.2, rarities: ['uncommon', 'rare'] },
   gymLeader: { chance: 0.5, rarities: ['rare', 'epic'] },
   boss: { chance: 1, rarities: ['rare', 'epic', 'legendary'] },
+  council: { chance: 0.15, rarities: ['uncommon', 'rare'] },
 }
 
 /** Roll a gear drop after victory; null if no drop. */

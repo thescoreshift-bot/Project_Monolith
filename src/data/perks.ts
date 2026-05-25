@@ -1,16 +1,49 @@
 import { CREATURE_PERKS } from './creaturePerks'
+import { GENERAL_PERKS } from './generalPerks'
+import type { ElementType } from './starters'
 
 export type { CreatureSpeciesKey } from './creaturePerks'
 export {
   creatureHasCombatTag,
   getPerkCombatTag,
-  pickPerksForCreature,
   resolveCreatureSpeciesKey,
 } from './creaturePerks'
+export {
+  pickPerksForCreature,
+  inferCreatureRole,
+  getPerkStackLabel,
+} from './creaturePerks'
+export type { PickPerkContext } from '../utils/perkSelection'
 
-export type PerkRarity = 'common' | 'rare' | 'legendary'
+export type PerkRarity =
+  | 'common'
+  | 'uncommon'
+  | 'rare'
+  | 'epic'
+  | 'legendary'
+
+export type EvolutionBranchCategory =
+  | 'offense'
+  | 'defense'
+  | 'speed'
+  | 'utility'
+  | 'evolution'
 
 export type PerkCategory =
+  | EvolutionBranchCategory
+  | 'support'
+  | 'economy'
+  | 'mastery'
+  | 'gear'
+
+export type PerkRole =
+  | 'damage'
+  | 'tank'
+  | 'support'
+  | 'speed'
+  | 'balanced'
+
+export type EvolutionPathBonus =
   | 'offense'
   | 'defense'
   | 'speed'
@@ -35,6 +68,13 @@ export type Perk = {
   description: string
   statModifiers?: StatModifiers
   effect: string
+  weight?: number
+  maxStacks?: number
+  stackGroup?: string
+  unique?: boolean
+  allowedTypes?: ElementType[]
+  allowedRoles?: PerkRole[]
+  secondaryEvolutionPath?: EvolutionPathBonus
 }
 
 /** @deprecated Pre–species-perk saves only — not offered in new drafts. */
@@ -195,39 +235,44 @@ const LEGACY_GENERIC_PERKS: Record<string, Perk> = {
     id: 'primal-mutation',
     name: 'Primal Mutation',
     rarity: 'legendary',
-    category: 'evolution',
-    description: 'A violent shift toward a primal future form.',
-    effect: 'Greatly increases evolution score toward primal paths.',
+    category: 'offense',
+    description: 'Violent shift toward a primal future form.',
+    effect: '+5% damage with all abilities. Also +1 Offense evolution path.',
+    secondaryEvolutionPath: 'offense',
   },
   'adaptive-core': {
     id: 'adaptive-core',
     name: 'Adaptive Core',
     rarity: 'rare',
-    category: 'evolution',
+    category: 'defense',
     description: 'Flexible biology adapts to any path.',
-    effect: 'Slightly improves all evolution scores.',
+    effect: '+3% max HP, +2% DEF, +2% SPD. Also +1 to all evolution paths.',
+    secondaryEvolutionPath: 'evolution',
   },
   'strange-catalyst': {
     id: 'strange-catalyst',
     name: 'Strange Catalyst',
     rarity: 'legendary',
-    category: 'evolution',
-    description: 'Unlocks unusual future evolution paths later.',
-    effect: 'Opens rare and unusual evolution branches later.',
+    category: 'utility',
+    description: 'Unlocks unusual future evolution branches.',
+    effect: '+8% debuff accuracy and status potency. Also +1 Evolution path.',
+    secondaryEvolutionPath: 'evolution',
   },
   'monolith-resonance': {
     id: 'monolith-resonance',
     name: 'Monolith Resonance',
     rarity: 'rare',
-    category: 'evolution',
+    category: 'mastery',
     description: 'Harmonic link to the Monolith deepens.',
-    effect: 'Strengthens connection to Monolith evolutions.',
+    effect: '+5% mastery XP gain. Also +1 Evolution path.',
+    secondaryEvolutionPath: 'evolution',
   },
 }
 
 export const PERKS: Record<string, Perk> = {
   ...LEGACY_GENERIC_PERKS,
   ...CREATURE_PERKS,
+  ...GENERAL_PERKS,
 }
 
 export const PERK_LIST = Object.values(PERKS)

@@ -26,11 +26,11 @@ import {
 export type { EvolutionHistoryEntry }
 
 export type DominantCategoryResult = {
-  category: PerkCategory
+  category: keyof EvolutionScores
   reason: string
 }
 
-const CATEGORY_ORDER: PerkCategory[] = [
+const CATEGORY_ORDER: (keyof EvolutionScores)[] = [
   'offense',
   'defense',
   'speed',
@@ -38,7 +38,7 @@ const CATEGORY_ORDER: PerkCategory[] = [
   'evolution',
 ]
 
-function defaultCategoryForType(type: ElementType): PerkCategory {
+function defaultCategoryForType(type: ElementType): keyof EvolutionScores {
   switch (type) {
     case 'Fire':
       return 'offense'

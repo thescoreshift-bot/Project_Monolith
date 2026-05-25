@@ -9,6 +9,7 @@ export type NodeType =
   | 'gymTrainer'
   | 'gymLeader'
   | 'boss'
+  | 'monolithCouncil'
 
 export type MapNode = {
   id: string
@@ -18,6 +19,10 @@ export type MapNode = {
   column: number
   connectsTo: string[]
   badgeId?: string
+  /** Optional map UI subtitle (e.g. Council node). */
+  mapSubtitle?: string
+  /** Multi-line tooltip for map node title attribute. */
+  mapTooltip?: string
 }
 
 export const NODE_TYPE_LABELS: Record<NodeType, string> = {
@@ -31,6 +36,7 @@ export const NODE_TYPE_LABELS: Record<NodeType, string> = {
   gymTrainer: 'Gym Trainer',
   gymLeader: 'Gym Leader',
   boss: 'Boss',
+  monolithCouncil: 'Monolith Council',
 }
 
 export type NodeVisitState = 'locked' | 'available' | 'completed'
@@ -47,9 +53,16 @@ export const ALL_NODE_TYPES: readonly NodeType[] = [
   'gymTrainer',
   'gymLeader',
   'boss',
+  'monolithCouncil',
 ] as const
 
-export type NodeClickAction = 'combat' | 'shop' | 'relicShop' | 'rest' | 'event'
+export type NodeClickAction =
+  | 'combat'
+  | 'shop'
+  | 'relicShop'
+  | 'rest'
+  | 'event'
+  | 'monolithCouncil'
 
 export function getNodeClickAction(nodeType: NodeType): NodeClickAction {
   switch (nodeType) {
@@ -68,6 +81,8 @@ export function getNodeClickAction(nodeType: NodeType): NodeClickAction {
       return 'rest'
     case 'event':
       return 'event'
+    case 'monolithCouncil':
+      return 'monolithCouncil'
     default: {
       const unhandled: never = nodeType
       throw new Error(`Unhandled node type in click router: ${unhandled}`)
@@ -93,8 +108,9 @@ export function nodeTypeToCssClass(type: NodeType): string {
     rest: 'rest',
     gymTrainer: 'gym-trainer',
     gymLeader: 'gym-leader',
-    boss: 'boss',
-  }
+  boss: 'boss',
+  monolithCouncil: 'monolith-council',
+}
   return classes[type]
 }
 
@@ -109,13 +125,54 @@ export function nodeTypeToIconPath(type: NodeType): string {
     rest: '/assets/map-nodes/rest.png',
     gymTrainer: '/assets/map-nodes/gym-trainer.png',
     gymLeader: '/assets/map-nodes/gym-leader.png',
-    boss: '/assets/map-nodes/boss.png',
-  }
+  boss: '/assets/map-nodes/boss.png',
+  monolithCouncil: '/assets/map-nodes/boss.png',
+}
   return icons[type]
 }
 
 export function isDramaticNodeType(type: NodeType): boolean {
-  return type === 'boss' || type === 'gymLeader'
+  return type === 'boss' || type === 'gymLeader' || type === 'monolithCouncil'
+}
+
+/** Visual scale tier for map node icons (UI only). */
+export type MapNodeSizeTier = 'normal' | 'important' | 'dramatic'
+
+export function getMapNodeSizeTier(type: NodeType): MapNodeSizeTier {
+  if (type === 'monolithCouncil') return 'dramatic'
+  if (isDramaticNodeType(type)) return 'dramatic'
+  if (
+    type === 'elite' ||
+    type === 'alphaNest' ||
+    type === 'gymTrainer' ||
+    type === 'relicShop'
+  ) {
+    return 'important'
+  }
+  return 'normal'
+}
+
+export function isDangerousMapNodeType(type: NodeType): boolean {
+  return type === 'elite' || type === 'alphaNest'
+}
+
+export function getMapNodeDifficultyHint(type: NodeType): string | null {
+  switch (type) {
+    case 'elite':
+      return 'Elite'
+    case 'alphaNest':
+      return 'Alpha'
+    case 'gymTrainer':
+      return 'Gym'
+    case 'gymLeader':
+      return 'Leader'
+    case 'boss':
+      return 'Boss'
+    case 'monolithCouncil':
+      return '8/8 · Council'
+    default:
+      return null
+  }
 }
 
 export function isNodeReachable(

@@ -48,7 +48,23 @@ export function getDamageCapFraction(
     return superEffective ? 0.55 : 0.48
   }
 
-  return 1
+  if (attackerLevel <= 20) {
+    if (kind === 'boss') {
+      return superEffective ? 0.58 : 0.48
+    }
+    if (kind === 'elite' || kind === 'alpha' || kind === 'trainer') {
+      return superEffective ? 0.5 : 0.42
+    }
+    return superEffective ? 0.42 : 0.34
+  }
+
+  if (kind === 'normal') {
+    return superEffective ? 0.48 : 0.38
+  }
+  if (kind === 'boss') {
+    return superEffective ? 0.55 : 0.45
+  }
+  return superEffective ? 0.46 : 0.4
 }
 
 /** Cap single-hit damage for low-level fights so type advantage is not an instant full-HP delete. */
@@ -60,8 +76,15 @@ export function applyEarlyGameDamageCap(
   encounterKind: EncounterDamageKind = 'normal',
 ): number {
   if (damage <= 0 || defenderMaxHp <= 0) return damage
-  if (attackerLevel > 10 && encounterKind === 'normal') {
-    return damage
+  if (attackerLevel > 24 && encounterKind === 'normal') {
+    const fraction = getDamageCapFraction(
+      attackerLevel,
+      effectivenessMultiplier,
+      encounterKind,
+    )
+    if (fraction >= 1) return damage
+    const cap = Math.max(1, Math.floor(defenderMaxHp * fraction))
+    return Math.min(damage, cap)
   }
 
   const fraction = getDamageCapFraction(

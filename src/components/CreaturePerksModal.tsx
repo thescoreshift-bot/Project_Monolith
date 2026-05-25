@@ -67,9 +67,11 @@ export function CreaturePerksModal({
                       Stats: {statLines.join(', ')}
                     </p>
                   )}
-                  <p className="creature-perks-modal__evo">
-                    Evolution impact: {getPerkEvolutionScoreLabel(perk)}
-                  </p>
+                  {getPerkEvolutionScoreLabel(perk) ? (
+                    <p className="creature-perks-modal__evo">
+                      {getPerkEvolutionScoreLabel(perk)}
+                    </p>
+                  ) : null}
                 </li>
               )
             })}

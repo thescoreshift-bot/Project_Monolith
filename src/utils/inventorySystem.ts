@@ -239,6 +239,62 @@ export function getAllInventoryItems(inv: TrainerInventory): InventoryItem[] {
   ]
 }
 
+/** Total stack/inventory count for a catalog item id (consumables, materials, gear instances, etc.). */
+export function getOwnedQuantityForItemId(
+  inv: TrainerInventory,
+  itemId: string,
+): number {
+  return getAllInventoryItems(inv).reduce(
+    (sum, entry) => (entry.itemId === itemId ? sum + entry.quantity : sum),
+    0,
+  )
+}
+
+export type ShopGearEquipDisplay = {
+  equippedBy: string[]
+  label: string | null
+}
+
+/** Which party members wear this gear template id (equipped gear is not in inventory). */
+export function getGearEquippedDisplay(
+  gearId: string,
+  starter: CreatureGearFields & { name: string },
+  recruits: Array<CreatureGearFields & { name: string }>,
+): ShopGearEquipDisplay {
+  const equippedBy: string[] = []
+  if (starter.equippedGearId === gearId) equippedBy.push(starter.name)
+  for (const recruit of recruits) {
+    if (recruit.equippedGearId === gearId) equippedBy.push(recruit.name)
+  }
+  if (equippedBy.length === 0) {
+    return { equippedBy, label: null }
+  }
+  if (equippedBy.length === 1) {
+    return { equippedBy, label: `Equipped by ${equippedBy[0]}` }
+  }
+  return { equippedBy, label: `Equipped (${equippedBy.join(', ')})` }
+}
+
+export type ShopItemOwnership = {
+  ownedQuantity: number
+  equippedLabel: string | null
+}
+
+export function getShopItemOwnership(
+  inv: TrainerInventory,
+  itemId: string,
+  starter: CreatureGearFields & { name: string },
+  recruits: Array<CreatureGearFields & { name: string }>,
+  options?: { trackEquipped?: boolean },
+): ShopItemOwnership {
+  const ownedQuantity = getOwnedQuantityForItemId(inv, itemId)
+  const equippedLabel =
+    options?.trackEquipped === true
+      ? getGearEquippedDisplay(itemId, starter, recruits).label
+      : null
+  return { ownedQuantity, equippedLabel }
+}
+
 export function normalizeInventoryItem(raw: unknown): InventoryItem | null {
   if (!raw || typeof raw !== 'object') return null
   const o = raw as Record<string, unknown>

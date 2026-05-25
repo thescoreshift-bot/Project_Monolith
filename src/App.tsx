@@ -21,6 +21,7 @@ import {
   type PendingCombatStart,
 } from './utils/encounterTransition'
 import { resolveAbilitySfxKey } from './data/abilitySounds'
+import { resolveAbilityVfxId } from './data/abilityVfx'
 import type { User } from '@supabase/supabase-js'
 import { AccountScreen, LoginScreen, RegisterScreen } from './components/AuthScreens'
 import { CharacterSelectScreen } from './components/CharacterSelectScreen'
@@ -234,8 +235,7 @@ import {
 } from './data/nodeMap'
 import { getPerk, pickPerksForCreature, resolveCreatureSpeciesKey, type Perk } from './data/perks'
 import { getGearItem } from './data/gearItems'
-import { SHOP_ITEMS, type ShopItemId } from './data/shopItems'
-import { STARTERS, type Starter } from './data/starters'
+import { STARTERS, type ElementType, type Starter } from './data/starters'
 import {
   applyMasteryXpToCreature,
   applyPerkToCreature,
@@ -276,8 +276,55 @@ import {
   getDefenderStatsForAttack,
   getEffectiveStats,
   getFirstStrikeBonus,
+  getFirstStrikeDamageMult,
   getPostVictoryHealFromBadges,
 } from './utils/badgeBonuses'
+import {
+  getEnemyDamageDealtMultiplier,
+  getEnemyDamageTakenMultiplier,
+} from './data/enemyModifiers'
+import {
+  applyPerkDamageTakenReduction,
+  getPerkCritChanceBonus,
+  rollPerkDodge,
+} from './utils/perkCombat'
+import { inferCreatureRole, getPerkStackLabel } from './data/perks'
+import { pickCouncilEnemyPlayerTarget } from './utils/councilAi'
+import { getCouncilForRegion, getCouncilNodeId } from './data/monolithCouncil'
+import { MonolithCouncilScreen } from './components/MonolithCouncilScreen'
+import { CouncilIntermissionScreen } from './components/CouncilIntermissionScreen'
+import {
+  allCouncilEnemiesDefeated,
+  getDefaultLivingCouncilTargetIndex,
+  getLivingCouncilEnemies,
+  logCouncilEnemyDefeatCheck,
+  applyCouncilFreeRecovery,
+  applyCouncilFullRecovery,
+  COUNCIL_FULL_HEAL_COST,
+} from './utils/councilGauntlet'
+import {
+  advanceGauntletProgress,
+  applyCouncilMapState,
+  buildCouncilCombatSession,
+  buildCouncilPlayerTargets,
+  councilBattleLabel,
+  completeCouncilForRegion,
+  createContextForCouncilFight,
+  getCouncilDefinitionOrThrow,
+  grantCouncilCompletionRewards,
+  isGauntletComplete,
+  pickCouncilEnemyMove,
+  pickPlayerTargetIndex,
+  startGauntletProgress,
+  type CouncilCombatSession,
+} from './utils/councilRunFlow'
+import {
+  createDefaultCouncilState,
+  normalizeCouncilState,
+  reconcileMonolithCouncilUnlocks,
+  canShowCouncilMapHudAccess,
+} from './utils/monolithCouncilState'
+import { getRegionSelectCouncilBanner } from './utils/councilTravelHint'
 import { clearPartyBattleBuffs } from './utils/battleBuffs'
 import {
   getTypeEffectivenessMultiplier,
@@ -288,6 +335,11 @@ import {
   clampAbilityPowerForEnemy,
 } from './utils/damageBalance'
 import { distributeBattleXp } from './utils/battleRewards'
+import {
+  getCouncilFightCoinReward,
+  getCouncilFightEncounterKind,
+  getCouncilFightScaledXp,
+} from './utils/councilFightRewards'
 import {
   applyDamage,
   pickEnemyAbility,
@@ -304,7 +356,18 @@ import {
   getMapNodeFromList,
   unlockBossIfReady,
 } from './utils/mapGenerator'
-import { rollBattleGearDrop, rollRelicShopOffers, rollShopGearOffers } from './utils/gearSystem'
+import { rollBattleGearDrop } from './utils/gearSystem'
+import { getItemDefinition } from './data/items'
+import {
+  generateShopInventory,
+  resolveShopType,
+  type PersistedShopInventory,
+} from './utils/shopGeneration'
+import {
+  getGearPurchasePrice,
+  getItemPurchasePrice,
+  shopTypeToPurchaseSource,
+} from './utils/itemPurchasePrice'
 import {
   addGearIdToTrainerInventory,
   addItemToTrainerInventory,
@@ -367,6 +430,7 @@ import {
   countBadgesInRegion,
   createRegionMap,
   getAllTravelRegions,
+  getRegionDisplayName,
 } from './utils/regionTravel'
 import { isSupabaseConfigured } from './lib/supabaseClient'
 import {
@@ -464,6 +528,8 @@ type Screen =
   | 'settings'
   | 'inventory'
   | 'recoveryStation'
+  | 'monolithCouncil'
+  | 'councilIntermission'
   | 'pvp'
   | 'pvpVictory'
   | 'pvpDefeat'
@@ -483,6 +549,14 @@ type CreatureLevelUpLine = {
   newLevel: number
 }
 
+type CouncilGauntletRewardStep = {
+  fightNumber: number
+  totalFights: number
+  trialName: string
+  nextTrialName?: string
+  gauntletComplete: boolean
+}
+
 type RewardInfo = {
   coinsGained: number
   xpLines: CreatureXpGainLine[]
@@ -500,6 +574,7 @@ type RewardInfo = {
   materialsFound?: string[]
   questProgressLines?: string[]
   questCompletedTitles?: string[]
+  councilGauntletStep?: CouncilGauntletRewardStep
 }
 
 type DefeatInfo = {
@@ -541,6 +616,16 @@ function App() {
   const [earnedBadges, setEarnedBadges] = useState<string[]>([])
   const [currentRegionId, setCurrentRegionId] = useState(DEFAULT_REGION_ID)
   const [completedRegionIds, setCompletedRegionIds] = useState<string[]>([])
+  const [monolithCouncilState, setMonolithCouncilState] = useState(
+    createDefaultCouncilState(),
+  )
+  const [secondaryEnemy, setSecondaryEnemy] = useState<Enemy | null>(null)
+  const councilEnemiesRef = useRef<Enemy[]>([])
+  const councilSessionRef = useRef<CouncilCombatSession | null>(null)
+  const councilPostRewardRef = useRef<{
+    gauntletComplete: boolean
+  } | null>(null)
+  const councilTargetIndexRef = useRef(0)
   const [pendingBossVictory, setPendingBossVictory] = useState(false)
   const [regionCompleteInfo, setRegionCompleteInfo] =
     useState<RegionCompleteData | null>(null)
@@ -553,6 +638,10 @@ function App() {
     useState<EncounterKind>('battle')
   const [enemy, setEnemy] = useState<Enemy | null>(null)
   const [battleLog, setBattleLog] = useState<string[]>([])
+  const [enemyAbilityVfx, setEnemyAbilityVfx] = useState<{
+    vfxId: string
+    playKey: number
+  } | null>(null)
   const [rewardInfo, setRewardInfo] = useState<RewardInfo | null>(null)
   const [defeatInfo, setDefeatInfo] = useState<DefeatInfo | null>(null)
   const [combatLocked, setCombatLocked] = useState(false)
@@ -568,13 +657,21 @@ function App() {
     emptyTrainerInventory(),
   )
   const [inventoryMessage, setInventoryMessage] = useState<string | null>(null)
-  const [shopGearOffers, setShopGearOffers] = useState<string[]>([])
+  const [shopInventoriesByNodeId, setShopInventoriesByNodeId] = useState<
+    Record<string, PersistedShopInventory>
+  >({})
+  const [shopRareOfferHistory, setShopRareOfferHistory] = useState<string[]>([])
+  const [activeShopInventory, setActiveShopInventory] =
+    useState<PersistedShopInventory | null>(null)
   const [gearEquipCreatureId, setGearEquipCreatureId] = useState<string | null>(
     null,
   )
   const [restChoiceMade, setRestChoiceMade] = useState(false)
   const [currentEvent, setCurrentEvent] = useState<GameEvent | null>(null)
   const [mapMessage, setMapMessage] = useState<string | null>(null)
+  const [councilMapFocusNodeId, setCouncilMapFocusNodeId] = useState<string | null>(
+    null,
+  )
   const [nodeClickDebug, setNodeClickDebug] = useState<{
     id: string
     type: string
@@ -730,6 +827,7 @@ function App() {
   const combatContextRef = useRef<CombatContext | null>(null)
   const combatTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const firstAttackUsedRef = useRef<Set<string>>(new Set())
+  const playerDamageHitsRef = useRef(0)
   const runCreatureRef = useRef<RunCreature | null>(null)
   const partyRecruitsRef = useRef<PartyCreature[]>([])
   const pendingAbilityUpgradeQueueRef = useRef<AbilityMasteryPerkQueueEntry[]>([])
@@ -778,7 +876,30 @@ function App() {
   }, [screen])
 
   useEffect(() => {
-    if (screen !== 'combat' || !enemy) return
+    if (screen !== 'combat') return
+    if (combatContextRef.current?.source === 'monolithCouncil') {
+      if (
+        councilEnemiesRef.current.length > 0 &&
+        allCouncilEnemiesDefeated(councilEnemiesRef.current) &&
+        !combatEndedRef.current
+      ) {
+        const timer = window.setTimeout(() => {
+          if (
+            screenRef.current === 'combat' &&
+            !combatEndedRef.current &&
+            allCouncilEnemiesDefeated(councilEnemiesRef.current)
+          ) {
+            combatEndedRef.current = true
+            setCombatLocked(true)
+            stopEncounterBattleMusic()
+            handleCouncilGauntletVictory()
+          }
+        }, 450)
+        return () => window.clearTimeout(timer)
+      }
+      return
+    }
+    if (!enemy) return
     if (enemy.currentHp <= 0 && !combatEndedRef.current) {
       const timer = window.setTimeout(() => {
         if (
@@ -791,7 +912,7 @@ function App() {
       }, 450)
       return () => window.clearTimeout(timer)
     }
-  }, [screen, enemy])
+  }, [screen, enemy, secondaryEnemy])
 
   useEffect(() => {
     authUserRef.current = authUser
@@ -896,9 +1017,11 @@ function App() {
   function resetCombatSession() {
     combatEndedRef.current = false
     firstAttackUsedRef.current = new Set()
+    playerDamageHitsRef.current = 0
     enemyStatStagesRef.current = {}
     playerStatStagesRef.current = {}
     enemyTurnLockRef.current = false
+    setEnemyAbilityVfx(null)
     clearCombatTimeout()
   }
 
@@ -911,11 +1034,384 @@ function App() {
     clearCombatTimeout()
     enemyTurnLockRef.current = false
     setEnemy(null)
+    setSecondaryEnemy(null)
+    councilEnemiesRef.current = []
+    councilSessionRef.current = null
     setLastCombatNode(null)
     setCombatContextBoth(null)
     setCombatLocked(true)
     setBattleLog([])
     setCombatPhase('starter')
+  }
+
+  function syncCouncilToMap(
+    nodes: MapNode[],
+    states: Record<string, import('./data/nodeMap').NodeVisitState>,
+    councilState: import('./utils/monolithCouncilState').MonolithCouncilSaveState = monolithCouncilState,
+  ) {
+    const applied = applyCouncilMapState(
+      nodes,
+      states,
+      currentRegionId,
+      councilState,
+      earnedBadges,
+    )
+    setMapNodes(applied.nodes)
+    setNodeStates(applied.states)
+    return applied
+  }
+
+  function refreshCouncilUnlock(regionId: string = currentRegionId) {
+    const { state, newlyUnlockedRegionIds, notificationMessage } =
+      reconcileMonolithCouncilUnlocks(monolithCouncilState, earnedBadges, {
+        preferNotifyRegionId: regionId,
+      })
+    const stateChanged = state !== monolithCouncilState
+    if (stateChanged) {
+      setMonolithCouncilState(state)
+    }
+    if (newlyUnlockedRegionIds.includes(regionId)) {
+      dispatchRetentionEvent('monolithCouncilUnlocked', { regionId })
+    }
+    if (notificationMessage) {
+      setMapMessage(
+        `${notificationMessage} Use Challenge Monolith Council on the map HUD or scroll to the node at the top of the route.`,
+      )
+      setCouncilMapFocusNodeId(getCouncilNodeId(regionId))
+    }
+    if (stateChanged || newlyUnlockedRegionIds.length > 0) {
+      syncCouncilToMap(mapNodes, nodeStates, state)
+      if (newlyUnlockedRegionIds.includes(regionId)) {
+        setCouncilMapFocusNodeId(getCouncilNodeId(regionId))
+      }
+    }
+  }
+
+  function handleOpenMonolithCouncil() {
+    const council = getCouncilForRegion(currentRegionId)
+    if (!council || council.trials.length === 0) {
+      setMapMessage("This region's Monolith Council is not available yet.")
+      return
+    }
+    if (
+      !canShowCouncilMapHudAccess(
+        currentRegionId,
+        earnedBadges,
+        monolithCouncilState,
+      )
+    ) {
+      return
+    }
+    setMapMessage(null)
+    setScreen('monolithCouncil')
+  }
+
+  function syncCouncilEnemiesUi(enemies: Enemy[]) {
+    councilEnemiesRef.current = enemies
+    setEnemy(enemies[0] ?? null)
+    setSecondaryEnemy(enemies[1] ?? null)
+    const livingIdx = getDefaultLivingCouncilTargetIndex(enemies)
+    councilTargetIndexRef.current = livingIdx
+  }
+
+  function runCouncilEnemyTurnAfterPlayerHandoff() {
+    const starterSnapshot = runCreatureRef.current ?? runCreature
+    const recruitsSnapshot = partyRecruitsRef.current ?? partyRecruits
+    if (!starterSnapshot || screenRef.current !== 'combat') return
+    if (allCouncilEnemiesDefeated(councilEnemiesRef.current)) return
+    const living = getLivingCouncilEnemies(councilEnemiesRef.current)
+    if (living.length === 0) return
+    logCouncilEnemyDefeatCheck('enemy-turn-after-handoff', councilEnemiesRef.current, {
+      selectedTargetIndex: councilTargetIndexRef.current,
+      combatPhase,
+      combatLocked,
+      combatEnded: combatEndedRef.current,
+    })
+    runMonolithCouncilEnemyTurns(starterSnapshot, recruitsSnapshot)
+  }
+
+  function beginCouncilTrialFight(trialIndex: number) {
+    const council = getCouncilDefinitionOrThrow(currentRegionId)
+    const session = buildCouncilCombatSession(council, trialIndex)
+    councilSessionRef.current = session
+    syncCouncilEnemiesUi(session.enemies)
+    const ctx = createContextForCouncilFight(
+      currentRegionId,
+      council,
+      session,
+      currentNode,
+    )
+    setCombatContextBoth(ctx)
+    setActiveEncounterKind('council')
+    resetCombatSession()
+    const starterSnapshot = runCreatureRef.current ?? runCreature
+    const recruitsSnapshot = partyRecruitsRef.current ?? partyRecruits
+    if (starterSnapshot) {
+      preCombatMasteryRef.current = {
+        starter: structuredClone(starterSnapshot.abilityMastery),
+        recruits: Object.fromEntries(
+          recruitsSnapshot.map((r) => [r.id, structuredClone(r.abilityMastery)]),
+        ),
+      }
+    }
+    setBattleLog([
+      `${councilBattleLabel(council, session)} — ${council.trials[trialIndex]?.name ?? 'Trial'} begins!`,
+    ])
+    setCombatLocked(false)
+    setScreen('combat')
+  }
+
+  function handleCouncilGauntletVictory() {
+    const council = getCouncilDefinitionOrThrow(currentRegionId)
+    const progress =
+      monolithCouncilState.activeGauntlet ??
+      startGauntletProgress(currentRegionId, council.councilId)
+    const trial = council.trials[progress.trialIndex]
+    if (!trial) return
+
+    const starterSnapshot = runCreatureRef.current ?? runCreature
+    const recruitsSnapshot = partyRecruitsRef.current ?? partyRecruits
+    if (!starterSnapshot) return
+
+    stopEncounterBattleMusic()
+    clearCombatTimeout()
+    combatEndedRef.current = true
+    setCombatLocked(true)
+
+    const fightNumber = progress.trialIndex + 1
+    const totalFights = council.trials.length
+    const encounterKind = getCouncilFightEncounterKind(trial, fightNumber, totalFights)
+    const scaledXp = getCouncilFightScaledXp(
+      trial,
+      fightNumber,
+      totalFights,
+      currentRegionId,
+    )
+    const defeatedLabel = trial.trainers.map((t) => t.trainerName).join(' & ')
+
+    dispatchRetentionEvent('councilFightWon', { regionId: currentRegionId })
+    dispatchRetentionEvent('councilTrialCompleted', { regionId: currentRegionId })
+    dispatchQuestEvent('councilFightWon', { regionId: currentRegionId })
+    dispatchQuestEvent('battleWon', { encounterKind, nodeType: 'monolithCouncil' })
+    dispatchQuestEvent('enemyDefeated', {
+      encounterKind,
+      enemyKind: 'trainer',
+      enemyType: 'Normal',
+    })
+    dispatchRetentionEvent('battleWon')
+    dispatchRetentionEvent('enemyDefeated')
+    if (trial.id === 'verdant-warden') {
+      dispatchRetentionEvent('monolithWardenDefeated', { regionId: currentRegionId })
+    }
+    if (encounterKind === 'elite') {
+      dispatchRetentionEvent('eliteOrAlphaDefeated')
+    }
+
+    recordBattleVictory(scoreTrackerRef.current, encounterKind)
+
+    const levelBefore = starterSnapshot.level
+    const recruitLevelsBefore = Object.fromEntries(
+      recruitsSnapshot.map((r) => [r.id, r.level]),
+    )
+    const helper = getActiveCombatHelper(recruitsSnapshot, activeHelperId)
+    const preReviveHp = {
+      starterHp: starterSnapshot.currentHp,
+      helperHp: helper?.currentHp ?? null,
+    }
+
+    const xpResult = distributeBattleXp(
+      encounterKind,
+      currentRegionId,
+      starterSnapshot,
+      recruitsSnapshot,
+      activeHelperId,
+      preReviveHp,
+      levelBefore,
+      recruitLevelsBefore,
+      { xpOverride: scaledXp },
+    )
+
+    recordLevelsGained(scoreTrackerRef.current, xpResult.levelUpLines.length)
+
+    const coinsGained = getCouncilFightCoinReward(currentRegionId)
+    let nextStarter = addCoins(xpResult.starter, coinsGained)
+    let nextRecruits = xpResult.recruits
+    if (coinsGained > 0) {
+      dispatchQuestEvent('coinsCollected', { amount: coinsGained })
+    }
+
+    const revived = reviveFaintedToOne(nextStarter, nextRecruits)
+    nextStarter = revived.starter
+    nextRecruits = revived.recruits
+
+    const masteryStarter = {
+      ...nextStarter,
+      abilityMastery: starterSnapshot.abilityMastery,
+    }
+    const masteryRecruits = nextRecruits.map((r) => {
+      const prev = recruitsSnapshot.find((p) => p.id === r.id)
+      return prev ? { ...r, abilityMastery: prev.abilityMastery } : r
+    })
+
+    runCreatureRef.current = masteryStarter
+    partyRecruitsRef.current = masteryRecruits
+    setRunCreature(masteryStarter)
+    setPartyRecruits(masteryRecruits)
+    setPendingPerkDraftQueue(xpResult.perkDraftQueue)
+    setPendingEvolutionQueue(xpResult.evolutionQueue)
+
+    const postQueue = buildPostBattleQueue({
+      perkDraftQueue: xpResult.perkDraftQueue,
+      evolutionQueue: xpResult.evolutionQueue,
+      starter: masteryStarter,
+      recruits: masteryRecruits,
+      levelBeforeStarter: levelBefore,
+      recruitLevelsBefore,
+      masteryPerkQueue: pendingAbilityUpgradeQueueRef.current,
+      masteryTransformQueue: pendingTransformQueueRef.current,
+    })
+    setPendingPostBattleQueue(postQueue)
+    pendingPostBattleQueueRef.current = postQueue
+
+    const preMastery = preCombatMasteryRef.current
+    const masteryLines =
+      preMastery != null
+        ? buildMasteryRewardLines(
+            {
+              ...starterSnapshot,
+              abilityMastery: preMastery.starter,
+            },
+            starterSnapshot,
+            recruitsSnapshot.map((r) => ({
+              ...r,
+              abilityMastery: preMastery.recruits[r.id] ?? r.abilityMastery,
+            })),
+            recruitsSnapshot,
+          )
+        : []
+
+    for (const line of masteryLines) {
+      if (line.xpGained > 0) {
+        dispatchRetentionEvent('abilityMasteryXp', { amount: line.xpGained })
+      }
+      if (line.rankUp && line.newRank != null) {
+        dispatchRetentionEvent('abilityMasteryLevelReached', {
+          masteryLevel: line.newRank,
+        })
+      }
+    }
+
+    const pendingChoices = summarizePostBattleQueue(postQueue)
+    setPendingAbilityUpgradeQueue([])
+    pendingAbilityUpgradeQueueRef.current = []
+    setPendingTransformQueue([])
+    pendingTransformQueueRef.current = []
+
+    const nextProgress = advanceGauntletProgress(progress)
+    const gauntletComplete = isGauntletComplete(council, nextProgress)
+    setMonolithCouncilState((s) => ({ ...s, activeGauntlet: nextProgress }))
+    councilPostRewardRef.current = { gauntletComplete }
+
+    const nextTrial = council.trials[nextProgress.trialIndex]
+    const questLines = buildQuestRewardLines()
+
+    cleanupCombatState()
+    combatEndedRef.current = false
+
+    setRewardInfo({
+      coinsGained,
+      xpLines: xpResult.xpLines,
+      levelUpLines: xpResult.levelUpLines,
+      masteryLines,
+      pendingChoices,
+      loot: coinsGained > 0 ? 'Council trial coins' : 'None',
+      enemyName: `${trial.name} (${defeatedLabel})`,
+      hasPerkDrafts: xpResult.perkDraftQueue.length > 0,
+      questProgressLines: questLines.progress,
+      questCompletedTitles: questLines.completed,
+      councilGauntletStep: {
+        fightNumber,
+        totalFights,
+        trialName: trial.name,
+        nextTrialName: nextTrial?.name,
+        gauntletComplete,
+      },
+    })
+
+    if (xpResult.perkDraftQueue.length > 0) {
+      advanceTutorialTo('claimRewards')
+      maybeAdvanceTutorial('winBattle', 'choosePerk')
+    } else {
+      advanceTutorialTo('claimRewards')
+      maybeAdvanceTutorial('winBattle', 'masteryProgress')
+    }
+
+    setScreen('reward')
+    void persistRun()
+  }
+
+  function finishCouncilGauntlet(council: ReturnType<typeof getCouncilDefinitionOrThrow>) {
+    const seed = `${currentRegionId}|council|${Date.now()}`
+    let nextStarter = runCreatureRef.current ?? runCreature
+    if (!nextStarter) return
+    const granted = grantCouncilCompletionRewards(
+      nextStarter,
+      council,
+      trainerInventoryRef.current,
+      seed,
+    )
+    nextStarter = granted.starter
+    trainerInventoryRef.current = granted.inventory
+    setTrainerInventory(granted.inventory)
+    runCreatureRef.current = nextStarter
+    setRunCreature(nextStarter)
+
+    let nextCouncil = completeCouncilForRegion(monolithCouncilState, currentRegionId)
+    if (!nextCouncil.emblemsOwned.includes(council.rewards.emblemItemId)) {
+      nextCouncil = {
+        ...nextCouncil,
+        emblemsOwned: [...nextCouncil.emblemsOwned, council.rewards.emblemItemId],
+      }
+    }
+    setMonolithCouncilState(nextCouncil)
+    dispatchRetentionEvent('councilCompleted', { regionId: currentRegionId })
+    dispatchRetentionEvent('regionCompleted', { regionId: currentRegionId })
+    dispatchQuestEvent('councilCompleted', { regionId: currentRegionId })
+
+    setCompletedRegionIds((prev) =>
+      prev.includes(currentRegionId) ? prev : [...prev, currentRegionId],
+    )
+    setMapMessage(
+      `${council.officialName} complete! ${granted.lines.join(' · ')}`,
+    )
+
+    const applied = applyCouncilMapState(
+      mapNodes,
+      nodeStates,
+      currentRegionId,
+      nextCouncil,
+      earnedBadges,
+    )
+    setMapNodes(applied.nodes)
+    setNodeStates(applied.states)
+    markNodeComplete(getCouncilNodeId(currentRegionId))
+
+    setScreen('runMap')
+    void persistRun()
+  }
+
+  function abandonCouncilGauntlet() {
+    setMonolithCouncilState((s) => ({ ...s, activeGauntlet: null }))
+    cleanupCombatState()
+    setScreen('runMap')
+    setMapMessage('You abandoned the Monolith Council challenge.')
+    void persistRun()
+  }
+
+  function handleCouncilCombatDefeat() {
+    abandonCouncilGauntlet()
+    setScreen('recoveryStation')
+    setMapMessage('Council gauntlet ended — visit Recovery Station to recover.')
   }
 
   function persistQuestProgress(nextState: QuestState) {
@@ -1675,6 +2171,8 @@ function App() {
       pendingPerkDraftQueue,
       draftingCreatureId,
       shopLog,
+      shopInventoriesByNodeId,
+      shopRareOfferHistory,
       restChoiceMade,
       currentEventId: currentEvent?.id ?? null,
       rewardInfo,
@@ -1689,6 +2187,7 @@ function App() {
       questState,
       requestQuestState,
       retentionState,
+      monolithCouncilState,
     }
   }
 
@@ -2370,8 +2869,22 @@ function App() {
     }
 
     setSelectedStarter(starter)
-    setMapNodes(saved.mapNodes)
-    setNodeStates(saved.nodeStates)
+    const loadedCouncilState = normalizeCouncilState(saved.monolithCouncilState)
+    const loadedRegionId = normalizeRegionId(saved.currentRegion)
+    const councilReconciled = reconcileMonolithCouncilUnlocks(
+      loadedCouncilState,
+      saved.earnedBadges,
+      { preferNotifyRegionId: loadedRegionId },
+    )
+    const councilMapApplied = applyCouncilMapState(
+      saved.mapNodes,
+      saved.nodeStates,
+      loadedRegionId,
+      councilReconciled.state,
+      saved.earnedBadges,
+    )
+    setMapNodes(councilMapApplied.nodes)
+    setNodeStates(councilMapApplied.states)
     const normalizedCreature = normalizeRunCreature(
       saved.runCreature,
       saved.starterId,
@@ -2393,12 +2906,30 @@ function App() {
       ),
     )
     setEarnedBadges(saved.earnedBadges)
-    setCurrentRegionId(normalizeRegionId(saved.currentRegion))
+    setCurrentRegionId(loadedRegionId)
     setCompletedRegionIds(saved.completedRegionIds ?? [])
+    setMonolithCouncilState(councilReconciled.state)
+    if (councilReconciled.notificationMessage) {
+      setMapMessage(
+        `${councilReconciled.notificationMessage} Use Challenge Monolith Council on the map HUD or scroll to the node at the top of the route.`,
+      )
+      setCouncilMapFocusNodeId(getCouncilNodeId(loadedRegionId))
+    }
     setPendingBossVictory(saved.pendingBossVictory ?? false)
     setRegionCompleteInfo(saved.regionCompleteInfo ?? null)
 
     setShopLog(saved.shopLog)
+    const loadedShopStock = (saved.shopInventoriesByNodeId ?? {}) as Record<
+      string,
+      PersistedShopInventory
+    >
+    setShopInventoriesByNodeId(loadedShopStock)
+    setShopRareOfferHistory(saved.shopRareOfferHistory ?? [])
+    if (saved.activeNodeId && loadedShopStock[saved.activeNodeId]) {
+      setActiveShopInventory(loadedShopStock[saved.activeNodeId])
+    } else {
+      setActiveShopInventory(null)
+    }
     setTrainerInventory(
       saved.trainerInventory ??
         migrateLegacyGearInventory(
@@ -2586,6 +3117,9 @@ function App() {
     pendingPerkDraftQueue,
     draftingCreatureId,
     shopLog,
+    shopInventoriesByNodeId,
+    shopRareOfferHistory,
+    activeShopInventory,
     restChoiceMade,
     currentEvent,
     rewardInfo,
@@ -2622,7 +3156,9 @@ function App() {
     setDraftOptions([])
     setShopLog([])
     setTrainerInventory(emptyTrainerInventory())
-    setShopGearOffers([])
+    setShopInventoriesByNodeId({})
+    setShopRareOfferHistory([])
+    setActiveShopInventory(null)
     setGearEquipCreatureId(null)
     setRestChoiceMade(false)
     setCurrentEvent(null)
@@ -2973,7 +3509,9 @@ function App() {
     setTrainerInventory(freshInventory)
     setQuestState(createDefaultQuestState())
     setRequestQuestState(createDefaultRequestQuestState())
-    setShopGearOffers([])
+    setShopInventoriesByNodeId({})
+    setShopRareOfferHistory([])
+    setActiveShopInventory(null)
 
     let nodes: MapNode[]
     let states: Record<string, NodeVisitState>
@@ -3273,14 +3811,8 @@ function App() {
         startCombat(node)
         break
       case 'shop':
-        setShopLog([])
-        setShopGearOffers(rollShopGearOffers(currentRegionId))
-        setScreen('shop')
-        break
       case 'relicShop':
-        setShopLog([])
-        setShopGearOffers(rollRelicShopOffers(runCreature.type))
-        setScreen('shop')
+        openShopForNode(node)
         break
       case 'rest':
         setRestChoiceMade(false)
@@ -3290,6 +3822,15 @@ function App() {
         setCurrentEvent(pickRandomEvent())
         setScreen('event')
         break
+      case 'monolithCouncil': {
+        const councilAtNode = getCouncilForRegion(currentRegionId)
+        if (!councilAtNode || councilAtNode.trials.length === 0) {
+          setMapMessage("This region's Monolith Council is not available yet.")
+          break
+        }
+        setScreen('monolithCouncil')
+        break
+      }
     }
   }
 
@@ -3406,10 +3947,28 @@ function App() {
   ) {
     if (!runCreature) return
 
+    const isCouncilFight =
+      combatContextRef.current?.source === 'monolithCouncil'
+
     if (nextEnemy.currentHp <= 0) {
-      appendLog(`${nextEnemy.name} fainted!`)
-      scheduleVictoryCallback(() => handleVictory(nextEnemy), 400)
-      return
+      appendLog(`${getEnemyFoeName(nextEnemy)} fainted!`)
+      if (isCouncilFight) {
+        logCouncilEnemyDefeatCheck('player-attack-faint', councilEnemiesRef.current, {
+          selectedTargetIndex: councilTargetIndexRef.current,
+          combatPhase,
+          combatLocked,
+          combatEnded: combatEndedRef.current,
+        })
+        if (allCouncilEnemiesDefeated(councilEnemiesRef.current)) {
+          return
+        }
+        councilTargetIndexRef.current = getDefaultLivingCouncilTargetIndex(
+          councilEnemiesRef.current,
+        )
+      } else {
+        scheduleVictoryCallback(() => handleVictory(nextEnemy), 400)
+        return
+      }
     }
 
     const next = getNextPlayerAttacker(
@@ -3425,6 +3984,11 @@ function App() {
       }
       setCombatPhase('recruit')
       setCombatLocked(false)
+      return
+    }
+
+    if (isCouncilFight) {
+      runCouncilEnemyTurnAfterPlayerHandoff()
       return
     }
 
@@ -3459,6 +4023,12 @@ function App() {
     attackerKey: string
   }
 
+  function triggerEnemyAbilityVfx(abilityId: string, resolvedAbilityId: string) {
+    const vfxId = resolveAbilityVfxId(abilityId, resolvedAbilityId)
+    if (!vfxId) return
+    setEnemyAbilityVfx({ vfxId, playKey: Date.now() })
+  }
+
   function applyAbilityToEnemy(
     abilityId: string,
     attacker: RunCreature | PartyCreature,
@@ -3467,6 +4037,13 @@ function App() {
   ): AttackResolution | null {
     const starterSnapshot = runCreatureRef.current ?? runCreature
     if (!enemy || !starterSnapshot) return null
+
+    let defenderEnemy = enemy
+    if (combatContextRef.current?.source === 'monolithCouncil') {
+      const idx = pickPlayerTargetIndex(councilEnemiesRef.current, abilityId)
+      councilTargetIndexRef.current = idx
+      defenderEnemy = councilEnemiesRef.current[idx] ?? enemy
+    }
 
     const recruitsSnapshot = partyRecruitsRef.current ?? partyRecruits
     const masteryEntry = getMasteryEntry(attacker, abilityId)
@@ -3481,27 +4058,44 @@ function App() {
     })
     const enemyStages = enemyStatStagesRef.current
     const rawDefender = getDefenderStatsForAttack(
-      enemy.stats,
+      defenderEnemy.stats,
       ability,
       attacker.selectedPerks,
     )
     const defenderStats = buildCombatStatsForEnemy(rawDefender, enemyStages)
+    const typeMult = getTypeEffectivenessMultiplier(
+      ability.type,
+      defenderEnemy.type,
+    )
+    const defenderHpRatio =
+      defenderEnemy.maxHp > 0 ? defenderEnemy.currentHp / defenderEnemy.maxHp : 1
     const badgeMult = getAttackerDamageMultiplier(
       ability,
       earnedBadges,
       attacker.selectedPerks,
       attacker,
+      {
+        defenderHpRatio,
+        typeMultiplier: typeMult,
+        encounterKind: defenderEnemy.kind,
+        consecutiveDamageHits: playerDamageHitsRef.current,
+        rhythmHitIndex: playerDamageHitsRef.current + 1,
+      },
     )
-    const typeMult = getTypeEffectivenessMultiplier(ability.type, enemy.type)
     const masteryMods = getCombatModifiersFromMastery(masteryEntry)
     const supportMods = getSupportMasteryModifiers(masteryEntry)
+    const firstStrikeUsed = firstAttackUsedRef.current.has(attackerKey)
     const firstStrikeBonus = getFirstStrikeBonus(
       attacker.selectedPerks,
-      firstAttackUsedRef.current.has(attackerKey),
+      firstStrikeUsed,
+    )
+    const firstStrikeMult = getFirstStrikeDamageMult(
+      attacker.selectedPerks,
+      firstStrikeUsed,
     )
     firstAttackUsedRef.current.add(attackerKey)
 
-    const enemyHpBefore = enemy.currentHp
+    const enemyHpBefore = defenderEnemy.currentHp
     const hit = rollHitsWithMastery(
       ability.accuracy,
       masteryMods.bonusAccuracy + supportMods.bonusAccuracy,
@@ -3513,9 +4107,15 @@ function App() {
         attacker,
         attackerKey,
         abilityId,
-        buildMasteryXpContext(ability.type, enemy.type, false, enemyHpBefore, 0),
+        buildMasteryXpContext(
+          ability.type,
+          defenderEnemy.type,
+          false,
+          enemyHpBefore,
+          0,
+        ),
       )
-      return { nextEnemy: enemy, updatedAttacker, attackerKey }
+      return { nextEnemy: defenderEnemy, updatedAttacker, attackerKey }
     }
 
     let nextEnemy = { ...enemy }
@@ -3560,13 +4160,16 @@ function App() {
         }
       }
     } else {
-      const crit = rollCrit(masteryMods.bonusCritChance)
+      const crit = rollCrit(
+        masteryMods.bonusCritChance +
+          getPerkCritChanceBonus(attacker.selectedPerks) * 100,
+      )
       const damageDebug = {
         attackerName,
         attackerId: attackerKey,
         abilityId: resolvedId,
         abilityName: abilityDisplayName,
-        defenderName: getEnemyFoeName(enemy),
+        defenderName: getEnemyFoeName(defenderEnemy),
       }
       let damage = calcDamageWithMastery(
         ability,
@@ -3577,22 +4180,49 @@ function App() {
         badgeMult,
         crit,
         {
-          defenderMaxHp: enemy.maxHp,
+          defenderMaxHp: defenderEnemy.maxHp,
           attackerLevel: attacker.level,
-          encounterKind: enemy.kind,
+          encounterKind: defenderEnemy.kind,
         },
         damageDebug,
       )
-      damage = sanitizeDamage(damage, enemy.maxHp, ability, typeMult)
+      damage = sanitizeDamage(damage, defenderEnemy.maxHp, ability, typeMult)
+      damage = Math.floor(
+        damage *
+          getEnemyDamageTakenMultiplier(
+            defenderEnemy.combatModifier,
+            ability.category,
+          ),
+      )
       if (damage > 0 && firstStrikeBonus > 0) {
         damage += firstStrikeBonus
       }
+      if (damage > 0 && firstStrikeMult > 0) {
+        damage = Math.floor(damage * (1 + firstStrikeMult))
+      }
+
+      let shieldHp = defenderEnemy.shieldHp ?? 0
+      let hpDamage = damage
+      if (shieldHp > 0 && damage > 0) {
+        const absorbed = Math.min(shieldHp, damage)
+        shieldHp -= absorbed
+        hpDamage = damage - absorbed
+      }
+      playerDamageHitsRef.current += 1
 
       nextEnemy = {
-        ...enemy,
-        currentHp: applyDamage(enemy.currentHp, damage),
+        ...defenderEnemy,
+        currentHp: applyDamage(defenderEnemy.currentHp, hpDamage),
+        shieldHp: shieldHp > 0 ? shieldHp : undefined,
       }
-      setEnemy(nextEnemy)
+      if (combatContextRef.current?.source === 'monolithCouncil') {
+        const updated = [...councilEnemiesRef.current]
+        updated[councilTargetIndexRef.current] = nextEnemy
+        syncCouncilEnemiesUi(updated)
+      } else {
+        setEnemy(nextEnemy)
+      }
+      triggerEnemyAbilityVfx(abilityId, resolvedId)
 
       const notes: string[] = []
       if (crit) notes.push('critical hit')
@@ -3602,7 +4232,7 @@ function App() {
       const noteSuffix = notes.length > 0 ? ` (${notes.join(', ')})` : ''
 
       appendLog(
-        `${attackerName} used ${abilityDisplayName} — ${damage} damage to ${getEnemyFoeName(enemy)}!${noteSuffix}`,
+        `${attackerName} used ${abilityDisplayName} — ${damage} damage to ${getEnemyFoeName(defenderEnemy)}!${noteSuffix}`,
       )
 
       if (ability.effects?.length) {
@@ -3630,7 +4260,7 @@ function App() {
         abilityId,
         buildMasteryXpContext(
           ability.type,
-          enemy.type,
+          defenderEnemy.type,
           true,
           enemyHpBefore,
           damage,
@@ -3643,7 +4273,13 @@ function App() {
       attacker,
       attackerKey,
       abilityId,
-      buildMasteryXpContext(ability.type, enemy.type, true, enemyHpBefore, 0),
+      buildMasteryXpContext(
+        ability.type,
+        defenderEnemy.type,
+        true,
+        enemyHpBefore,
+        0,
+      ),
     )
 
     return { nextEnemy, updatedAttacker, attackerKey }
@@ -3672,6 +4308,11 @@ function App() {
     defeatedBy: Enemy,
   ) {
     if (combatEndedRef.current) return
+
+    if (combatContextRef.current?.source === 'monolithCouncil') {
+      handleCouncilCombatDefeat()
+      return
+    }
 
     stopEncounterBattleMusic()
     combatEndedRef.current = true
@@ -3715,17 +4356,216 @@ function App() {
     setScreen('defeat')
   }
 
-  function runEnemyTurn(currentEnemy: Enemy) {
-    if (enemyTurnLockRef.current) return
-    if (currentEnemy.currentHp <= 0 || combatEndedRef.current) return
-    const starterSnapshot = runCreatureRef.current ?? runCreature
-    const recruitsSnapshot = partyRecruitsRef.current ?? partyRecruits
-    if (
-      !starterSnapshot ||
-      screenRef.current !== 'combat'
-    ) {
+  function runMonolithCouncilEnemyTurns(
+    starterSnapshot: RunCreature,
+    recruitsSnapshot: PartyCreature[],
+  ) {
+    const session = councilSessionRef.current
+    if (!session || combatEndedRef.current) return
+
+    enemyTurnLockRef.current = true
+    const partyLevel = getPartyHighestLevel(starterSnapshot, recruitsSnapshot)
+    let nextStarterHp = starterSnapshot.currentHp
+    let nextRecruits = recruitsSnapshot
+    const helper = getActiveCombatHelper(recruitsSnapshot, activeHelperId)
+    let nextHelperHp = helper?.currentHp ?? null
+    let councilEnemies = [...councilEnemiesRef.current]
+
+    const applyCouncilEnemyAttack = (
+      attackerState: Enemy,
+      attackerIndex: number,
+    ) => {
+      if (attackerState.currentHp <= 0) return
+
+      const livingTargets = buildCouncilPlayerTargets(
+        { ...starterSnapshot, currentHp: nextStarterHp },
+        nextRecruits,
+        activeHelperId,
+        earnedBadges,
+        partyLevel,
+        playerStatStagesRef.current,
+      ).filter((t) => t.currentHp > 0)
+
+      if (livingTargets.length === 0) return
+
+      const partner = councilEnemies.find(
+        (e, i) => i !== attackerIndex && e.currentHp > 0,
+      )
+      const enemyAbilityId = pickCouncilEnemyMove(
+        attackerState,
+        session.aiStyle,
+        livingTargets,
+        partner,
+      )
+      const enemyAbility = getAbility(enemyAbilityId)
+      const enemyAbilityName = getAbilityDisplayName(enemyAbility)
+      const focus = pickCouncilEnemyPlayerTarget(session.aiStyle, livingTargets)
+      if (!focus) return
+
+      const enemySfxRank = Math.min(
+        10,
+        Math.max(0, Math.floor((attackerState.level ?? 1) / 2)),
+      )
+      playAbilitySfx(
+        resolveAbilitySfxKey(enemyAbility, null, { fallbackRank: enemySfxRank }),
+      )
+      const enemyAttackStats = buildCombatStatsForEnemy(
+        attackerState.stats,
+        enemyStatStagesRef.current,
+      )
+      const targetCreature =
+        focus.key === 'starter'
+          ? starterSnapshot
+          : recruitsSnapshot.find((r) => r.id === focus.key)
+      const targetPerks = targetCreature?.selectedPerks ?? []
+
+      if (rollPerkDodge(targetPerks)) {
+        appendLog(
+          `${focus.name} dodged ${getEnemyFoeName(attackerState)}'s ${enemyAbilityName}!`,
+        )
+        return
+      }
+      if (!rollHits(enemyAbility.accuracy)) {
+        appendLog(
+          `${getEnemyFoeName(attackerState)} used ${enemyAbilityName} — it missed!`,
+        )
+        return
+      }
+
+      const typeMult = getTypeEffectivenessMultiplier(
+        enemyAbility.type,
+        focus.type,
+      )
+      const powerCap = clampAbilityPowerForEnemy(
+        enemyAbility.power,
+        attackerState.level,
+        attackerState.kind,
+      )
+      const abilityForDamage =
+        powerCap < enemyAbility.power
+          ? { ...enemyAbility, power: powerCap }
+          : enemyAbility
+      let damage = safeCalcDamage(
+        abilityForDamage,
+        enemyAttackStats,
+        focus.stats,
+        focus.maxHp,
+      )
+      damage = Math.floor(damage * typeMult)
+      damage = Math.floor(
+        damage * getEnemyDamageDealtMultiplier(attackerState.combatModifier),
+      )
+      const targetHp = focus.currentHp
+      damage = applyPerkDamageTakenReduction(damage, targetPerks, {
+        hpRatio: focus.maxHp > 0 ? targetHp / focus.maxHp : 1,
+        typeMultiplier: typeMult,
+        encounterKind: attackerState.kind,
+      })
+      damage = applyEarlyGameDamageCap(
+        damage,
+        focus.maxHp,
+        attackerState.level,
+        typeMult,
+        attackerState.kind,
+      )
+      damage = sanitizeDamage(damage, focus.maxHp, abilityForDamage, typeMult)
+      const seNote =
+        typeMult >= SUPER_EFFECTIVE_MULTIPLIER ? ' (super effective)' : ''
+
+      if (focus.key === 'starter') {
+        nextStarterHp = applyDamage(nextStarterHp, damage)
+      } else {
+        nextRecruits = nextRecruits.map((r) =>
+          r.id === focus.key
+            ? { ...r, currentHp: applyDamage(r.currentHp, damage) }
+            : r,
+        )
+        const updatedHelper = nextRecruits.find((r) => r.id === focus.key)
+        nextHelperHp = updatedHelper?.currentHp ?? nextHelperHp
+      }
+      if (damage > 0) {
+        appendLog(
+          `${getEnemyFoeName(attackerState)} used ${enemyAbilityName} — ${damage} damage to ${focus.name}!${seNote}`,
+        )
+      } else {
+        appendLog(
+          `${getEnemyFoeName(attackerState)} used ${enemyAbilityName} on ${focus.name}!`,
+        )
+      }
+    }
+
+    for (let i = 0; i < councilEnemies.length; i++) {
+      let foe = councilEnemies[i]!
+      if (foe.currentHp <= 0) continue
+
+      if (
+        foe.combatModifier?.healPerTurnPercent &&
+        foe.currentHp < foe.maxHp
+      ) {
+        const heal = Math.max(
+          1,
+          Math.floor(foe.maxHp * foe.combatModifier.healPerTurnPercent),
+        )
+        foe = {
+          ...foe,
+          currentHp: Math.min(foe.maxHp, foe.currentHp + heal),
+        }
+        councilEnemies[i] = foe
+        appendLog(
+          `${getEnemyFoeName(foe)} regenerates ${heal} HP (${foe.combatModifier?.name ?? 'Regenerating'}).`,
+        )
+      }
+
+      applyCouncilEnemyAttack(foe, i)
+      councilEnemies[i] = councilEnemiesRef.current[i] ?? foe
+
+      if (isPartyDefeated(nextStarterHp, helper ? nextHelperHp : null)) {
+        break
+      }
+    }
+
+    syncCouncilEnemiesUi(councilEnemies)
+
+    logCouncilEnemyDefeatCheck('after-enemy-turns', councilEnemies, {
+      selectedTargetIndex: councilTargetIndexRef.current,
+      combatPhase,
+      combatLocked,
+      combatEnded: combatEndedRef.current,
+    })
+
+    const mergedStarter = { ...starterSnapshot, currentHp: nextStarterHp }
+    if (isPartyDefeated(nextStarterHp, helper ? nextHelperHp : null)) {
+      appendLog('Your team was defeated!')
+      handleDefeat(mergedStarter, nextRecruits, councilEnemies[0]!)
+      enemyTurnLockRef.current = false
       return
     }
+
+    runCreatureRef.current = mergedStarter
+    setRunCreature(mergedStarter)
+    partyRecruitsRef.current = nextRecruits
+    setPartyRecruits(nextRecruits)
+    setCombatPhase(resolvePlayerTurnPhase(nextStarterHp, nextRecruits))
+    setCombatLocked(false)
+    enemyTurnLockRef.current = false
+  }
+
+  function runEnemyTurn(currentEnemy: Enemy) {
+    if (enemyTurnLockRef.current) return
+    if (combatEndedRef.current) return
+    const starterSnapshot = runCreatureRef.current ?? runCreature
+    const recruitsSnapshot = partyRecruitsRef.current ?? partyRecruits
+    if (!starterSnapshot || screenRef.current !== 'combat') {
+      return
+    }
+
+    if (combatContextRef.current?.source === 'monolithCouncil') {
+      if (allCouncilEnemiesDefeated(councilEnemiesRef.current)) return
+      runMonolithCouncilEnemyTurns(starterSnapshot, recruitsSnapshot)
+      return
+    }
+
+    if (currentEnemy.currentHp <= 0) return
 
     enemyTurnLockRef.current = true
 
@@ -3776,8 +4616,34 @@ function App() {
       return
     }
 
+    let currentEnemyState = currentEnemy
+    if (
+      currentEnemyState.combatModifier?.healPerTurnPercent &&
+      currentEnemyState.currentHp > 0 &&
+      currentEnemyState.currentHp < currentEnemyState.maxHp
+    ) {
+      const heal = Math.max(
+        1,
+        Math.floor(
+          currentEnemyState.maxHp *
+            currentEnemyState.combatModifier.healPerTurnPercent,
+        ),
+      )
+      currentEnemyState = {
+        ...currentEnemyState,
+        currentHp: Math.min(
+          currentEnemyState.maxHp,
+          currentEnemyState.currentHp + heal,
+        ),
+      }
+      setEnemy(currentEnemyState)
+      appendLog(
+        `${getEnemyFoeName(currentEnemyState)} regenerates ${heal} HP (${currentEnemyState.combatModifier?.name ?? 'Regenerating'}).`,
+      )
+    }
+
     const target = targets[Math.floor(Math.random() * targets.length)]
-    const enemyAbilityId = pickEnemyAbility(currentEnemy.abilityIds)
+    const enemyAbilityId = pickEnemyAbility(currentEnemyState.abilityIds)
     const enemyAbility = getAbility(enemyAbilityId)
     const enemyAbilityName = getAbilityDisplayName(enemyAbility)
     const enemySfxRank = Math.min(
@@ -3788,17 +4654,23 @@ function App() {
       resolveAbilitySfxKey(enemyAbility, null, { fallbackRank: enemySfxRank }),
     )
     const enemyAttackStats = buildCombatStatsForEnemy(
-      currentEnemy.stats,
+      currentEnemyState.stats,
       enemyStatStagesRef.current,
     )
 
-    if (!rollHits(enemyAbility.accuracy)) {
-      appendLog(`${getEnemyFoeName(currentEnemy)} used ${enemyAbilityName} — it missed!`)
+    const targetCreature =
+      target.key === 'starter'
+        ? starterSnapshot
+        : recruitsSnapshot.find((r) => r.id === target.key)
+    const targetPerks = targetCreature?.selectedPerks ?? []
+
+    if (rollPerkDodge(targetPerks)) {
+      appendLog(
+        `${target.name} dodged ${getEnemyFoeName(currentEnemyState)}'s ${enemyAbilityName}!`,
+      )
+    } else if (!rollHits(enemyAbility.accuracy)) {
+      appendLog(`${getEnemyFoeName(currentEnemyState)} used ${enemyAbilityName} — it missed!`)
     } else {
-      const targetCreature =
-        target.key === 'starter'
-          ? starterSnapshot
-          : recruitsSnapshot.find((r) => r.id === target.key)
       const targetType = targetCreature?.type ?? starterSnapshot.type
       const typeMult = getTypeEffectivenessMultiplier(
         enemyAbility.type,
@@ -3820,12 +4692,24 @@ function App() {
         target.maxHp,
       )
       damage = Math.floor(damage * typeMult)
+      damage = Math.floor(
+        damage * getEnemyDamageDealtMultiplier(currentEnemyState.combatModifier),
+      )
+      const targetHp =
+        target.key === 'starter'
+          ? nextStarterHp
+          : nextRecruits.find((r) => r.id === target.key)?.currentHp ?? 0
+      damage = applyPerkDamageTakenReduction(damage, targetPerks, {
+        hpRatio: target.maxHp > 0 ? targetHp / target.maxHp : 1,
+        typeMultiplier: typeMult,
+        encounterKind: currentEnemyState.kind,
+      })
       damage = applyEarlyGameDamageCap(
         damage,
         target.maxHp,
-        currentEnemy.level,
+        currentEnemyState.level,
         typeMult,
-        currentEnemy.kind,
+        currentEnemyState.kind,
       )
       damage = sanitizeDamage(
         damage,
@@ -3848,7 +4732,7 @@ function App() {
       }
       if (damage > 0) {
         appendLog(
-          `${getEnemyFoeName(currentEnemy)} used ${enemyAbilityName} — ${damage} damage to ${target.name}!${seNote}`,
+          `${getEnemyFoeName(currentEnemyState)} used ${enemyAbilityName} — ${damage} damage to ${target.name}!${seNote}`,
         )
       } else {
         appendLog(`${getEnemyFoeName(currentEnemy)} used ${enemyAbilityName} on ${target.name}!`)
@@ -3904,8 +4788,23 @@ function App() {
     resetCombatSession()
 
     const route = generateNewRoute(currentRegionId, earnedBadges)
-    setMapNodes(route.mapNodes)
-    setNodeStates(route.nodeStates)
+    const councilReconciled = reconcileMonolithCouncilUnlocks(
+      monolithCouncilState,
+      earnedBadges,
+      { preferNotifyRegionId: currentRegionId },
+    )
+    if (councilReconciled.state !== monolithCouncilState) {
+      setMonolithCouncilState(councilReconciled.state)
+    }
+    const councilApplied = applyCouncilMapState(
+      route.mapNodes,
+      route.nodeStates,
+      currentRegionId,
+      councilReconciled.state,
+      earnedBadges,
+    )
+    setMapNodes(councilApplied.nodes)
+    setNodeStates(councilApplied.states)
     setDefeatInfo(null)
     setEnemy(null)
     setBattleLog([])
@@ -3914,6 +4813,10 @@ function App() {
     setLastCombatNode(null)
     setActiveNodeId(null)
     setCurrentNode(null)
+    setShopInventoriesByNodeId({})
+    setShopRareOfferHistory([])
+    setActiveShopInventory(null)
+    setShopLog([])
     setScreen('runMap')
   }
 
@@ -4076,6 +4979,7 @@ function App() {
       appendLog(`Earned the ${badge?.name ?? 'badge'}!`)
       scoreTrackerRef.current.badgesEarned += 1
       dispatchRetentionEvent('badgeEarned', { badgeId: leaderBadgeId })
+      refreshCouncilUnlock(currentRegionId)
     }
 
     const masteryStarter = {
@@ -4225,6 +5129,14 @@ function App() {
 
   function handleFleeClick() {
     if (combatEndedRef.current || screenRef.current !== 'combat') return
+    if (combatContextRef.current?.source === 'monolithCouncil') {
+      const ok = window.confirm(
+        'Fleeing will abandon the Council challenge. Continue?',
+      )
+      if (!ok) return
+      abandonCouncilGauntlet()
+      return
+    }
     setFleeConfirmOpen(true)
   }
 
@@ -4391,7 +5303,11 @@ function App() {
     const view = getPlayerTurnView(runCreature, partyRecruits, combatPhase)
     if (view.activeKey === null && combatPhase === 'recruit') {
       setCombatLocked(true)
-      runEnemyTurn(enemy)
+      if (combatContextRef.current?.source === 'monolithCouncil') {
+        runCouncilEnemyTurnAfterPlayerHandoff()
+      } else {
+        runEnemyTurn(enemy)
+      }
     }
   }, [
     screen,
@@ -4418,15 +5334,9 @@ function App() {
     return getLatestRecruits().find((r) => r.id === creatureId)?.selectedPerks ?? []
   }
 
-  function getCreatureForDraft(creatureId: string): {
-    name: string
-    type: RunCreature['type']
-    level: number
-    currentHp: number
-    maxHp: number
-    evolutionStage: number
-    evolutionScores: RunCreature['evolutionScores']
-  } | null {
+  function getCreatureForDraft(
+    creatureId: string,
+  ): RunCreature | PartyCreature | null {
     if (creatureId === STARTER_CREATURE_ID) {
       return getLatestStarter()
     }
@@ -4449,7 +5359,18 @@ function App() {
           type: creature.type,
         })
       : 'fire'
-    const options = pickPerksForCreature(speciesKey, exclude)
+    const options = pickPerksForCreature(speciesKey, exclude, 3, {
+      level: creature?.level ?? 1,
+      type: creature?.type,
+      stats: creature?.stats ?? creature?.baseStats,
+      abilityIds: creature?.abilityIds ?? [creature?.abilityId ?? 'tackle'],
+      role: creature
+        ? inferCreatureRole(
+            creature.stats ?? creature.baseStats,
+            creature.abilityIds ?? [creature.abilityId],
+          )
+        : undefined,
+    })
     if (options.length === 0) {
       return false
     }
@@ -4847,6 +5768,46 @@ function App() {
     creature: RunCreature,
     recruits: PartyCreature[] = partyRecruitsRef.current,
   ) {
+    const councilAfterReward = councilPostRewardRef.current
+    if (councilAfterReward) {
+      councilPostRewardRef.current = null
+      setRewardInfo(null)
+      const council = getCouncilDefinitionOrThrow(currentRegionId)
+      let nextStarter = runCreatureRef.current ?? creature
+      let nextRecruits = partyRecruitsRef.current ?? recruits
+      const healed = applyCouncilFreeRecovery(
+        nextStarter,
+        nextRecruits,
+        activeHelperId,
+      )
+      runCreatureRef.current = healed.starter
+      partyRecruitsRef.current = healed.recruits
+      setRunCreature(healed.starter)
+      setPartyRecruits(healed.recruits)
+      resetCombatSession()
+      setEnemy(null)
+      setBattleLog([])
+      setCombatLocked(false)
+      setPendingPerkDraftQueue([])
+      setPendingEvolutionQueue([])
+      setPendingAbilityUpgradeQueue([])
+      setDraftingCreatureId(null)
+      setDraftOptions([])
+      setPendingRecruit(null)
+      setLastCombatNode(null)
+      setCombatPhase('starter')
+      setPendingPostBattleQueue([])
+      pendingPostBattleQueueRef.current = []
+
+      if (councilAfterReward.gauntletComplete) {
+        finishCouncilGauntlet(council)
+        return
+      }
+      setScreen('councilIntermission')
+      void persistRun()
+      return
+    }
+
     healPartyAfterBattle(creature, recruits)
 
     if (rewardInfo?.bossVictory || pendingBossVictory) {
@@ -4948,9 +5909,24 @@ function App() {
 
   function handleTravelToRegion(regionId: string) {
     const route = createRegionMap(regionId, earnedBadges)
+    const councilReconciled = reconcileMonolithCouncilUnlocks(
+      monolithCouncilState,
+      earnedBadges,
+      { preferNotifyRegionId: regionId },
+    )
+    if (councilReconciled.state !== monolithCouncilState) {
+      setMonolithCouncilState(councilReconciled.state)
+    }
+    const councilApplied = applyCouncilMapState(
+      route.nodes,
+      route.nodeStates,
+      regionId,
+      councilReconciled.state,
+      earnedBadges,
+    )
     setCurrentRegionId(regionId)
-    setMapNodes(route.nodes)
-    setNodeStates(route.nodeStates)
+    setMapNodes(councilApplied.nodes)
+    setNodeStates(councilApplied.states)
     clearActiveRouteState()
     if (runModeRef.current === 'daily') {
       syncDailyDayStateFromGame(false)
@@ -5105,55 +6081,118 @@ function App() {
     consumePostBattleQueueAndContinue(nextStarter, nextRecruits)
   }
 
+  function getRunShopSeed(): string {
+    if (runModeRef.current === 'daily' && dailySeedRef.current) {
+      return dailySeedRef.current
+    }
+    const nodeKey = mapNodes.map((n) => n.id).join('|')
+    return `${currentRegionId}:${nodeKey}:${activeSlotId ?? 0}`
+  }
+
+  function buildPartyElementTypes(): ElementType[] {
+    if (!runCreature) return ['Fire']
+    const types = new Set<ElementType>()
+    types.add(runCreature.type)
+    for (const r of partyRecruits) types.add(r.type)
+    return [...types]
+  }
+
+  function appendShopRareHistory(gearIds: string[]) {
+    const rareIds = gearIds.filter((id) => {
+      const g = getGearItem(id)
+      return g && ['epic', 'mythic', 'legendary'].includes(g.rarity)
+    })
+    if (rareIds.length === 0) return
+    setShopRareOfferHistory((prev) => [...prev, ...rareIds].slice(-24))
+  }
+
+  function openShopForNode(node: MapNode) {
+    if (!runCreature) return
+    setShopLog([])
+    const shopType = resolveShopType(node.type, node.label)
+    let stock = shopInventoriesByNodeId[node.id]
+    if (!stock) {
+      stock = generateShopInventory({
+        shopType,
+        region: currentRegionId,
+        playerLevel: getPartyHighestLevel(runCreature, partyRecruits),
+        partyTypes: buildPartyElementTypes(),
+        seed: getRunShopSeed(),
+        nodeId: node.id,
+        nodeLabel: node.label,
+        previousShopHistory: shopRareOfferHistory,
+      })
+      setShopInventoriesByNodeId((prev) => ({ ...prev, [node.id]: stock }))
+      appendShopRareHistory(stock.gearIds)
+    }
+    setActiveShopInventory(stock)
+    setScreen('shop')
+  }
+
   function handleLeaveShop() {
     if (!activeNodeId) return
     markNodeComplete(activeNodeId)
     setShopLog([])
+    setActiveShopInventory(null)
     setScreen('runMap')
   }
 
-  function handleBuyConsumable(itemId: ShopItemId) {
-    if (!runCreature) return
+  function handleBuyShopItem(itemId: string) {
+    if (!runCreature || !activeShopInventory) return
+    if (!activeShopInventory.itemIds.includes(itemId)) return
 
-    const item = SHOP_ITEMS.find((i) => i.id === itemId)
-    if (!item) return
+    const def = getItemDefinition(itemId)
+    if (!def) return
+    const source = shopTypeToPurchaseSource(activeShopInventory.shopType)
+    const cost = getItemPurchasePrice(def, source)
+    if (cost == null) {
+      setShopLog((prev) => [...prev, `Cannot buy ${def.name} — price unavailable.`])
+      return
+    }
 
-    if (runCreature.coins < item.cost) {
+    if (runCreature.coins < cost) {
       setShopLog((prev) => [
         ...prev,
-        `Not enough coins for ${item.name} (need ${item.cost}).`,
+        `Not enough coins for ${def.name} (need ${cost}).`,
       ])
       return
     }
 
     const next: RunCreature = {
       ...runCreature,
-      coins: runCreature.coins - item.cost,
+      coins: runCreature.coins - cost,
     }
     setTrainerInventory((prev) => addItemToTrainerInventory(prev, itemId, 1))
     dispatchRetentionEvent('itemCollected', { itemId })
-    setShopLog((prev) => [...prev, `Bought ${item.name} x1.`])
+    setShopLog((prev) => [...prev, `Bought ${def.name} x1.`])
     runCreatureRef.current = next
     setRunCreature(next)
   }
 
   function handleBuyGear(gearId: string) {
-    if (!runCreature) return
+    if (!runCreature || !activeShopInventory) return
     const gear = getGearItem(gearId)
     if (!gear) return
-    if (!shopGearOffers.includes(gearId)) return
+    if (!activeShopInventory.gearIds.includes(gearId)) return
 
-    if (runCreature.coins < gear.price) {
+    const source = shopTypeToPurchaseSource(activeShopInventory.shopType)
+    const cost = getGearPurchasePrice(gear, source)
+    if (cost == null) {
+      setShopLog((prev) => [...prev, `Cannot buy ${gear.name} — not sold here.`])
+      return
+    }
+
+    if (runCreature.coins < cost) {
       setShopLog((prev) => [
         ...prev,
-        `Not enough coins for ${gear.name} (need ${gear.price}).`,
+        `Not enough coins for ${gear.name} (need ${cost}).`,
       ])
       return
     }
 
     const next: RunCreature = {
       ...runCreature,
-      coins: runCreature.coins - gear.price,
+      coins: runCreature.coins - cost,
     }
     setTrainerInventory((prev) => addGearIdToTrainerInventory(prev, gearId))
     dispatchRetentionEvent('gearCollected', { gearId })
@@ -5974,10 +7013,18 @@ function App() {
       <div className="app">
         <ShopScreen
           creature={runCreature}
+          recruits={partyRecruits}
+          inventory={trainerInventory}
+          shopInventory={
+            activeShopInventory ??
+            shopInventoriesByNodeId[activeNodeId ?? ''] ?? {
+              gearIds: [],
+              itemIds: [],
+              shopType: 'normal',
+            }
+          }
           shopLog={shopLog}
-          gearOffers={shopGearOffers}
-          variant={currentNode.type === 'relicShop' ? 'relic' : 'market'}
-          onBuyConsumable={handleBuyConsumable}
+          onBuyItem={handleBuyShopItem}
           onBuyGear={handleBuyGear}
           onOpenInventory={() => openInventory('shop')}
           onLeave={handleLeaveShop}
@@ -6011,16 +7058,124 @@ function App() {
     )
   }
 
+  if (screen === 'monolithCouncil' && runCreature) {
+    const council = getCouncilForRegion(currentRegionId)
+    if (!council || council.trials.length === 0) {
+      return (
+        <div className="app">
+          <main className="monolith-council-screen">
+            <header className="screen-header">
+              <h1 className="screen-header__title">Monolith Council</h1>
+            </header>
+            <p className="monolith-council-warning" role="status">
+              This region&apos;s Monolith Council is not available yet.
+            </p>
+            <footer className="monolith-council-actions">
+              <button
+                type="button"
+                className="btn btn--primary"
+                onClick={() => setScreen('runMap')}
+              >
+                Back to Map
+              </button>
+            </footer>
+          </main>
+          {renderGlobalToasts()}
+        </div>
+      )
+    }
+    return (
+      <div className="app">
+        <MonolithCouncilScreen
+          council={council}
+          earnedBadges={earnedBadges}
+          creature={runCreature}
+          recruits={partyRecruits}
+          activeHelperId={activeHelperId}
+          gauntletProgress={monolithCouncilState.activeGauntlet}
+          onStart={() => {
+            const progress =
+              monolithCouncilState.activeGauntlet ??
+              startGauntletProgress(currentRegionId, council.councilId)
+            setMonolithCouncilState((s) => ({ ...s, activeGauntlet: progress }))
+            beginCouncilTrialFight(progress.trialIndex)
+          }}
+          onBack={() => setScreen('runMap')}
+          onOpenParty={() => setScreen('party')}
+        />
+        {renderGlobalToasts()}
+      </div>
+    )
+  }
+
+  if (screen === 'councilIntermission' && runCreature) {
+    const council = getCouncilDefinitionOrThrow(currentRegionId)
+    const progress = monolithCouncilState.activeGauntlet
+    const trialIndex = Math.max(0, (progress?.fightsWon ?? 1) - 1)
+    const trial = council.trials[trialIndex] ?? council.trials[0]!
+    return (
+      <div className="app">
+        <CouncilIntermissionScreen
+          trial={trial}
+          fightNumber={progress?.fightsWon ?? 1}
+          totalFights={council.trials.length}
+          creature={runCreature}
+          onContinue={() => {
+            if (!progress) {
+              setScreen('runMap')
+              return
+            }
+            if (isGauntletComplete(council, progress)) {
+              finishCouncilGauntlet(council)
+              return
+            }
+            beginCouncilTrialFight(progress.trialIndex)
+          }}
+          onFullHeal={() => {
+            if (runCreature.coins < COUNCIL_FULL_HEAL_COST) return
+            const paid = addCoins(runCreature, -COUNCIL_FULL_HEAL_COST)
+            const healed = applyCouncilFullRecovery(paid, partyRecruits)
+            runCreatureRef.current = healed.starter
+            partyRecruitsRef.current = healed.recruits
+            setRunCreature(healed.starter)
+            setPartyRecruits(healed.recruits)
+            void persistRun()
+          }}
+          canAffordFullHeal={runCreature.coins >= COUNCIL_FULL_HEAL_COST}
+        />
+        {renderGlobalToasts()}
+      </div>
+    )
+  }
+
   if (screen === 'combat' && runCreature && enemy) {
     const combatants = buildCombatants()
     const playerTurn = getPlayerTurnView(runCreature, partyRecruits, combatPhase)
-    const combatEnded = combatEndedRef.current || enemy.currentHp <= 0
+    const isCouncilFight = combatContextRef.current?.source === 'monolithCouncil'
+    const councilAllDown =
+      isCouncilFight && allCouncilEnemiesDefeated(councilEnemiesRef.current)
+    const combatEnded =
+      combatEndedRef.current ||
+      councilAllDown ||
+      (!isCouncilFight && enemy.currentHp <= 0)
+    const council = isCouncilFight ? getCouncilForRegion(currentRegionId) : null
+    const session = councilSessionRef.current
 
     return (
       <div className="app">
         <CombatScreen
           combatants={combatants}
           enemy={enemy}
+          secondaryEnemy={secondaryEnemy}
+          councilBattleLabel={
+            council && session ? councilBattleLabel(council, session) : null
+          }
+          allEnemiesDefeated={isCouncilFight ? councilAllDown : false}
+          councilTargetIndex={
+            isCouncilFight
+              ? getDefaultLivingCouncilTargetIndex(councilEnemiesRef.current)
+              : undefined
+          }
           battleLog={battleLog}
           combatLocked={combatLocked}
           combatEnded={combatEnded}
@@ -6031,6 +7186,13 @@ function App() {
           enemyStatStages={enemyStatStagesRef.current}
           playerStatStages={playerStatStagesRef.current}
           fleeDisabled={runModeRef.current === 'pvp'}
+          locationLabel={`${getRegionDisplayName(currentRegionId)}${
+            lastCombatNode ? ` — ${lastCombatNode.label}` : ''
+          }`}
+          encounterKind={activeEncounterKind}
+          enemyAbilityVfxId={enemyAbilityVfx?.vfxId ?? null}
+          enemyAbilityVfxKey={enemyAbilityVfx?.playKey ?? 0}
+          onEnemyAbilityVfxComplete={() => setEnemyAbilityVfx(null)}
           onUseAbility={handlePlayerAbility}
           onFlee={handleFleeClick}
         />
@@ -6123,6 +7285,7 @@ function App() {
           dominantCategory={dominant.category}
           dominantReason={dominant.reason}
           evolutionScores={draftCreature.evolutionScores}
+          selectedPerkIds={draftCreature.selectedPerks}
           perks={draftOptions}
           onChoose={handlePerkChosen}
         />
@@ -6299,6 +7462,11 @@ function App() {
           regions={getAllTravelRegions()}
           partyHighestLevel={getPartyHighestLevel(runCreature, partyRecruits)}
           hintMessage={mapMessage}
+          councilStatusBanner={getRegionSelectCouncilBanner(
+            currentRegionId,
+            earnedBadges,
+            monolithCouncilState,
+          )}
           onTravel={handleTravelToRegion}
         />
       </div>
@@ -6339,6 +7507,11 @@ function App() {
           onForgeCraft={handleForgeCraft}
           onForgeUpgradeInventory={handleForgeUpgradeInventory}
           onForgeUpgradeEquipped={handleForgeUpgradeEquipped}
+          councilScoutUnlocked={monolithCouncilState.councilScoutUnlocked}
+          monolithCouncilState={monolithCouncilState}
+          currentRegionId={currentRegionId}
+          earnedBadges={earnedBadges}
+          completedRegionIds={completedRegionIds}
           onBack={handleRecoveryBack}
         />
         {renderGlobalToasts()}
@@ -6447,6 +7620,11 @@ function App() {
 
   if (screen === 'runMap' && selectedStarter && runCreature && mapNodes.length > 0) {
     const recoveryRequestReady = hasClaimableRequestQuests(requestQuestState)
+    const showCouncilHudAccess = canShowCouncilMapHudAccess(
+      currentRegionId,
+      earnedBadges,
+      monolithCouncilState,
+    )
     const currentObjective = computeCurrentObjective({
       mapNodes,
       nodeStates,
@@ -6459,6 +7637,8 @@ function App() {
       pendingPostBattleCount: pendingPostBattleQueue.length,
       hasArchiveNotification: hasRetentionNotifications(retentionState),
       runMode,
+      earnedBadges,
+      monolithCouncilState,
     })
     return (
       <div className="app">
@@ -6488,6 +7668,9 @@ function App() {
           onOpenLeaderboard={() =>
             openLeaderboard('runMap', runMode === 'daily' ? 'daily' : 'campaign')
           }
+          showCouncilHudAccess={showCouncilHudAccess}
+          onOpenMonolithCouncil={handleOpenMonolithCouncil}
+          councilMapFocusNodeId={councilMapFocusNodeId}
           currentObjective={currentObjective}
           showTesterPanel={showTesterPanel}
           onToggleTesterPanel={() => {
@@ -6893,7 +8076,8 @@ function PlayerPanel({
         <div>
           <dt>Evolution path</dt>
           <dd>
-            {formatCategory(dominant.category)} ({creature.evolutionScores[dominant.category]})
+            {formatCategory(dominant.category)} (
+            {creature.evolutionScores[dominant.category]})
           </dd>
         </div>
         <div>
@@ -6979,6 +8163,9 @@ function RunMapScreen({
   onOpenFriendBattle,
   onOpenFeedback,
   onOpenLeaderboard,
+  showCouncilHudAccess,
+  onOpenMonolithCouncil,
+  councilMapFocusNodeId,
 }: {
   creature: RunCreature
   mapNodes: MapNode[]
@@ -6989,6 +8176,9 @@ function RunMapScreen({
   partyRecruits: PartyCreature[]
   currentRegionId: string
   mapMessage: string | null
+  showCouncilHudAccess?: boolean
+  onOpenMonolithCouncil?: () => void
+  councilMapFocusNodeId?: string | null
   nodeClickDebug: {
     id: string
     type: string
@@ -7070,6 +8260,21 @@ function RunMapScreen({
 
       <CurrentObjectivePanel objective={currentObjective} />
 
+      {showCouncilHudAccess && onOpenMonolithCouncil && (
+        <div className="map-screen__council-access" role="region" aria-label="Monolith Council">
+          <button
+            type="button"
+            className="btn btn--primary map-screen__council-btn"
+            onClick={onOpenMonolithCouncil}
+          >
+            Challenge Monolith Council
+          </button>
+          <p className="map-screen__council-access-hint">
+            Final challenge at the top of your route · 2v2 gauntlet (active helper required)
+          </p>
+        </div>
+      )}
+
       <section className="map-region-info" aria-label="Current region">
         <p>
           <span className="panel-label">Current Region</span>{' '}
@@ -7110,6 +8315,7 @@ function RunMapScreen({
         mapNodes={mapNodes}
         nodeStates={nodeStates}
         onNodeClick={onNodeClick}
+        focusNodeId={councilMapFocusNodeId}
       />
 
       <p className="map-hint">
@@ -7195,6 +8401,7 @@ function PerkDraftScreen({
   dominantCategory,
   dominantReason,
   evolutionScores,
+  selectedPerkIds,
   perks,
   onChoose,
 }: {
@@ -7207,6 +8414,7 @@ function PerkDraftScreen({
   dominantCategory: string
   dominantReason: string
   evolutionScores: RunCreature['evolutionScores']
+  selectedPerkIds: string[]
   perks: Perk[]
   onChoose: (perkId: string) => void
 }) {
@@ -7258,9 +8466,16 @@ function PerkDraftScreen({
             {perk.effect && (
               <p className="perk-card__effect">{perk.effect}</p>
             )}
-            <p className="perk-card__evo-impact">
-              Evolution score: {getPerkEvolutionScoreLabel(perk)}
-            </p>
+            {getPerkEvolutionScoreLabel(perk) ? (
+              <p className="perk-card__evo-impact">
+                {getPerkEvolutionScoreLabel(perk)}
+              </p>
+            ) : null}
+            {getPerkStackLabel(perk, selectedPerkIds) ? (
+              <p className="perk-card__stacks">
+                {getPerkStackLabel(perk, selectedPerkIds)}
+              </p>
+            ) : null}
             <p className="perk-card__affects">Affects: this creature only</p>
             <button
               type="button"

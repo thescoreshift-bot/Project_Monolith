@@ -1,7 +1,12 @@
 import type { MapNode } from '../data/nodeMap'
 import type { EncounterKind } from '../data/enemies'
 
-export type CombatSource = 'mapNode' | 'event' | 'pvp' | 'dailyRun'
+export type CombatSource =
+  | 'mapNode'
+  | 'event'
+  | 'pvp'
+  | 'dailyRun'
+  | 'monolithCouncil'
 
 export type CombatEncounterType = EncounterKind | 'pvp'
 
@@ -13,6 +18,11 @@ export type CombatContext = {
   eventId?: string
   eventChoiceId?: string
   mapNode?: MapNode | null
+  regionId?: string
+  councilId?: string
+  trialIndex?: number
+  fightNumber?: number
+  councilAiStyle?: string
 }
 
 export function createMapCombatContext(
@@ -26,6 +36,29 @@ export function createMapCombatContext(
     nodeId: node.id,
     nodeType: node.type,
     mapNode: node,
+  }
+}
+
+export function createCouncilCombatContext(params: {
+  regionId: string
+  councilId: string
+  trialIndex: number
+  fightNumber: number
+  councilAiStyle: string
+  nodeId?: string
+  mapNode?: MapNode | null
+}): CombatContext {
+  return {
+    source: 'monolithCouncil',
+    encounterType: 'council',
+    regionId: params.regionId,
+    councilId: params.councilId,
+    trialIndex: params.trialIndex,
+    fightNumber: params.fightNumber,
+    councilAiStyle: params.councilAiStyle,
+    nodeId: params.nodeId,
+    nodeType: 'monolithCouncil',
+    mapNode: params.mapNode ?? null,
   }
 }
 

@@ -48,6 +48,8 @@ export type QuestEventType =
   | 'itemCollected'
   | 'gearCollected'
   | 'questClaimed'
+  | 'councilFightWon'
+  | 'councilCompleted'
 
 export type QuestEventPayload = {
   nodeType?: string
@@ -241,6 +243,10 @@ function matchesQuestEvent(
       return event === 'eventCompleted'
     case 'equipGear':
       return event === 'gearEquipped'
+    case 'winCouncilFight':
+      return event === 'councilFightWon'
+    case 'completeCouncil':
+      return event === 'councilCompleted'
     default:
       return false
   }

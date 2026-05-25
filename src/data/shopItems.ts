@@ -32,7 +32,7 @@ export const SHOP_ITEMS: ShopItem[] = SHOP_CONSUMABLE_ITEMS.filter((i) =>
 ).map((i) => ({
   id: i.id as ShopItemId,
   name: i.name,
-  cost: i.price ?? 0,
+  cost: i.price != null && i.price > 0 ? i.price : Math.max(8, Math.round((i.sellValue ?? 10) * 2.2)),
   description: i.description,
   category: 'consumable' as const,
   rarity: i.rarity,

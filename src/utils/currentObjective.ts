@@ -9,6 +9,11 @@ import type { PartyCreature } from './party'
 import type { RunCreature } from './progression'
 import { getPartyHighestLevel } from './regionRewards'
 import type { PendingChoiceSummary } from './rewardSummary'
+import { BADGES_IN_REGION } from '../data/badges'
+import { countBadgesInRegion } from './regionTravel'
+import type { MonolithCouncilSaveState } from './monolithCouncilState'
+import { isCouncilCompleted, isCouncilUnlocked } from './monolithCouncilState'
+import { getCouncilForRegion } from '../data/monolithCouncil'
 
 export type CurrentObjectiveInput = {
   mapNodes: MapNode[]
@@ -22,6 +27,8 @@ export type CurrentObjectiveInput = {
   pendingPostBattleCount: number
   hasArchiveNotification: boolean
   runMode: 'normal' | 'daily' | 'pvp'
+  earnedBadges?: string[]
+  monolithCouncilState?: MonolithCouncilSaveState
 }
 
 export type CurrentObjective = {
@@ -54,6 +61,8 @@ export function computeCurrentObjective(input: CurrentObjectiveInput): CurrentOb
     pendingPostBattleCount,
     hasArchiveNotification,
     runMode,
+    earnedBadges,
+    monolithCouncilState,
   } = input
 
   if (runMode === 'daily') {
@@ -115,6 +124,56 @@ export function computeCurrentObjective(input: CurrentObjectiveInput): CurrentOb
     return {
       title: 'Monolith Archive has rewards to claim.',
       detail: 'Open from the main menu when you are safe on the map.',
+    }
+  }
+
+  const badgeIds = earnedBadges ?? []
+  const councilState = monolithCouncilState
+
+  const VERDANT_REGION_ID = 'verdant-circuit'
+  const verdantCouncil = getCouncilForRegion(VERDANT_REGION_ID)
+  if (
+    verdantCouncil &&
+    verdantCouncil.trials.length > 0 &&
+    councilState &&
+    currentRegionId !== VERDANT_REGION_ID &&
+    !isCouncilCompleted(councilState, VERDANT_REGION_ID)
+  ) {
+    const verdantBadges = countBadgesInRegion(VERDANT_REGION_ID, badgeIds)
+    if (
+      verdantBadges >= BADGES_IN_REGION &&
+      isCouncilUnlocked(councilState, VERDANT_REGION_ID, badgeIds)
+    ) {
+      return {
+        title: 'The Verdant Council is available in Verdant Circuit.',
+        detail: `Travel to Verdant Circuit — ${verdantCouncil.officialName} is on the map there.`,
+      }
+    }
+  }
+
+  const council = getCouncilForRegion(currentRegionId)
+  if (council && council.trials.length === 0) {
+    const badgesHere = countBadgesInRegion(currentRegionId, badgeIds)
+    if (badgesHere >= BADGES_IN_REGION) {
+      return {
+        title: "This region's Monolith Council is not available yet.",
+        detail: 'The Council gauntlet for this region is coming soon.',
+      }
+    }
+  }
+
+  if (
+    council &&
+    council.trials.length > 0 &&
+    councilState &&
+    !isCouncilCompleted(councilState, currentRegionId)
+  ) {
+    const badges = countBadgesInRegion(currentRegionId, badgeIds)
+    if (badges >= BADGES_IN_REGION && isCouncilUnlocked(councilState, currentRegionId, badgeIds)) {
+      return {
+        title: 'Challenge The Monolith Council at the end of the route.',
+        detail: `Use Challenge Monolith Council on the map HUD, or travel to the glowing node at the top — ${council.localName}.`,
+      }
     }
   }
 
