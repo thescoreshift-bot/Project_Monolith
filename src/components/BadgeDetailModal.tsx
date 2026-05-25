@@ -3,6 +3,7 @@ import {
   formatBadgeStatModifiers,
   getBadge,
 } from '../data/badges'
+import { getRegion } from '../data/regions'
 
 type BadgeDetailModalProps = {
   badgeId: string
@@ -37,7 +38,7 @@ export function BadgeDetailModal({ badgeId, onClose }: BadgeDetailModalProps) {
             {badge.name}
           </h2>
           <p className="badge-modal__region">
-            Region {badge.region} · Gym {badge.gymNumber}
+            {getRegion(badge.regionId).name} · Gym {badge.gymNumber}
           </p>
           <button
             type="button"

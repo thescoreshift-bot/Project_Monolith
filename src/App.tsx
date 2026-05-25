@@ -1,4 +1,26 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import {
+  bgmTrackForScreen,
+  isMusicEnabledSetting,
+  playAbilitySfx,
+  playBgm,
+  startEncounterBattleMusic,
+  stopEncounterBattleMusic,
+  playSfx,
+  setMusicEnabled,
+  stopBgm,
+  unlockAudio,
+} from './utils/audioSystem'
+import {
+  isFastEncounterEnabled,
+  setFastEncounterEnabled,
+} from './utils/encounterSettings'
+import {
+  buildEncounterTransitionView,
+  type EncounterTransitionView,
+  type PendingCombatStart,
+} from './utils/encounterTransition'
+import { resolveAbilitySfxKey } from './data/abilitySounds'
 import type { User } from '@supabase/supabase-js'
 import { AccountScreen, LoginScreen, RegisterScreen } from './components/AuthScreens'
 import { CharacterSelectScreen } from './components/CharacterSelectScreen'
@@ -22,6 +44,7 @@ import { CreaturePortrait } from './components/CreaturePortrait'
 import { CombatScreen, type CombatantTarget } from './components/CombatScreen'
 import { getPortraitForStarter } from './data/creaturePortraits'
 import { EventScreen } from './components/EventScreen'
+import { EncounterTransitionOverlay } from './components/EncounterTransitionOverlay'
 import { HpBar } from './components/HpBar'
 import { BadgeDetailModal } from './components/BadgeDetailModal'
 import {
@@ -417,6 +440,7 @@ type Screen =
   | 'nameTrainer'
   | 'starterSelect'
   | 'runMap'
+  | 'encounterTransition'
   | 'combat'
   | 'reward'
   | 'perkDraft'
@@ -678,6 +702,11 @@ function App() {
   )
   const [requestBoardMessage, setRequestBoardMessage] = useState<string | null>(null)
   const [forgeMessage, setForgeMessage] = useState<string | null>(null)
+  const [musicEnabled, setMusicEnabledState] = useState(isMusicEnabledSetting)
+  const [fastEncounter, setFastEncounterState] = useState(isFastEncounterEnabled)
+  const [encounterTransitionView, setEncounterTransitionView] =
+    useState<EncounterTransitionView | null>(null)
+  const pendingCombatRef = useRef<PendingCombatStart | null>(null)
   const [questCompleteToasts, setQuestCompleteToasts] = useState<
     { id: string; title: string; rewardPreview: string }[]
   >([])
@@ -806,6 +835,30 @@ function App() {
   }, [])
 
   useEffect(() => {
+    const unlock = () => unlockAudio()
+    window.addEventListener('pointerdown', unlock, { once: true })
+    window.addEventListener('keydown', unlock, { once: true })
+    return () => {
+      window.removeEventListener('pointerdown', unlock)
+      window.removeEventListener('keydown', unlock)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!musicEnabled) {
+      stopBgm()
+      return
+    }
+    const track = bgmTrackForScreen(screen)
+    if (track) playBgm(track)
+    else stopBgm()
+  }, [screen, musicEnabled])
+
+  useEffect(() => {
+    return () => stopBgm()
+  }, [])
+
+  useEffect(() => {
     if (!isAuthAvailable()) {
       setAuthReady(true)
       return
@@ -854,6 +907,7 @@ function App() {
   }
 
   function cleanupCombatState() {
+    stopEncounterBattleMusic()
     clearCombatTimeout()
     enemyTurnLockRef.current = false
     setEnemy(null)
@@ -3020,10 +3074,10 @@ function App() {
     }
   }
 
-  function startCombat(node: MapNode) {
+  function prepareMapCombat(node: MapNode): PendingCombatStart | null {
     const starterSnapshot = runCreatureRef.current ?? runCreature
-    if (!starterSnapshot) return
-    if (getNodeState(nodeStates, node.id) !== 'available') return
+    if (!starterSnapshot) return null
+    if (getNodeState(nodeStates, node.id) !== 'available') return null
 
     const kind = getEncounterKind(node.type)
     const recruitsSnapshot = partyRecruitsRef.current ?? partyRecruits
@@ -3034,44 +3088,29 @@ function App() {
       getDailyEnemySpawnOptions(),
       partyLevel,
     )
-
-    setActiveNodeId(node.id)
-    setCurrentNode(node)
-    setLastCombatNode(node)
     const ctx = createMapCombatContext(
       node,
       kind,
       runModeRef.current === 'daily' ? 'dailyRun' : 'mapNode',
     )
-    setCombatContextBoth(ctx)
-    setActiveEncounterKind(kind)
-    setEnemy(spawned)
-    resetCombatSession()
-    setPendingAbilityUpgradeQueue([])
-    setCombatPhase('starter')
-    preCombatMasteryRef.current = {
-      starter: structuredClone(starterSnapshot.abilityMastery),
-      recruits: Object.fromEntries(
-        recruitsSnapshot.map((r) => [r.id, structuredClone(r.abilityMastery)]),
-      ),
-    }
     const discovery = getEnemyArchiveDiscovery(spawned)
-    setBattleLog([`${spawned.name} sent out ${discovery.creatureName}!`])
-    setCombatLocked(false)
-    dispatchRetentionEvent('enemySeen', {
-      templateId: discovery.templateId,
-      creatureName: discovery.creatureName,
-      regionId: currentRegionId,
-    })
-    maybeAdvanceTutorial('clickBattleNode', 'useAbility')
-    setScreen('combat')
+    return {
+      mode: 'map',
+      node,
+      spawned,
+      ctx,
+      encounterKind: kind,
+      battleLogLine: `${spawned.name} sent out ${discovery.creatureName}!`,
+      discoveryTemplateId: discovery.templateId,
+      discoveryCreatureName: discovery.creatureName,
+    }
   }
 
-  function startBonusAlphaCombat(ctx: CombatContext) {
+  function prepareEventAlphaCombat(ctx: CombatContext): PendingCombatStart | null {
     const starterSnapshot = runCreatureRef.current ?? runCreature
-    if (!starterSnapshot) return
+    if (!starterSnapshot) return null
 
-    const recruitsSnapshot = partyRecruitsRef.current
+    const recruitsSnapshot = partyRecruitsRef.current ?? partyRecruits
     const partyLevel = getPartyHighestLevel(starterSnapshot, recruitsSnapshot)
     const alphas = ['alpha-bristlebug', 'alpha-ashling', 'alpha-pebblemaw']
     const id = alphas[Math.floor(Math.random() * alphas.length)] ?? 'alpha-ashling'
@@ -3093,30 +3132,103 @@ function App() {
         mapLayer,
       })
     }
-
-    console.log('Combat victory context', ctx)
-    setCombatContextBoth(ctx)
-    setLastCombatNode(ctx.mapNode ?? null)
-    setActiveEncounterKind('alphaNest')
-    setEnemy(spawned)
-    resetCombatSession()
-    setPendingAbilityUpgradeQueue([])
-    setCombatPhase('starter')
-    preCombatMasteryRef.current = {
-      starter: structuredClone(starterSnapshot.abilityMastery),
-      recruits: Object.fromEntries(
-        recruitsSnapshot.map((r) => [r.id, structuredClone(r.abilityMastery)]),
-      ),
-    }
     const discovery = getEnemyArchiveDiscovery(spawned)
-    setBattleLog([`Bonus alpha — ${spawned.name} sent out ${discovery.creatureName}!`])
-    setCombatLocked(false)
-    dispatchRetentionEvent('enemySeen', {
-      templateId: discovery.templateId,
-      creatureName: discovery.creatureName,
-      regionId: currentRegionId,
-    })
+    return {
+      mode: 'eventAlpha',
+      ctx,
+      spawned,
+      battleLogLine: `Bonus alpha — ${spawned.name} sent out ${discovery.creatureName}!`,
+      discoveryTemplateId: discovery.templateId,
+      discoveryCreatureName: discovery.creatureName,
+    }
+  }
+
+  function queueEncounterTransition(pending: PendingCombatStart) {
+    const encounterKind =
+      pending.mode === 'map' ? pending.encounterKind : 'alphaNest'
+    const ctx = pending.mode === 'map' ? pending.ctx : pending.ctx
+    const view = buildEncounterTransitionView(
+      encounterKind,
+      pending.spawned,
+      ctx,
+    )
+    pendingCombatRef.current = pending
+    setEncounterTransitionView(view)
+    startEncounterBattleMusic(view.audioProfile)
+    setScreen('encounterTransition')
+  }
+
+  function applyPendingCombatStart() {
+    const pending = pendingCombatRef.current
+    if (!pending) return
+    pendingCombatRef.current = null
+    setEncounterTransitionView(null)
+
+    const starterSnapshot = runCreatureRef.current ?? runCreature
+    if (!starterSnapshot) return
+    const recruitsSnapshot = partyRecruitsRef.current ?? partyRecruits
+
+    if (pending.mode === 'map') {
+      setActiveNodeId(pending.node.id)
+      setCurrentNode(pending.node)
+      setLastCombatNode(pending.node)
+      setCombatContextBoth(pending.ctx)
+      setActiveEncounterKind(pending.encounterKind)
+      setEnemy(pending.spawned)
+      resetCombatSession()
+      setPendingAbilityUpgradeQueue([])
+      setCombatPhase('starter')
+      preCombatMasteryRef.current = {
+        starter: structuredClone(starterSnapshot.abilityMastery),
+        recruits: Object.fromEntries(
+          recruitsSnapshot.map((r) => [r.id, structuredClone(r.abilityMastery)]),
+        ),
+      }
+      setBattleLog([pending.battleLogLine])
+      setCombatLocked(false)
+      dispatchRetentionEvent('enemySeen', {
+        templateId: pending.discoveryTemplateId,
+        creatureName: pending.discoveryCreatureName,
+        regionId: currentRegionId,
+      })
+      maybeAdvanceTutorial('clickBattleNode', 'useAbility')
+    } else {
+      console.log('Combat victory context', pending.ctx)
+      setCombatContextBoth(pending.ctx)
+      setLastCombatNode(pending.ctx.mapNode ?? null)
+      setActiveEncounterKind('alphaNest')
+      setEnemy(pending.spawned)
+      resetCombatSession()
+      setPendingAbilityUpgradeQueue([])
+      setCombatPhase('starter')
+      preCombatMasteryRef.current = {
+        starter: structuredClone(starterSnapshot.abilityMastery),
+        recruits: Object.fromEntries(
+          recruitsSnapshot.map((r) => [r.id, structuredClone(r.abilityMastery)]),
+        ),
+      }
+      setBattleLog([pending.battleLogLine])
+      setCombatLocked(false)
+      dispatchRetentionEvent('enemySeen', {
+        templateId: pending.discoveryTemplateId,
+        creatureName: pending.discoveryCreatureName,
+        regionId: currentRegionId,
+      })
+    }
+
     setScreen('combat')
+  }
+
+  function startCombat(node: MapNode) {
+    const pending = prepareMapCombat(node)
+    if (!pending) return
+    queueEncounterTransition(pending)
+  }
+
+  function startBonusAlphaCombat(ctx: CombatContext) {
+    const pending = prepareEventAlphaCombat(ctx)
+    if (!pending) return
+    queueEncounterTransition(pending)
   }
 
   function handleMapNodeClick(node: MapNode) {
@@ -3361,6 +3473,7 @@ function App() {
     const resolvedId = getResolvedAbilityId(masteryEntry)
     const ability = getAbility(resolvedId)
     const abilityDisplayName = getAbilityDisplayName(ability)
+    playAbilitySfx(resolveAbilitySfxKey(ability, masteryEntry))
     const partyLevel = getPartyHighestLevel(starterSnapshot, recruitsSnapshot)
     const effectiveStats = getEffectiveStats(attacker, {
       earnedBadges,
@@ -3560,6 +3673,7 @@ function App() {
   ) {
     if (combatEndedRef.current) return
 
+    stopEncounterBattleMusic()
     combatEndedRef.current = true
     clearCombatTimeout()
     setCombatLocked(true)
@@ -3666,6 +3780,13 @@ function App() {
     const enemyAbilityId = pickEnemyAbility(currentEnemy.abilityIds)
     const enemyAbility = getAbility(enemyAbilityId)
     const enemyAbilityName = getAbilityDisplayName(enemyAbility)
+    const enemySfxRank = Math.min(
+      10,
+      Math.max(0, Math.floor((currentEnemy.level ?? 1) / 2)),
+    )
+    playAbilitySfx(
+      resolveAbilitySfxKey(enemyAbility, null, { fallbackRank: enemySfxRank }),
+    )
     const enemyAttackStats = buildCombatStatsForEnemy(
       currentEnemy.stats,
       enemyStatStagesRef.current,
@@ -3802,6 +3923,7 @@ function App() {
 
     if (screenRef.current !== 'combat') return
 
+    stopEncounterBattleMusic()
     clearCombatTimeout()
     combatEndedRef.current = true
     setCombatLocked(true)
@@ -4122,6 +4244,7 @@ function App() {
     const starterSnapshot = runCreatureRef.current ?? runCreature
     if (!starterSnapshot) return
 
+    stopEncounterBattleMusic()
     clearCombatTimeout()
     combatEndedRef.current = true
     setCombatLocked(true)
@@ -5461,6 +5584,9 @@ function App() {
   function handleEventChoice(choice: EventChoiceId) {
     if (!runCreature || !currentEvent || !activeNodeId) return
 
+    stopBgm()
+    playSfx('game_reward')
+
     const recruitCountBefore = partyRecruits.length
     const result = applyEventChoice(currentEvent.id, choice, {
       starter: runCreature,
@@ -5771,6 +5897,17 @@ function App() {
     )
   }
 
+  if (screen === 'encounterTransition' && encounterTransitionView) {
+    return (
+      <div className="app encounter-transition-screen">
+        <EncounterTransitionOverlay
+          view={encounterTransitionView}
+          onComplete={applyPendingCombatStart}
+        />
+      </div>
+    )
+  }
+
   if (screen === 'settings') {
     const returnScreen = settingsReturnScreenRef.current
     return (
@@ -5778,10 +5915,25 @@ function App() {
         <SettingsScreen
           tutorialCompleted={isTutorialCompletedForRun()}
           showTesterPanel={showTesterPanel}
+          musicEnabled={musicEnabled}
+          fastEncounter={fastEncounter}
           onResetTutorial={handleResetTutorial}
           onToggleTesterPanel={(enabled) => {
             setShowTesterPanel(enabled)
             setTesterPanelEnabled(enabled)
+          }}
+          onToggleMusic={(enabled) => {
+            setMusicEnabled(enabled)
+            setMusicEnabledState(enabled)
+            if (!enabled) stopBgm()
+            else {
+              const track = bgmTrackForScreen(screen)
+              if (track) playBgm(track)
+            }
+          }}
+          onToggleFastEncounter={(enabled) => {
+            setFastEncounterEnabled(enabled)
+            setFastEncounterState(enabled)
           }}
           onOpenFeedback={() => setFeedbackOpen(true)}
           onBack={() =>

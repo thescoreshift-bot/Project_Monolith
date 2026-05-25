@@ -3,8 +3,12 @@ import { APP_VERSION_LABEL } from '../utils/version'
 type SettingsScreenProps = {
   tutorialCompleted: boolean
   showTesterPanel: boolean
+  musicEnabled: boolean
+  fastEncounter: boolean
   onResetTutorial: () => void
   onToggleTesterPanel: (enabled: boolean) => void
+  onToggleMusic: (enabled: boolean) => void
+  onToggleFastEncounter: (enabled: boolean) => void
   onOpenFeedback: () => void
   onBack: () => void
 }
@@ -12,8 +16,12 @@ type SettingsScreenProps = {
 export function SettingsScreen({
   tutorialCompleted,
   showTesterPanel,
+  musicEnabled,
+  fastEncounter,
   onResetTutorial,
   onToggleTesterPanel,
+  onToggleMusic,
+  onToggleFastEncounter,
   onOpenFeedback,
   onBack,
 }: SettingsScreenProps) {
@@ -34,6 +42,32 @@ export function SettingsScreen({
         <button type="button" className="btn btn--small" onClick={onResetTutorial}>
           Reset tutorial
         </button>
+      </section>
+
+      <section className="settings-screen__section">
+        <h2 className="panel-label">Audio</h2>
+        <label className="settings-screen__toggle">
+          <input
+            type="checkbox"
+            checked={musicEnabled}
+            onChange={(e) => onToggleMusic(e.target.checked)}
+          />
+          Background music
+        </label>
+        <p className="settings-screen__hint">
+          Music starts after your first click or key press on the title screen.
+        </p>
+        <label className="settings-screen__toggle">
+          <input
+            type="checkbox"
+            checked={fastEncounter}
+            onChange={(e) => onToggleFastEncounter(e.target.checked)}
+          />
+          Fast encounter transitions
+        </label>
+        <p className="settings-screen__hint">
+          Shortens the pre-battle intro. You can still tap the screen to skip.
+        </p>
       </section>
 
       <section className="settings-screen__section">

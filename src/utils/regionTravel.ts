@@ -1,4 +1,4 @@
-import { REGION_1_BADGES } from '../data/badges'
+import { getBadge } from '../data/badges'
 import { getRegion, REGIONS, type Region } from '../data/regions'
 import {
   generateMap,
@@ -14,11 +14,7 @@ export function countBadgesInRegion(
   regionId: string,
   earnedBadgeIds: string[],
 ): number {
-  const region = getRegion(regionId)
-  return earnedBadgeIds.filter((id) => {
-    const badge = REGION_1_BADGES.find((b) => b.id === id)
-    return badge?.region === region.regionNumber
-  }).length
+  return earnedBadgeIds.filter((id) => getBadge(id)?.regionId === regionId).length
 }
 
 export function createRegionMap(

@@ -8,6 +8,7 @@ import {
   type MapNode,
   type NodeVisitState,
 } from '../data/nodeMap'
+import { getGymPortraitUrlForMapNode } from '../data/trainerPortraits'
 
 type MapBoardProps = {
   mapNodes: MapNode[]
@@ -25,10 +26,13 @@ function MapNodeButton({
   onClick: () => void
 }) {
   const [iconFailed, setIconFailed] = useState(false)
+  const gymPortrait = getGymPortraitUrlForMapNode(node)
+  const iconSrc = gymPortrait ?? nodeTypeToIconPath(node.type)
   const disabled = state !== 'available'
   const typeClass = nodeTypeToCssClass(node.type)
   const dramatic = isDramaticNodeType(node.type)
   const useLegacy = iconFailed
+  const isGymPortrait = Boolean(gymPortrait) && !iconFailed
 
   return (
     <button
@@ -36,8 +40,8 @@ function MapNodeButton({
       className={`map-node map-node--${typeClass} map-node--${state}${
         state === 'available' ? ' map-node--available' : ''
       }${useLegacy ? ' map-node--legacy' : ' map-node--icon'}${
-        dramatic ? ' map-node--dramatic' : ''
-      }`}
+        isGymPortrait ? ' map-node--gym-portrait' : ''
+      }${dramatic ? ' map-node--dramatic' : ''}`}
       style={{ gridColumn: node.column + 1 }}
       disabled={disabled}
       onPointerDown={(e) => e.stopPropagation()}
@@ -54,7 +58,7 @@ function MapNodeButton({
           <span className="map-node__icon-wrap">
             <img
               className="map-node__icon"
-              src={nodeTypeToIconPath(node.type)}
+              src={iconSrc}
               alt=""
               draggable={false}
               onError={() => setIconFailed(true)}

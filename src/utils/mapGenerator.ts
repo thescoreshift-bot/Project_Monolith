@@ -1,12 +1,41 @@
-import { REGION_1_BADGES } from '../data/badges'
+import { getBadgesForRegionId } from '../data/badges'
 import { getRegion } from '../data/regions'
+import { getGymNpcNameForMapNode } from '../data/trainerPortraits'
 import type { MapNode, NodeType, NodeVisitState } from '../data/nodeMap'
 import type { DailyModifier } from './dailyRun'
 import { gameRandom } from './seededRandom'
 
-function getBadgesForRegion(regionNumber: number) {
-  if (regionNumber !== 1) return []
-  return REGION_1_BADGES.map((b) => b.id)
+function getBadgeIdsForRegion(regionId: string): string[] {
+  return getBadgesForRegionId(regionId).map((b) => b.id)
+}
+
+/** Unearned badges in random order — one gym row per badge through end of queue. */
+function buildShuffledBadgeQueue(
+  regionId: string,
+  earnedBadges: string[],
+): string[] {
+  const pending = getBadgeIdsForRegion(regionId).filter(
+    (id) => !earnedBadges.includes(id),
+  )
+  const queue = [...pending]
+  for (let i = queue.length - 1; i > 0; i--) {
+    const j = Math.floor(gameRandom() * (i + 1))
+    ;[queue[i], queue[j]] = [queue[j]!, queue[i]!]
+  }
+  return queue
+}
+
+function pickLeaderAndTrainerColumns(count: number): {
+  leader: number
+  trainer: number
+} {
+  if (count <= 1) return { leader: 0, trainer: 0 }
+  const leader = Math.floor(gameRandom() * count)
+  let trainer = Math.floor(gameRandom() * count)
+  while (trainer === leader) {
+    trainer = Math.floor(gameRandom() * count)
+  }
+  return { leader, trainer }
 }
 
 function getContentRows(regionId: string): number {
@@ -26,8 +55,31 @@ const TYPE_WEIGHTS: { type: NodeType; weight: number }[] = [
   { type: 'gymTrainer', weight: 8 },
 ]
 
+const REGION_GYM_LABELS: Record<
+  string,
+  { gymTrainer: string[]; gymLeader: string[] }
+> = {
+  'verdant-circuit': {
+    gymTrainer: ['Circuit Acolyte', 'Gym Scout', 'Trail Ace'],
+    gymLeader: ['Circuit Leader', 'Gym Master'],
+  },
+  'ember-coast': {
+    gymTrainer: ['Coast Acolyte', 'Ash Trainer', 'Magma Scout'],
+    gymLeader: ['Coast Leader', 'Inferno Master'],
+  },
+  'storm-plateau': {
+    gymTrainer: ['Plateau Acolyte', 'Storm Scout', 'Volt Ace'],
+    gymLeader: ['Plateau Leader', 'Tempest Master'],
+  },
+  'obsidian-crown': {
+    gymTrainer: ['Crown Acolyte', 'Obsidian Scout', 'Throne Ace'],
+    gymLeader: ['Crown Leader', 'Monolith Master'],
+  },
+}
+
 function getLabels(regionId: string): Record<NodeType, string[]> {
   const region = getRegion(regionId)
+  const gymLabels = REGION_GYM_LABELS[regionId] ?? REGION_GYM_LABELS['verdant-circuit']
   return {
     battle: ['Wild Sector', 'Hostile Patrol', 'Rival Scout', 'Feral Drift', 'Border Clash'],
     elite: ['Veteran Hunter', 'Elite Guard', 'Champion Scout'],
@@ -36,8 +88,8 @@ function getLabels(regionId: string): Record<NodeType, string[]> {
     shop: ['Drift Market', 'Supply Cache', 'Wandering Trader'],
     relicShop: ['Relic Vault', 'Monolith Curator', 'Ash Reliquary'],
     rest: ['Bio Camp', 'Safe Haven', 'Recovery Post'],
-    gymTrainer: ['Gym Trainer', 'Ace Trainer', 'Gym Acolyte'],
-    gymLeader: ['Gym Leader', 'Gym Master'],
+    gymTrainer: gymLabels.gymTrainer,
+    gymLeader: gymLabels.gymLeader,
     boss: [region.bossName, `${region.name} Apex`, 'Monolith Throne'],
   }
 }
@@ -133,39 +185,55 @@ export function generateMap(
   })
   rowIds[0] = [startId]
 
-  const badgeQueue = getBadgesForRegion(region.regionNumber).filter(
-    (id) => !earnedBadges.includes(id),
-  )
+  const badgeQueue = buildShuffledBadgeQueue(regionId, earnedBadges)
 
   for (let layer = 1; layer <= contentRows; layer++) {
-    const count =
-      minNodes + Math.floor(gameRandom() * (maxNodes - minNodes + 1))
-    const currentRow: string[] = []
     const badgeForRow =
       badgeQueue.length > 0 ? badgeQueue.shift() : undefined
-    const leaderColumn =
-      badgeForRow !== undefined
-        ? Math.floor(gameRandom() * count)
-        : -1
+    const needsGymPair = badgeForRow !== undefined
+    const count = needsGymPair
+      ? Math.max(
+          2,
+          minNodes +
+            Math.floor(gameRandom() * (maxNodes - minNodes + 1)),
+        )
+      : minNodes + Math.floor(gameRandom() * (maxNodes - minNodes + 1))
+    const gymColumns = needsGymPair
+      ? pickLeaderAndTrainerColumns(count)
+      : null
+    const currentRow: string[] = []
 
     for (let i = 0; i < count; i++) {
       const id = `r${layer}-${i}`
       let type: NodeType
       let badgeId: string | undefined
 
-      if (i === leaderColumn && badgeForRow) {
-        type = 'gymLeader'
-        badgeId = badgeForRow
-      } else if (badgeForRow && gameRandom() < 0.35) {
-        type = 'gymTrainer'
+      if (gymColumns && badgeForRow) {
+        if (i === gymColumns.leader) {
+          type = 'gymLeader'
+          badgeId = badgeForRow
+        } else if (i === gymColumns.trainer) {
+          type = 'gymTrainer'
+          badgeId = badgeForRow
+        } else {
+          type = pickWeightedType(
+            ['gymLeader', 'gymTrainer', 'boss'],
+            dailyModifier,
+          )
+        }
       } else {
-        type = pickWeightedType(['gymLeader', 'boss'], dailyModifier)
+        type = pickWeightedType(['gymLeader', 'gymTrainer', 'boss'], dailyModifier)
       }
+
+      const gymLabel =
+        badgeId && (type === 'gymTrainer' || type === 'gymLeader')
+          ? getGymNpcNameForMapNode({ type, badgeId })
+          : null
 
       nodes.push({
         id,
         type,
-        label: labelFor(type, regionId),
+        label: gymLabel ?? labelFor(type, regionId),
         layer,
         column: columnForIndex(i, count),
         connectsTo: [],

@@ -1,11 +1,17 @@
 import type { ElementType } from './starters'
 import type { NodeType } from './nodeMap'
 import { resolveNpcCreatureDisplay } from './creaturePortraits'
+import { getGymTrainerPortraitUrl } from './trainerPortraits'
 import { normalizeRecruitTemplateId } from './recruitPortraits'
 import {
   encounterKindToHpMultiplier,
   enemyKindToHpMultiplier,
 } from '../data/balance'
+import { GYM_NPC_TEMPLATES, REGION_ELITE_IDS } from './gymRoster'
+import {
+  getLeaderIdForBadge,
+  getTrainerIdForBadge,
+} from './regionGyms'
 import { getRegion } from './regions'
 import {
   getRegionEnemyLevelRange,
@@ -156,113 +162,41 @@ export const ENEMY_TEMPLATES: Record<string, EnemyTemplate> = {
     recruitable: false,
     companionTemplateId: 'voltimp',
   },
-  'gym-trainer-nova': {
-    id: 'gym-trainer-nova',
-    name: 'Trainer Nova',
+  'elite-coast-hunter': {
+    id: 'elite-coast-hunter',
+    name: 'Coast Hunter',
     type: 'Fire',
-    kind: 'trainer',
-    level: 8,
-    maxHp: 50,
-    stats: { atk: 46, def: 36, spAtk: 42, spDef: 34, spd: 40 },
-    abilityIds: ['spark-ember', 'cinder-bite'],
+    kind: 'elite',
+    level: 12,
+    maxHp: 54,
+    stats: { atk: 50, def: 38, spAtk: 46, spDef: 34, spd: 44 },
+    abilityIds: ['cinder-bite', 'spark-ember'],
     recruitable: false,
     companionTemplateId: 'ashling',
   },
-  'gym-leader-ember': {
-    id: 'gym-leader-ember',
-    name: 'Leader Pyra',
-    type: 'Fire',
-    kind: 'boss',
-    level: 10,
-    maxHp: 72,
-    stats: { atk: 52, def: 40, spAtk: 55, spDef: 42, spd: 44 },
-    abilityIds: ['spark-ember', 'cinder-bite'],
-    recruitable: false,
-    companionTemplateId: 'ashling',
-  },
-  'gym-leader-tide': {
-    id: 'gym-leader-tide',
-    name: 'Leader Marina',
-    type: 'Water',
-    kind: 'boss',
-    level: 10,
-    maxHp: 76,
-    stats: { atk: 44, def: 44, spAtk: 52, spDef: 48, spd: 38 },
-    abilityIds: ['bubble-hex', 'tackle'],
-    recruitable: false,
-    companionTemplateId: 'driftwisp',
-  },
-  'gym-leader-bloom': {
-    id: 'gym-leader-bloom',
-    name: 'Leader Sylva',
-    type: 'Grass',
-    kind: 'boss',
-    level: 10,
-    maxHp: 74,
-    stats: { atk: 46, def: 42, spAtk: 50, spDef: 46, spd: 36 },
-    abilityIds: ['vine-lash', 'sting'],
-    recruitable: false,
-    companionTemplateId: 'bristlebug',
-  },
-  'gym-leader-volt': {
-    id: 'gym-leader-volt',
-    name: 'Leader Surge',
+  'elite-storm-hunter': {
+    id: 'elite-storm-hunter',
+    name: 'Storm Hunter',
     type: 'Electric',
-    kind: 'boss',
-    level: 11,
-    maxHp: 68,
-    stats: { atk: 48, def: 38, spAtk: 58, spDef: 40, spd: 52 },
+    kind: 'elite',
+    level: 16,
+    maxHp: 52,
+    stats: { atk: 52, def: 36, spAtk: 54, spDef: 34, spd: 50 },
     abilityIds: ['static-jolt', 'spark-ember'],
     recruitable: false,
     companionTemplateId: 'voltimp',
   },
-  'gym-leader-stone': {
-    id: 'gym-leader-stone',
-    name: 'Leader Granite',
+  'elite-obsidian-hunter': {
+    id: 'elite-obsidian-hunter',
+    name: 'Obsidian Hunter',
     type: 'Ground',
-    kind: 'boss',
-    level: 11,
-    maxHp: 88,
-    stats: { atk: 50, def: 58, spAtk: 40, spDef: 52, spd: 28 },
+    kind: 'elite',
+    level: 20,
+    maxHp: 62,
+    stats: { atk: 56, def: 52, spAtk: 44, spDef: 48, spd: 36 },
     abilityIds: ['rock-bump', 'stone-nudge'],
     recruitable: false,
     companionTemplateId: 'pebblemaw',
-  },
-  'gym-leader-venom': {
-    id: 'gym-leader-venom',
-    name: 'Leader Toxin',
-    type: 'Grass',
-    kind: 'boss',
-    level: 11,
-    maxHp: 70,
-    stats: { atk: 42, def: 40, spAtk: 56, spDef: 44, spd: 40 },
-    abilityIds: ['vine-lash', 'sting'],
-    recruitable: false,
-    companionTemplateId: 'bristlebug',
-  },
-  'gym-leader-spirit': {
-    id: 'gym-leader-spirit',
-    name: 'Leader Phantom',
-    type: 'Water',
-    kind: 'boss',
-    level: 12,
-    maxHp: 72,
-    stats: { atk: 40, def: 42, spAtk: 54, spDef: 56, spd: 42 },
-    abilityIds: ['bubble-hex', 'static-jolt'],
-    recruitable: false,
-    companionTemplateId: 'driftwisp',
-  },
-  'gym-leader-apex': {
-    id: 'gym-leader-apex',
-    name: 'Leader Apex',
-    type: 'Electric',
-    kind: 'boss',
-    level: 12,
-    maxHp: 80,
-    stats: { atk: 55, def: 45, spAtk: 58, spDef: 48, spd: 50 },
-    abilityIds: ['static-jolt', 'cinder-bite'],
-    recruitable: false,
-    companionTemplateId: 'voltimp',
   },
   'region-boss-verdant': {
     id: 'region-boss-verdant',
@@ -312,6 +246,7 @@ export const ENEMY_TEMPLATES: Record<string, EnemyTemplate> = {
     recruitable: false,
     companionTemplateId: 'pebblemaw',
   },
+  ...GYM_NPC_TEMPLATES,
 }
 
 /** @deprecated Use region-specific boss ids */
@@ -319,9 +254,11 @@ const LEGACY_REGION_BOSS = 'region-boss-verdant'
 
 export function getEnemyCombatDisplay(enemy: Enemy): {
   creatureName: string
+  creaturePortraitUrl: string | null
+  creatureType: ElementType
+  trainerName: string | null
+  trainerPortraitUrl: string | null
   trainerLabel: string
-  portraitUrl: string | null
-  displayType: ElementType
 } {
   const companionId = enemy.companionTemplateId
   const companion = companionId ? ENEMY_TEMPLATES[companionId] : undefined
@@ -338,17 +275,24 @@ export function getEnemyCombatDisplay(enemy: Enemy): {
     baseName,
   )
 
+  const trainerPortraitUrl = getGymTrainerPortraitUrl(enemy.id)
+  const isGymNpc = Boolean(trainerPortraitUrl)
+
   const trainerLabel =
-    companionId &&
-    (enemy.kind === 'trainer' || enemy.kind === 'boss' || enemy.kind === 'elite')
+    isGymNpc
       ? enemy.name
-      : 'Enemy'
+      : companionId &&
+          (enemy.kind === 'trainer' || enemy.kind === 'boss' || enemy.kind === 'elite')
+        ? enemy.name
+        : 'Enemy'
 
   return {
     creatureName: resolved.name,
+    creaturePortraitUrl: resolved.portraitUrl,
+    creatureType: elementType,
+    trainerName: isGymNpc ? enemy.name : null,
+    trainerPortraitUrl,
     trainerLabel,
-    portraitUrl: resolved.portraitUrl,
-    displayType: elementType,
   }
 }
 
@@ -383,17 +327,6 @@ const REGION_NORMAL_POOLS: Record<string, string[]> = {
   'ember-coast': ['ashling', 'pebblemaw', 'bristlebug'],
   'storm-plateau': ['voltimp', 'ashling', 'elite-scout'],
   'obsidian-crown': ['pebblemaw', 'voltimp', 'elite-scout'],
-}
-
-const BADGE_LEADER_MAP: Record<string, string> = {
-  'ember-badge': 'gym-leader-ember',
-  'tide-badge': 'gym-leader-tide',
-  'bloom-badge': 'gym-leader-bloom',
-  'volt-badge': 'gym-leader-volt',
-  'stone-badge': 'gym-leader-stone',
-  'venom-badge': 'gym-leader-venom',
-  'spirit-badge': 'gym-leader-spirit',
-  'apex-badge': 'gym-leader-apex',
 }
 
 function scaleStats(stats: EnemyStats, ratio: number): EnemyStats {
@@ -503,11 +436,12 @@ export function getEnemyForNode(
     return spawnEnemy(bossId, level, { hpMult, encounterKind })
   }
   if (node.type === 'gymLeader' && node.badgeId) {
-    const leaderId = BADGE_LEADER_MAP[node.badgeId] ?? 'gym-leader-ember'
+    const leaderId = getLeaderIdForBadge(node.badgeId)
     return spawnEnemy(leaderId, level, { hpMult, encounterKind })
   }
   if (node.type === 'gymTrainer') {
-    return spawnEnemy('gym-trainer-nova', level, { hpMult, encounterKind })
+    const trainerId = getTrainerIdForBadge(node.badgeId)
+    return spawnEnemy(trainerId, level, { hpMult, encounterKind })
   }
   if (node.type === 'alphaNest') {
     const alphas = ['alpha-bristlebug', 'alpha-ashling', 'alpha-pebblemaw']
@@ -515,7 +449,8 @@ export function getEnemyForNode(
     return spawnEnemy(id, level, { hpMult, encounterKind })
   }
   if (node.type === 'elite') {
-    return spawnEnemy('elite-scout', level, { hpMult, encounterKind })
+    const eliteId = REGION_ELITE_IDS[regionId] ?? 'elite-scout'
+    return spawnEnemy(eliteId, level, { hpMult, encounterKind })
   }
   return pickRandomNormalEnemy(regionId, level, {
     fireBias: spawnOptions?.fireBias,

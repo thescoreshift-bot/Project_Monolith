@@ -224,6 +224,7 @@ export function CombatScreen({
   const processedLogCount = useRef(0)
 
   const enemyDisplay = useMemo(() => getEnemyCombatDisplay(enemy), [enemy])
+  const isGymBattle = Boolean(enemyDisplay.trainerName)
   const playerNameMap = useMemo(
     () => new Map(combatants.map((c) => [c.key, c.creature.name])),
     [combatants],
@@ -322,10 +323,18 @@ export function CombatScreen({
           <FighterPanel
             fighter={enemy}
             side="enemy"
-            roleLabel={enemyDisplay.trainerLabel}
-            displayName={enemyDisplay.creatureName}
-            displayType={enemyDisplay.displayType}
-            portraitUrl={enemyDisplay.portraitUrl}
+            roleLabel={
+              isGymBattle
+                ? enemyDisplay.creatureName
+                : enemyDisplay.trainerLabel
+            }
+            displayName={
+              isGymBattle
+                ? enemyDisplay.trainerName!
+                : enemyDisplay.creatureName
+            }
+            displayType={enemyDisplay.creatureType}
+            portraitUrl={enemyDisplay.creaturePortraitUrl}
             statStages={enemyStages}
             targeted={playerTurnActive}
             hitFlash={flashEnemy}
