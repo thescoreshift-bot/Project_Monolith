@@ -2262,6 +2262,7 @@
 }
 
 .enemy-battle-card__portrait-wrap {
+  position: relative;
   display: flex;
   justify-content: center;
   margin: 0.15rem 0 0.35rem;
@@ -3026,20 +3027,54 @@
   width: min(100%, 320px);
 }
 
-.ability-sprite-vfx {
-  position: absolute;
-  left: 50%;
-  bottom: 2.5rem;
-  z-index: 6;
-  pointer-events: none;
-  transform: translateX(-50%);
-  isolation: isolate;
+/* —— Sprite sheet: fixed viewport, background-position advances frames —— */
+.sprite-viewport {
+  position: relative;
+  overflow: hidden;
+  flex-shrink: 0;
 }
 
-.ability-sprite-vfx__frame {
+.sprite-viewport--debug {
+  outline: 1px solid rgba(0, 255, 255, 0.4);
+}
+
+.sprite-sheet-frame {
   display: block;
-  image-rendering: auto;
-  filter: drop-shadow(0 0 12px rgba(56, 189, 248, 0.45));
+  background-repeat: no-repeat;
+  pointer-events: none;
+}
+
+.creature-portrait--spritesheet {
+  background: transparent;
+}
+
+.creature-portrait--spritesheet .creature-portrait__spritesheet {
+  margin: 0 auto;
+}
+
+.creature-portrait--spritesheet.creature-portrait--idle {
+  animation: none;
+}
+
+/* Fixed on target portrait — only background-position changes per frame */
+.vfx-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.sprite-viewport--vfx {
+  overflow: hidden;
+}
+
+.ability-sprite-vfx__canvas {
+  display: block;
+  max-width: none;
+  filter: drop-shadow(0 0 14px rgba(56, 189, 248, 0.5));
 }
 
 .combat-battlefield__players {

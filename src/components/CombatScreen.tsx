@@ -26,6 +26,11 @@ import {
   type EnemyIntentPreview,
 } from '../utils/enemyIntentPreview'
 import { getPortraitForCreature } from '../data/creaturePortraits'
+import {
+  getCreatureSpriteSheets,
+  getCreatureSpriteSheetsForFighter,
+} from '../data/creatureSpriteSheets'
+import { normalizeRecruitTemplateId } from '../data/recruitPortraits'
 import { AbilityCombatCard } from './AbilityCombatCard'
 import { CreaturePortrait } from './CreaturePortrait'
 import { HpBar } from './HpBar'
@@ -152,6 +157,9 @@ function EnemyBattleCard({
   targeted,
   hitFlash,
   fainted = false,
+  abilityVfxId = null,
+  abilityVfxKey = 0,
+  onAbilityVfxComplete,
 }: {
   enemy: Enemy
   enemyDisplay: ReturnType<typeof getEnemyCombatDisplay>
@@ -162,6 +170,9 @@ function EnemyBattleCard({
   targeted: boolean
   hitFlash: boolean
   fainted?: boolean
+  abilityVfxId?: string | null
+  abilityVfxKey?: number
+  onAbilityVfxComplete?: () => void
 }) {
   const stageLines = formatStatStageLine(statStages)
   const displayType = enemyDisplay.creatureType
@@ -185,9 +196,19 @@ function EnemyBattleCard({
         </span>
       </header>
       <div className="enemy-battle-card__portrait-wrap">
+        <CombatAbilityVfxLayer
+          vfxId={abilityVfxId}
+          playKey={abilityVfxKey}
+          onComplete={onAbilityVfxComplete}
+        />
         <CreaturePortrait
           type={displayType}
           portraitUrl={enemyDisplay.creaturePortraitUrl}
+          spriteSheets={getCreatureSpriteSheets(
+            enemy.companionTemplateId ??
+              normalizeRecruitTemplateId(enemy.id),
+          )}
+          combatAnim={hitFlash ? 'hurt' : 'idle'}
           alt={enemyDisplay.creatureName}
           size="combat-lg"
           idle={enemy.currentHp > 0}
@@ -284,6 +305,8 @@ function PlayerBattleCard({
       <CreaturePortrait
         type={creature.type}
         portraitUrl={portraitUrl}
+        spriteSheets={getCreatureSpriteSheetsForFighter(creature)}
+        combatAnim={hitFlash ? 'hurt' : 'idle'}
         alt={creature.name}
         size="combat-party"
         idle={!combatant.fainted}
@@ -719,11 +742,6 @@ export function CombatScreen({
             <p className="combat-screen__council-label">{councilBattleLabel}</p>
           ) : null}
           <div className="combat-screen__enemy-duo">
-            <CombatAbilityVfxLayer
-              vfxId={enemyAbilityVfxId}
-              playKey={enemyAbilityVfxKey}
-              onComplete={onEnemyAbilityVfxComplete}
-            />
             <EnemyBattleCard
               enemy={enemy}
               enemyDisplay={enemyDisplay}
@@ -738,6 +756,9 @@ export function CombatScreen({
               }
               hitFlash={flashEnemy}
               fainted={primaryFainted}
+              abilityVfxId={enemyAbilityVfxId}
+              abilityVfxKey={enemyAbilityVfxKey}
+              onAbilityVfxComplete={onEnemyAbilityVfxComplete}
             />
             {secondaryEnemy && secondaryDisplay ? (
               <EnemyBattleCard

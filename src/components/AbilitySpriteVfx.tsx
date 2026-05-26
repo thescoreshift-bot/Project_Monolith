@@ -1,14 +1,97 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   getDefaultFrameDurationMs,
   type AbilityVfxDef,
+  type VfxFrame,
 } from '../data/abilityVfx'
+import {
+  applyBlackKeyToImageData,
+  getFixedViewportLayout,
+  getVfxFrameDestRectCentered,
+  getVfxFrameDestRectRegistered,
+  getVfxStageLayout,
+  loadVfxSheet,
+  scaleVfxFrameToImage,
+} from '../utils/vfxSheetImage'
 
 type AbilitySpriteVfxProps = {
   def: AbilityVfxDef
-  /** Change to restart the animation. */
   playKey: number
   onComplete?: () => void
+}
+
+const BLACK_KEY_THRESHOLD = 38
+
+function resolveStage(def: AbilityVfxDef) {
+  if (def.fixedViewport) {
+    return getFixedViewportLayout(
+      def.frames,
+      def.fixedViewport.width,
+      def.fixedViewport.height,
+    )
+  }
+  return getVfxStageLayout(def.frames, def.maxDisplayWidth ?? 280)
+}
+
+function paintVfxFrame(
+  canvas: HTMLCanvasElement,
+  img: HTMLImageElement,
+  frame: VfxFrame,
+  def: AbilityVfxDef,
+  anchorFrame: VfxFrame,
+  scale: number,
+  stageW: number,
+  stageH: number,
+): void {
+  if (canvas.width !== stageW || canvas.height !== stageH) {
+    canvas.width = stageW
+    canvas.height = stageH
+  }
+
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })
+  if (!ctx) return
+
+  const crop = scaleVfxFrameToImage(frame, img, def.sheetWidth, def.sheetHeight)
+  const anchorCrop = scaleVfxFrameToImage(
+    anchorFrame,
+    img,
+    def.sheetWidth,
+    def.sheetHeight,
+  )
+
+  const dest = def.centerFrames
+    ? getVfxFrameDestRectCentered(crop, scale, stageW, stageH)
+    : getVfxFrameDestRectRegistered(
+        crop,
+        anchorCrop,
+        scale,
+        stageW,
+        stageH,
+      )
+
+  ctx.clearRect(0, 0, stageW, stageH)
+  ctx.save()
+  ctx.beginPath()
+  ctx.rect(0, 0, stageW, stageH)
+  ctx.clip()
+  ctx.drawImage(
+    img,
+    crop.x,
+    crop.y,
+    crop.w,
+    crop.h,
+    dest.dx,
+    dest.dy,
+    dest.dw,
+    dest.dh,
+  )
+  ctx.restore()
+
+  if (!def.skipBlackKey) {
+    const imageData = ctx.getImageData(0, 0, stageW, stageH)
+    applyBlackKeyToImageData(imageData, BLACK_KEY_THRESHOLD)
+    ctx.putImageData(imageData, 0, 0)
+  }
 }
 
 export function AbilitySpriteVfx({
@@ -17,6 +100,45 @@ export function AbilitySpriteVfx({
   onComplete,
 }: AbilitySpriteVfxProps) {
   const [frameIndex, setFrameIndex] = useState(0)
+  const [sheetReady, setSheetReady] = useState(false)
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const imgRef = useRef<HTMLImageElement | null>(null)
+
+  const [sheetSize, setSheetSize] = useState<{
+    w: number
+    h: number
+  } | null>(null)
+
+  const stage = useMemo(() => {
+    if (def.fixedViewport && sheetSize) {
+      const sx = sheetSize.w / def.sheetWidth
+      const sy = sheetSize.h / def.sheetHeight
+      const scaled = def.frames.map((f) => ({
+        w: f.w * sx,
+        h: f.h * sy,
+      }))
+      return getFixedViewportLayout(
+        scaled,
+        def.fixedViewport.width,
+        def.fixedViewport.height,
+      )
+    }
+    return resolveStage(def)
+  }, [def, sheetSize])
+
+  useEffect(() => {
+    let cancelled = false
+    setSheetReady(false)
+    void loadVfxSheet(def.sheetUrl).then((img) => {
+      if (cancelled) return
+      imgRef.current = img
+      setSheetSize({ w: img.naturalWidth, h: img.naturalHeight })
+      setSheetReady(true)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [def.sheetUrl])
 
   useEffect(() => {
     setFrameIndex(0)
@@ -49,35 +171,53 @@ export function AbilitySpriteVfx({
     }
   }, [def, playKey, onComplete])
 
-  const frame = def.frames[frameIndex]
-  if (!frame) return null
+  useEffect(() => {
+    const canvas = canvasRef.current
+    const img = imgRef.current
+    const frame = def.frames[frameIndex]
+    if (!canvas || !img || !frame || !sheetReady) return
 
-  const maxW = def.maxDisplayWidth ?? 280
-  const scale = maxW / frame.w
-  const displayW = Math.round(frame.w * scale)
-  const displayH = Math.round(frame.h * scale)
-  const sheetW = Math.round(def.sheetWidth * scale)
-  const sheetH = Math.round(def.sheetHeight * scale)
-  const posX = Math.round(-frame.x * scale)
-  const posY = Math.round(-frame.y * scale)
+    if (import.meta.env.DEV && def.id === 'splash-strike') {
+      console.log('Splash Strike frame', {
+        frameIndex,
+        crop: frame,
+      })
+    }
+
+    const anchor = def.frames[0]
+    if (!anchor) return
+    paintVfxFrame(
+      canvas,
+      img,
+      frame,
+      def,
+      anchor,
+      stage.scale,
+      stage.stageW,
+      stage.stageH,
+    )
+  }, [def, frameIndex, stage, sheetReady])
+
+  if (!def.frames[frameIndex]) return null
+
+  const debugClass =
+    import.meta.env.DEV && def.id === 'splash-strike'
+      ? ' sprite-viewport--debug'
+      : ''
 
   return (
-    <div
-      className="ability-sprite-vfx"
-      style={{ mixBlendMode: def.blendMode ?? 'screen' }}
-      aria-hidden
-    >
+    <div className="vfx-overlay" aria-hidden>
       <div
-        className="ability-sprite-vfx__frame"
-        style={{
-          width: displayW,
-          height: displayH,
-          backgroundImage: `url(${def.sheetUrl})`,
-          backgroundPosition: `${posX}px ${posY}px`,
-          backgroundSize: `${sheetW}px ${sheetH}px`,
-          backgroundRepeat: 'no-repeat',
-        }}
-      />
+        className={`sprite-viewport sprite-viewport--vfx${debugClass}`}
+        style={{ width: stage.stageW, height: stage.stageH }}
+      >
+        <canvas
+          ref={canvasRef}
+          className="ability-sprite-vfx__canvas"
+          width={stage.stageW}
+          height={stage.stageH}
+        />
+      </div>
     </div>
   )
 }

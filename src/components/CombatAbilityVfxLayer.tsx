@@ -8,7 +8,7 @@ type CombatAbilityVfxLayerProps = {
   onComplete?: () => void
 }
 
-/** Overlays a sprite-sheet ability VFX on the enemy (Pokémon-style). */
+/** Fixed overlay on enemy portrait; only the sprite frame advances. */
 export function CombatAbilityVfxLayer({
   vfxId,
   playKey,
