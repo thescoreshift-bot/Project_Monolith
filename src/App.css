@@ -5563,12 +5563,43 @@
   border-radius: 6px;
 }
 
+.patch-notes-entry--latest {
+  border-color: rgba(0, 255, 180, 0.45);
+  box-shadow: 0 0 12px rgba(0, 255, 180, 0.12);
+}
+
 .patch-notes-entry__header {
   display: flex;
   justify-content: space-between;
-  align-items: baseline;
+  align-items: flex-start;
   gap: 0.5rem;
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.35rem;
+}
+
+.patch-notes-entry__title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.patch-notes-entry__badge {
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 0.15rem 0.45rem;
+  border-radius: 3px;
+  background: rgba(0, 255, 180, 0.2);
+  color: #7dffc8;
+  border: 1px solid rgba(0, 255, 180, 0.4);
+}
+
+.patch-notes-entry__title {
+  margin: 0 0 0.5rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--mono-text);
 }
 
 .patch-notes-entry__version {
