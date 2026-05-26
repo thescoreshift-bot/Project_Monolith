@@ -1,4 +1,5 @@
 import { APP_VERSION_LABEL } from '../utils/version'
+import type { CombatDebugSnapshot } from '../utils/combatDebug'
 
 export type TesterInfo = {
   screen: string
@@ -14,9 +15,11 @@ export type TesterInfo = {
 
 export function TesterInfoPanel({
   info,
+  combatDebug = null,
   onClose,
 }: {
   info: TesterInfo
+  combatDebug?: CombatDebugSnapshot | null
   onClose: () => void
 }) {
   return (
@@ -66,6 +69,50 @@ export function TesterInfoPanel({
           <dt>Account</dt>
           <dd>{info.loggedIn ? info.displayName ?? 'Logged in' : 'Offline'}</dd>
         </div>
+        {combatDebug && (
+          <>
+            <div>
+              <dt>Combat turn</dt>
+              <dd>{combatDebug.turnNumber}</dd>
+            </div>
+            <div>
+              <dt>Combat phase</dt>
+              <dd>{combatDebug.combatPhase}</dd>
+            </div>
+            <div>
+              <dt>Active actor</dt>
+              <dd>{combatDebug.activeActor}</dd>
+            </div>
+            <div>
+              <dt>Player HP</dt>
+              <dd>
+                {combatDebug.playerHp} / {combatDebug.playerMaxHp}
+              </dd>
+            </div>
+            {combatDebug.helperHp !== null && (
+              <div>
+                <dt>Helper HP</dt>
+                <dd>
+                  {combatDebug.helperHp} / {combatDebug.helperMaxHp}
+                </dd>
+              </div>
+            )}
+            <div>
+              <dt>Enemy HP</dt>
+              <dd>
+                {combatDebug.enemyHp} / {combatDebug.enemyMaxHp}
+              </dd>
+            </div>
+            {combatDebug.lastDamageApplied !== null && (
+              <div>
+                <dt>Last damage</dt>
+                <dd>
+                  {combatDebug.lastDamageApplied} → {combatDebug.lastDamageTarget}
+                </dd>
+              </div>
+            )}
+          </>
+        )}
       </dl>
     </aside>
   )

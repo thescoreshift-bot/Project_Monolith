@@ -342,11 +342,22 @@ import {
 } from './utils/councilFightRewards'
 import {
   applyDamage,
-  pickEnemyAbility,
   rollHits,
   safeCalcDamage,
   sanitizeDamage,
 } from './utils/combat'
+import {
+  applyDamageToCombatCreature,
+  logEnemyDamageApplied,
+} from './utils/combatDamageApply'
+import {
+  pickEnemyCombatMove,
+  type EnemyAiTarget,
+} from './utils/enemyCombatAi'
+import {
+  simulateCombatBalance,
+  type CombatDebugSnapshot,
+} from './utils/combatDebug'
 import {
   applyDefeatPenalties,
   generateNewRoute,
@@ -645,6 +656,13 @@ function App() {
   const [rewardInfo, setRewardInfo] = useState<RewardInfo | null>(null)
   const [defeatInfo, setDefeatInfo] = useState<DefeatInfo | null>(null)
   const [combatLocked, setCombatLocked] = useState(false)
+  const [combatDebugSnapshot, setCombatDebugSnapshot] =
+    useState<CombatDebugSnapshot | null>(null)
+  const combatTurnNumberRef = useRef(0)
+  const lastCombatDamageRef = useRef<{
+    amount: number
+    target: string
+  } | null>(null)
   const [pendingPerkDraftQueue, setPendingPerkDraftQueue] = useState<
     PerkDraftQueueEntry[]
   >([])
@@ -1021,8 +1039,68 @@ function App() {
     enemyStatStagesRef.current = {}
     playerStatStagesRef.current = {}
     enemyTurnLockRef.current = false
+    combatTurnNumberRef.current = 0
+    lastCombatDamageRef.current = null
+    setCombatDebugSnapshot(null)
     setEnemyAbilityVfx(null)
     clearCombatTimeout()
+  }
+
+  function updateCombatDebugSnapshot(
+    phase: CombatPhase,
+    starter: RunCreature,
+    recruits: PartyCreature[],
+    enemyState: Enemy | null,
+    activeActor: string,
+  ) {
+    const helper = getActiveCombatHelper(recruits, activeHelperId)
+    setCombatDebugSnapshot({
+      turnNumber: combatTurnNumberRef.current,
+      combatPhase: phase,
+      activeActor,
+      playerHp: starter.currentHp,
+      playerMaxHp: starter.maxHp,
+      helperHp: helper?.currentHp ?? null,
+      helperMaxHp: helper?.maxHp ?? null,
+      enemyHp: enemyState?.currentHp ?? 0,
+      enemyMaxHp: enemyState?.maxHp ?? 0,
+      lastDamageApplied: lastCombatDamageRef.current?.amount ?? null,
+      lastDamageTarget: lastCombatDamageRef.current?.target ?? null,
+      selectedTarget: activeActor,
+    })
+  }
+
+  /** After enemy acts: helper turn if alive, otherwise starter. */
+  function phaseAfterEnemyTurn(
+    starter: RunCreature,
+    recruits: PartyCreature[],
+  ): CombatPhase {
+    const helper = getActiveCombatHelper(recruits, activeHelperId)
+    if (helper) {
+      const live = recruits.find((r) => r.id === helper.id)
+      if (live && live.currentHp > 0) return 'recruit'
+    }
+    if (starter.currentHp > 0) return 'starter'
+    return 'starter'
+  }
+
+  function beginEnemyTurn(nextEnemy: Enemy) {
+    setCombatPhase('enemy')
+    setCombatLocked(true)
+    updateCombatDebugSnapshot(
+      'enemy',
+      runCreatureRef.current ?? runCreature!,
+      partyRecruitsRef.current ?? partyRecruits,
+      nextEnemy,
+      'enemy',
+    )
+    const isCouncilFight =
+      combatContextRef.current?.source === 'monolithCouncil'
+    if (isCouncilFight) {
+      runCouncilEnemyTurnAfterPlayerHandoff()
+      return
+    }
+    runEnemyTurn(nextEnemy)
   }
 
   function setCombatContextBoth(ctx: CombatContext | null) {
@@ -1578,6 +1656,9 @@ function App() {
           loggedIn: Boolean(authUser),
           displayName: playerProfile?.display_name,
         }}
+        combatDebug={
+          screen === 'combat' ? combatDebugSnapshot : null
+        }
         onClose={() => {
           setShowTesterPanel(false)
           setTesterPanelEnabled(false)
@@ -3724,6 +3805,14 @@ function App() {
       }
       setBattleLog([pending.battleLogLine])
       setCombatLocked(false)
+      combatTurnNumberRef.current = 1
+      updateCombatDebugSnapshot(
+        'starter',
+        starterSnapshot,
+        recruitsSnapshot,
+        pending.spawned,
+        starterSnapshot.name,
+      )
       dispatchRetentionEvent('enemySeen', {
         templateId: pending.discoveryTemplateId,
         creatureName: pending.discoveryCreatureName,
@@ -3747,6 +3836,14 @@ function App() {
       }
       setBattleLog([pending.battleLogLine])
       setCombatLocked(false)
+      combatTurnNumberRef.current = 1
+      updateCombatDebugSnapshot(
+        'starter',
+        starterSnapshot,
+        recruitsSnapshot,
+        pending.spawned,
+        starterSnapshot.name,
+      )
       dispatchRetentionEvent('enemySeen', {
         templateId: pending.discoveryTemplateId,
         creatureName: pending.discoveryCreatureName,
@@ -3864,34 +3961,13 @@ function App() {
     return list
   }
 
-  /** Who attacks next on the player's side: starter → helper → enemy. Skips fainted. */
-  function getNextPlayerAttacker(
-    after: 'round-start' | 'starter' | 'recruit',
+  /** Who acts first when a round begins (starter fainted → helper, else starter). */
+  function getInitialPlayerCombatPhase(
     starter: RunCreature,
     recruits: PartyCreature[],
-  ): 'starter' | 'recruit' | 'enemy' {
-    const helper = getActiveCombatHelper(recruits, activeHelperId)
-    const starterUp = starter.currentHp > 0
-    const helperUp = Boolean(helper && helper.currentHp > 0)
-
-    if (after === 'round-start') {
-      if (starterUp) return 'starter'
-      if (helperUp) return 'recruit'
-      return 'enemy'
-    }
-    if (after === 'starter') {
-      if (helperUp) return 'recruit'
-      return 'enemy'
-    }
-    return 'enemy'
-  }
-
-  function resolvePlayerTurnPhase(
-    starterHp: number,
-    recruits: PartyCreature[],
   ): CombatPhase {
+    if (starter.currentHp > 0) return 'starter'
     const helper = getActiveCombatHelper(recruits, activeHelperId)
-    if (starterHp > 0) return 'starter'
     if (helper && helper.currentHp > 0) return 'recruit'
     return 'starter'
   }
@@ -3911,15 +3987,23 @@ function App() {
     const starterUp = starter.currentHp > 0
     const helperUp = Boolean(helper && helper.currentHp > 0)
 
+    if (phase === 'enemy') {
+      return {
+        phase: 'enemy',
+        activeKey: null,
+        hint: 'Enemy is acting…',
+      }
+    }
+
     if (phase === 'recruit') {
       if (helperUp) {
         return {
           phase: 'recruit',
           activeKey: helper!.id,
-          hint: `Choose an ability for ${helper!.name}`,
+          hint: `${helper!.name}'s turn — choose an ability`,
         }
       }
-      return { phase: 'recruit', activeKey: null, hint: 'Passing to enemy…' }
+      return { phase: 'recruit', activeKey: null, hint: 'Passing turn…' }
     }
 
     if (starterUp) {
@@ -3934,7 +4018,7 @@ function App() {
       return {
         phase: 'recruit',
         activeKey: helper!.id,
-        hint: `Choose an ability for ${helper!.name}`,
+        hint: `${helper!.name}'s turn — choose an ability`,
       }
     }
 
@@ -3971,50 +4055,44 @@ function App() {
       }
     }
 
-    const next = getNextPlayerAttacker(
-      whoJustAttacked,
-      runCreature,
-      partyRecruits,
-    )
-
-    if (next === 'recruit') {
+    if (whoJustAttacked === 'recruit') {
+      combatTurnNumberRef.current += 1
       const helper = getActiveCombatHelper(partyRecruits, activeHelperId)
-      if (whoJustAttacked === 'starter' && helper) {
-        appendLog(`${runCreature.name} acted — ${helper.name} is up next!`)
+      const starterUp = runCreature.currentHp > 0
+      if (starterUp) {
+        setCombatPhase('starter')
+        setCombatLocked(false)
+        updateCombatDebugSnapshot(
+          'starter',
+          runCreatureRef.current ?? runCreature,
+          partyRecruitsRef.current ?? partyRecruits,
+          nextEnemy,
+          runCreature.name,
+        )
+        return
       }
-      setCombatPhase('recruit')
-      setCombatLocked(false)
-      return
+      if (helper && helper.currentHp > 0) {
+        setCombatPhase('recruit')
+        setCombatLocked(false)
+        return
+      }
     }
 
-    if (isCouncilFight) {
-      runCouncilEnemyTurnAfterPlayerHandoff()
-      return
-    }
-
-    runEnemyTurn(nextEnemy)
+    beginEnemyTurn(nextEnemy)
   }
 
   function skipToNextLivingAttacker(reason: string) {
     if (!runCreature || !enemy) return
 
-    const helper = getActiveCombatHelper(partyRecruits, activeHelperId)
-    const next = getNextPlayerAttacker('round-start', runCreature, partyRecruits)
-
-    if (next === 'starter') {
-      appendLog(reason)
-      setCombatPhase('starter')
-      setCombatLocked(false)
-      return
-    }
-    if (next === 'recruit' && helper) {
-      appendLog(reason)
-      setCombatPhase('recruit')
+    appendLog(reason)
+    const phase = getInitialPlayerCombatPhase(runCreature, partyRecruits)
+    if (phase === 'starter' || phase === 'recruit') {
+      setCombatPhase(phase)
       setCombatLocked(false)
       return
     }
 
-    runEnemyTurn(enemy)
+    beginEnemyTurn(enemy)
   }
 
   type AttackResolution = {
@@ -4294,7 +4372,8 @@ function App() {
       runCreatureRef.current = next
       setRunCreature(next)
     } else {
-      const nextRecruits = partyRecruitsRef.current.map((r) =>
+      const base = partyRecruitsRef.current ?? partyRecruits
+      const nextRecruits = base.map((r) =>
         r.id === attackerKey ? (updated as PartyCreature) : r,
       )
       partyRecruitsRef.current = nextRecruits
@@ -4472,25 +4551,46 @@ function App() {
       const seNote =
         typeMult >= SUPER_EFFECTIVE_MULTIPLIER ? ' (super effective)' : ''
 
-      if (focus.key === 'starter') {
-        nextStarterHp = applyDamage(nextStarterHp, damage)
-      } else {
-        nextRecruits = nextRecruits.map((r) =>
-          r.id === focus.key
-            ? { ...r, currentHp: applyDamage(r.currentHp, damage) }
-            : r,
-        )
-        const updatedHelper = nextRecruits.find((r) => r.id === focus.key)
-        nextHelperHp = updatedHelper?.currentHp ?? nextHelperHp
+      const hpBeforeApply =
+        focus.key === 'starter'
+          ? nextStarterHp
+          : nextRecruits.find((r) => r.id === focus.key)?.currentHp ?? 0
+      const workingCouncilStarter = { ...starterSnapshot, currentHp: nextStarterHp }
+      const applied = applyDamageToCombatCreature(
+        focus.key,
+        damage,
+        workingCouncilStarter,
+        nextRecruits,
+      )
+      nextStarterHp = applied.starter.currentHp
+      nextRecruits = applied.recruits
+      const loggedDamage = applied.appliedDamage
+      lastCombatDamageRef.current = {
+        amount: loggedDamage,
+        target: applied.targetName,
       }
-      if (damage > 0) {
+      logEnemyDamageApplied({
+        enemyName: getEnemyFoeName(attackerState),
+        abilityName: enemyAbilityName,
+        targetName: applied.targetName,
+        targetId: focus.key,
+        hpBefore: hpBeforeApply,
+        damage: loggedDamage,
+        hpAfter: applied.hpAfter,
+        combatPhase: 'enemy',
+      })
+      if (loggedDamage > 0) {
         appendLog(
-          `${getEnemyFoeName(attackerState)} used ${enemyAbilityName} — ${damage} damage to ${focus.name}!${seNote}`,
+          `${getEnemyFoeName(attackerState)} used ${enemyAbilityName} — ${loggedDamage} damage to ${focus.name}!${seNote}`,
         )
       } else {
         appendLog(
           `${getEnemyFoeName(attackerState)} used ${enemyAbilityName} on ${focus.name}!`,
         )
+      }
+      if (helper) {
+        const updatedHelper = nextRecruits.find((r) => r.id === helper.id)
+        nextHelperHp = updatedHelper?.currentHp ?? nextHelperHp
       }
     }
 
@@ -4545,9 +4645,21 @@ function App() {
     setRunCreature(mergedStarter)
     partyRecruitsRef.current = nextRecruits
     setPartyRecruits(nextRecruits)
-    setCombatPhase(resolvePlayerTurnPhase(nextStarterHp, nextRecruits))
+    const nextPhase = phaseAfterEnemyTurn(mergedStarter, nextRecruits)
+    setCombatPhase(nextPhase)
     setCombatLocked(false)
     enemyTurnLockRef.current = false
+    const activeActor =
+      nextPhase === 'recruit'
+        ? getActiveCombatHelper(nextRecruits, activeHelperId)?.name ?? 'helper'
+        : mergedStarter.name
+    updateCombatDebugSnapshot(
+      nextPhase,
+      mergedStarter,
+      nextRecruits,
+      councilEnemies[0] ?? null,
+      activeActor,
+    )
   }
 
   function runEnemyTurn(currentEnemy: Enemy) {
@@ -4565,12 +4677,18 @@ function App() {
       return
     }
 
-    if (currentEnemy.currentHp <= 0) return
+    if (currentEnemy.currentHp <= 0) {
+      enemyTurnLockRef.current = false
+      const phase = phaseAfterEnemyTurn(starterSnapshot, recruitsSnapshot)
+      setCombatPhase(phase)
+      setCombatLocked(false)
+      return
+    }
 
     enemyTurnLockRef.current = true
 
     const helper = getActiveCombatHelper(recruitsSnapshot, activeHelperId)
-    let nextStarterHp = starterSnapshot.currentHp
+    let workingStarter = { ...starterSnapshot }
     let nextRecruits = recruitsSnapshot
     let nextHelperHp = helper?.currentHp ?? null
 
@@ -4579,16 +4697,18 @@ function App() {
       key: string
       name: string
       maxHp: number
+      type: RunCreature['type']
       combatStats: ReturnType<typeof buildCombatStatsForCreature>
     }[] = []
 
-    if (nextStarterHp > 0) {
+    if (workingStarter.currentHp > 0) {
       targets.push({
         key: 'starter',
-        name: starterSnapshot.name,
-        maxHp: starterSnapshot.maxHp,
+        name: workingStarter.name,
+        maxHp: workingStarter.maxHp,
+        type: workingStarter.type,
         combatStats: buildCombatStatsForCreature(
-          starterSnapshot,
+          workingStarter,
           earnedBadges,
           partyLevel,
           playerStatStagesRef.current['starter'] ?? {},
@@ -4600,6 +4720,7 @@ function App() {
         key: helper.id,
         name: helper.name,
         maxHp: helper.maxHp,
+        type: helper.type,
         combatStats: buildCombatStatsForCreature(
           helper,
           earnedBadges,
@@ -4642,8 +4763,30 @@ function App() {
       )
     }
 
-    const target = targets[Math.floor(Math.random() * targets.length)]
-    const enemyAbilityId = pickEnemyAbility(currentEnemyState.abilityIds)
+    const aiTargets: EnemyAiTarget[] = targets.map((t) => ({
+      key: t.key,
+      name: t.name,
+      type: t.type,
+      currentHp:
+        t.key === 'starter'
+          ? workingStarter.currentHp
+          : nextRecruits.find((r) => r.id === t.key)?.currentHp ?? 0,
+      maxHp: t.maxHp,
+      stats: t.combatStats,
+    }))
+    const focus =
+      aiTargets.length > 0
+        ? aiTargets[Math.floor(Math.random() * aiTargets.length)]
+        : null
+    const target = focus
+      ? targets.find((t) => t.key === focus.key) ?? targets[0]!
+      : targets[0]!
+    const enemyAbilityId = pickEnemyCombatMove(
+      currentEnemyState,
+      aiTargets,
+      enemyStatStagesRef.current,
+      playerStatStagesRef.current,
+    )
     const enemyAbility = getAbility(enemyAbilityId)
     const enemyAbilityName = getAbilityDisplayName(enemyAbility)
     const enemySfxRank = Math.min(
@@ -4697,7 +4840,7 @@ function App() {
       )
       const targetHp =
         target.key === 'starter'
-          ? nextStarterHp
+          ? workingStarter.currentHp
           : nextRecruits.find((r) => r.id === target.key)?.currentHp ?? 0
       damage = applyPerkDamageTakenReduction(damage, targetPerks, {
         hpRatio: target.maxHp > 0 ? targetHp / target.maxHp : 1,
@@ -4719,25 +4862,47 @@ function App() {
       )
       const seNote =
         typeMult >= SUPER_EFFECTIVE_MULTIPLIER ? ' (super effective)' : ''
-      if (target.key === 'starter') {
-        nextStarterHp = applyDamage(nextStarterHp, damage)
-      } else {
-        nextRecruits = nextRecruits.map((r) =>
-          r.id === target.key
-            ? { ...r, currentHp: applyDamage(r.currentHp, damage) }
-            : r,
+      const hpBeforeApply =
+        target.key === 'starter'
+          ? workingStarter.currentHp
+          : nextRecruits.find((r) => r.id === target.key)?.currentHp ?? 0
+      const applied = applyDamageToCombatCreature(
+        target.key,
+        damage,
+        workingStarter,
+        nextRecruits,
+      )
+      workingStarter = applied.starter
+      nextRecruits = applied.recruits
+      const loggedDamage = applied.appliedDamage
+      lastCombatDamageRef.current = {
+        amount: loggedDamage,
+        target: applied.targetName,
+      }
+      logEnemyDamageApplied({
+        enemyName: getEnemyFoeName(currentEnemyState),
+        abilityName: enemyAbilityName,
+        targetName: applied.targetName,
+        targetId: target.key,
+        hpBefore: hpBeforeApply,
+        damage: loggedDamage,
+        hpAfter: applied.hpAfter,
+        combatPhase: 'enemy',
+      })
+      if (loggedDamage > 0) {
+        appendLog(
+          `${getEnemyFoeName(currentEnemyState)} used ${enemyAbilityName} — ${loggedDamage} damage to ${target.name}!${seNote}`,
         )
-        const updatedHelper = nextRecruits.find((r) => r.id === target.key)
+      } else {
+        appendLog(
+          `${getEnemyFoeName(currentEnemyState)} used ${enemyAbilityName} on ${target.name}!`,
+        )
+      }
+      if (helper) {
+        const updatedHelper = nextRecruits.find((r) => r.id === helper.id)
         nextHelperHp = updatedHelper?.currentHp ?? nextHelperHp
       }
-      if (damage > 0) {
-        appendLog(
-          `${getEnemyFoeName(currentEnemyState)} used ${enemyAbilityName} — ${damage} damage to ${target.name}!${seNote}`,
-        )
-      } else {
-        appendLog(`${getEnemyFoeName(currentEnemy)} used ${enemyAbilityName} on ${target.name}!`)
-      }
-      if (nextStarterHp <= 0 && target.key === 'starter') {
+      if (workingStarter.currentHp <= 0 && target.key === 'starter') {
         const livingHelper = helper
           ? nextRecruits.find((r) => r.id === helper.id)
           : null
@@ -4746,38 +4911,40 @@ function App() {
         }
       }
       if (helper && nextHelperHp !== null && nextHelperHp <= 0 && target.key === helper.id) {
-        if (nextStarterHp > 0) {
+        if (workingStarter.currentHp > 0) {
           appendLog(`${helper.name} fainted — ${starterSnapshot.name} is up next!`)
         }
       }
     }
 
-    const baseStarter = runCreatureRef.current ?? starterSnapshot
-    if (!baseStarter) {
-      enemyTurnLockRef.current = false
-      return
-    }
-
-    const mergedStarter = {
-      ...baseStarter,
-      currentHp: nextStarterHp,
-    }
     const helperHpForCheck = helper ? nextHelperHp : null
 
-    if (isPartyDefeated(nextStarterHp, helperHpForCheck)) {
+    if (isPartyDefeated(workingStarter.currentHp, helperHpForCheck)) {
       appendLog('Your team was defeated!')
-      handleDefeat(mergedStarter, nextRecruits, currentEnemy)
+      handleDefeat(workingStarter, nextRecruits, currentEnemy)
       enemyTurnLockRef.current = false
       return
     }
 
-    runCreatureRef.current = mergedStarter
-    setRunCreature(mergedStarter)
+    runCreatureRef.current = workingStarter
+    setRunCreature(workingStarter)
     partyRecruitsRef.current = nextRecruits
     setPartyRecruits(nextRecruits)
-    setCombatPhase(resolvePlayerTurnPhase(nextStarterHp, nextRecruits))
+    const nextPhase = phaseAfterEnemyTurn(workingStarter, nextRecruits)
+    setCombatPhase(nextPhase)
     setCombatLocked(false)
     enemyTurnLockRef.current = false
+    const activeActor =
+      nextPhase === 'recruit'
+        ? getActiveCombatHelper(nextRecruits, activeHelperId)?.name ?? 'helper'
+        : workingStarter.name
+    updateCombatDebugSnapshot(
+      nextPhase,
+      workingStarter,
+      nextRecruits,
+      currentEnemyState,
+      activeActor,
+    )
   }
 
   function handleBeginNewRoute() {
@@ -5224,7 +5391,8 @@ function App() {
       combatEndedRef.current ||
       !runCreature ||
       !enemy ||
-      combatLocked
+      combatLocked ||
+      combatPhase === 'enemy'
     ) {
       return
     }
@@ -5302,12 +5470,7 @@ function App() {
 
     const view = getPlayerTurnView(runCreature, partyRecruits, combatPhase)
     if (view.activeKey === null && combatPhase === 'recruit') {
-      setCombatLocked(true)
-      if (combatContextRef.current?.source === 'monolithCouncil') {
-        runCouncilEnemyTurnAfterPlayerHandoff()
-      } else {
-        runEnemyTurn(enemy)
-      }
+      beginEnemyTurn(enemy)
     }
   }, [
     screen,
@@ -5318,6 +5481,32 @@ function App() {
     combatLocked,
     activeHelperId,
   ])
+
+  useEffect(() => {
+    if (screen !== 'combat' || combatPhase !== 'enemy' || !combatLocked) return
+    if (enemyTurnLockRef.current) return
+    const timer = window.setTimeout(() => {
+      if (screenRef.current !== 'combat' || enemyTurnLockRef.current) return
+      const starterSnapshot = runCreatureRef.current ?? runCreature
+      const recruitsSnapshot = partyRecruitsRef.current ?? partyRecruits
+      if (!starterSnapshot) return
+      const phase = phaseAfterEnemyTurn(starterSnapshot, recruitsSnapshot)
+      setCombatPhase(phase)
+      setCombatLocked(false)
+      console.warn('Combat phase recovery: unstuck from enemy phase')
+    }, 4500)
+    return () => window.clearTimeout(timer)
+  }, [screen, combatPhase, combatLocked])
+
+  useEffect(() => {
+    if (!showTesterPanel) return
+    ;(window as Window & { simulateCombatBalance?: typeof simulateCombatBalance }).simulateCombatBalance =
+      simulateCombatBalance
+    return () => {
+      delete (window as Window & { simulateCombatBalance?: typeof simulateCombatBalance })
+        .simulateCombatBalance
+    }
+  }, [showTesterPanel])
 
   function getLatestRecruits(): PartyCreature[] {
     return partyRecruitsRef.current
@@ -7178,6 +7367,7 @@ function App() {
           }
           battleLog={battleLog}
           combatLocked={combatLocked}
+          combatPhase={combatPhase}
           combatEnded={combatEnded}
           turnHint={playerTurn.hint}
           activeCombatantKey={playerTurn.activeKey}

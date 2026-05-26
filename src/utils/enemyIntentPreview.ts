@@ -19,6 +19,7 @@ import {
   type CombatStatStages,
 } from './combatEffects'
 import { safeCalcDamage, sanitizeDamage } from './combat'
+import { pickEnemyCombatMove, type EnemyAiTarget } from './enemyCombatAi'
 import type { CombatStats } from './combat'
 
 export type EnemyIntentTarget = {
@@ -190,10 +191,7 @@ function pickFeaturedDamageAbility(
   return best
 }
 
-/**
- * UI-only preview of what the enemy might do next. Does not call enemy AI or
- * fix a move — the real turn still uses random `pickEnemyAbility`.
- */
+/** UI preview of likely enemy action (uses same AI as combat when target is known). */
 export function buildEnemyIntentPreview(
   enemy: Enemy,
   target: EnemyIntentTarget | null,
@@ -234,8 +232,18 @@ export function buildEnemyIntentPreview(
     }
   }
 
+  const aiTarget: EnemyAiTarget = {
+    key: 'intent-preview',
+    name: target.name ?? 'You',
+    type: target.type,
+    currentHp: target.maxHp,
+    maxHp: target.maxHp,
+    stats: target.stats,
+  }
+  const pickedId = pickEnemyCombatMove(enemy, [aiTarget], enemyStages, {})
   const hint = pickHint(pool)
   const featured =
+    pool.find((a) => a.id === pickedId) ??
     pickFeaturedDamageAbility(pool, enemy, target, enemyStages) ??
     pool.find(hasStatDebuff) ??
     pool[0]

@@ -99,7 +99,7 @@ export const ENEMY_TEMPLATES: Record<string, EnemyTemplate> = {
     level: 1,
     maxHp: 50,
     stats: { atk: 5, def: 8, spAtk: 4, spDef: 7, spd: 8 },
-    abilityIds: ['rock-bump', 'tackle'],
+    abilityIds: ['rock-bump', 'soft-growl', 'tackle'],
     recruitable: true,
   },
   driftwisp: {
@@ -359,7 +359,16 @@ export function spawnEnemy(
     ? encounterKindToHpMultiplier(options.encounterKind)
     : 1
   const kindMult = enemyKindToHpMultiplier(template.kind)
-  const hpScale = (options?.hpMult ?? 1) * (level <= 3 ? 1 : 1)
+  const earlyDurability =
+    level <= 8 &&
+    template.kind === 'normal' &&
+    (options?.encounterKind === 'battle' || !options?.encounterKind)
+      ? 1.12
+      : level <= 10 &&
+          (template.kind === 'elite' || template.kind === 'alpha')
+        ? 1.08
+        : 1
+  const hpScale = (options?.hpMult ?? 1) * earlyDurability
   const lateHpBonus =
     level > 10 && (options?.encounterKind === 'battle' || !options?.encounterKind)
       ? 1 + Math.min(0.55, (level - 10) * 0.04)

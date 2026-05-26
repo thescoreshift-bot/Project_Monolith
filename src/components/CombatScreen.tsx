@@ -52,6 +52,7 @@ type CombatScreenProps = {
   councilTargetIndex?: number
   battleLog: string[]
   combatLocked: boolean
+  combatPhase?: 'starter' | 'recruit' | 'enemy'
   turnHint: string
   activeCombatantKey: string | null
   earnedBadges: string[]
@@ -92,6 +93,7 @@ function buildActionBanner(
   enemyFainted: boolean,
   combatEnded: boolean,
   combatLocked: boolean,
+  combatPhase: 'starter' | 'recruit' | 'enemy' | undefined,
   activeCombatantKey: string | null,
   combatants: CombatantTarget[],
   turnHint: string,
@@ -99,16 +101,20 @@ function buildActionBanner(
   if (enemyFainted || combatEnded) {
     return { title: 'Victory!', subtitle: 'The foe has been defeated' }
   }
-  if (combatLocked && !activeCombatantKey) {
+  if (combatPhase === 'enemy' || (combatLocked && !activeCombatantKey)) {
     return {
-      title: 'Enemy is preparing an attack',
+      title: 'Enemy is acting…',
       subtitle: 'Hold — enemy turn in progress',
     }
   }
   const active = combatants.find((c) => c.key === activeCombatantKey)
   if (active && !active.fainted) {
+    const role =
+      combatPhase === 'recruit' && active.key !== 'starter'
+        ? `${active.creature.name}'s turn`
+        : `${active.creature.name}'s turn`
     return {
-      title: `${active.creature.name}'s turn`,
+      title: role,
       subtitle: 'Choose an ability',
     }
   }
@@ -520,6 +526,7 @@ export function CombatScreen({
   councilTargetIndex = 0,
   battleLog,
   combatLocked,
+  combatPhase,
   turnHint,
   activeCombatantKey,
   earnedBadges,
@@ -618,7 +625,8 @@ export function CombatScreen({
   const secondaryFainted = Boolean(secondaryEnemy && secondaryEnemy.currentHp <= 0)
   const playerTurnActive = !actionsDisabled && activeCombatantKey !== null
   const enemyTurnInProgress =
-    combatLocked && !activeCombatantKey && !combatEnded && !enemyFainted
+    combatPhase === 'enemy' ||
+    (combatLocked && !activeCombatantKey && !combatEnded && !enemyFainted)
 
   const intentTarget = useMemo(() => {
     const active = combatants.find(
@@ -663,6 +671,7 @@ export function CombatScreen({
     enemyFainted,
     combatEnded,
     combatLocked,
+    combatPhase,
     activeCombatantKey,
     combatants,
     turnHint,
