@@ -27,6 +27,9 @@ import { AccountScreen, LoginScreen, RegisterScreen } from './components/AuthScr
 import { CharacterSelectScreen } from './components/CharacterSelectScreen'
 import { TrainerNameScreen } from './components/TrainerNameScreen'
 import { DailyRunScreen } from './components/DailyRunScreen'
+import { MainMenuButton } from './components/MainMenuButton'
+import { MainMenuHeader } from './components/MainMenuHeader'
+import { MAIN_MENU_ICONS, MAIN_MENU_TEXT } from './data/mainMenuIcons'
 import { DailyDefeatScreen } from './components/DailyDefeatScreen'
 import { LeaderboardScreen } from './components/LeaderboardScreen'
 import { ProfileSetupScreen } from './components/ProfileSetupScreen'
@@ -7890,6 +7893,13 @@ function App() {
         cloudConfigured={isSupabaseConfigured()}
         displayName={playerProfile?.display_name}
         hasArchiveNotification={hasRetentionNotifications(retentionState)}
+        dailyRunBadge={
+          hasDailyRunInProgress()
+            ? 'continue'
+            : !hasDailyRunForToday()
+              ? 'daily'
+              : undefined
+        }
         onLogin={() => setScreen('login')}
         onRegister={() => setScreen('register')}
         onPlay={() => openCharacterSelect('cloud')}
@@ -7939,6 +7949,7 @@ function TitleScreen({
   cloudConfigured,
   displayName,
   hasArchiveNotification,
+  dailyRunBadge,
   onLogin,
   onRegister,
   onPlay,
@@ -7957,6 +7968,7 @@ function TitleScreen({
   cloudConfigured: boolean
   displayName?: string
   hasArchiveNotification?: boolean
+  dailyRunBadge?: 'daily' | 'continue'
   onLogin: () => void
   onRegister: () => void
   onPlay: () => void
@@ -7976,79 +7988,142 @@ function TitleScreen({
       <div className="main-menu-screen__bg" aria-hidden="true" />
       <div className="main-menu-screen__overlay" aria-hidden="true" />
 
-      <header className="title-screen__header">
-        <h1 className="title-screen__title">PROJECT MONOLITH</h1>
-        <p className="title-screen__subtitle">Creature Battler Roguelike</p>
-      </header>
+      <div className="main-menu-layout">
+        <MainMenuHeader />
 
-      <nav className="title-screen__actions" aria-label="Main menu">
-        <button type="button" className="btn btn--primary" onClick={onDailyRun}>
-          Daily Run
-        </button>
-        <button
-          type="button"
-          className="btn title-screen__archive-btn"
-          onClick={onMonolithArchive}
-        >
-          Monolith Archive
-          {hasArchiveNotification ? (
-            <span className="title-screen__archive-badge" aria-label="Rewards available">
-              {' '}
-              !
-            </span>
-          ) : null}
-        </button>
-        {loggedIn ? (
-          <>
-            <button type="button" className="btn" onClick={onPlay}>
-              Play
-            </button>
-            <button type="button" className="btn" onClick={onAccount}>
-              Account
-            </button>
-            <button type="button" className="btn" onClick={onLogout}>
-              Logout
-            </button>
-          </>
-        ) : (
-          <>
-            <button
-              type="button"
-              className="btn"
-              onClick={onLogin}
-              disabled={!cloudConfigured}
-              title={
-                cloudConfigured
-                  ? undefined
-                  : 'Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to .env'
-              }
-            >
-              Login
-            </button>
-            <button type="button" className="btn" onClick={onRegister} disabled={!cloudConfigured}>
-              Register
-            </button>
-            <button type="button" className="btn" onClick={onPlayOffline}>
-              Play Offline
-            </button>
-          </>
-        )}
-        <button type="button" className="btn" onClick={onFriendBattle}>
-          Friend Battle
-        </button>
-        <button type="button" className="btn" onClick={onLeaderboard}>
-          Leaderboard
-        </button>
-        <button type="button" className="btn btn--small" onClick={onFeedback}>
-          Feedback
-        </button>
-        <button type="button" className="btn btn--small" onClick={onPatchNotes}>
-          Patch Notes
-        </button>
-        <button type="button" className="btn btn--small" onClick={onSettings}>
-          Settings
-        </button>
-      </nav>
+        <div className="main-menu-panel">
+          <nav className="main-menu-nav main-menu-nav--art" aria-label="Main menu">
+            <div className="main-menu-zone main-menu-zone--hero" aria-label="Play">
+              <MainMenuButton
+                label="Daily Run"
+                iconSrc={MAIN_MENU_ICONS.dailyRun}
+                labelSrc={MAIN_MENU_TEXT.dailyRun}
+                labelStyle="daily-run"
+                onClick={onDailyRun}
+                variant="primary"
+                badge={dailyRunBadge}
+              />
+              {loggedIn ? (
+                <MainMenuButton
+                  label="Play"
+                  iconSrc={MAIN_MENU_ICONS.play}
+                  labelSrc={MAIN_MENU_TEXT.play}
+                  labelStyle="play"
+                  onClick={onPlay}
+                  variant="primary-secondary"
+                />
+              ) : (
+                <MainMenuButton
+                  label="Play Offline"
+                  iconSrc={MAIN_MENU_ICONS.offline}
+                  labelSrc={MAIN_MENU_TEXT.offline}
+                  labelStyle="offline"
+                  onClick={onPlayOffline}
+                  variant="primary-secondary"
+                />
+              )}
+            </div>
+
+            <div className="main-menu-zone main-menu-zone--duo" aria-label="Progression">
+              <MainMenuButton
+                label="Monolith Archive"
+                iconSrc={MAIN_MENU_ICONS.monolithArchive}
+                labelSrc={MAIN_MENU_TEXT.monolithArchive}
+                labelStyle="archive"
+                onClick={onMonolithArchive}
+                badge={hasArchiveNotification ? 'notification' : undefined}
+              />
+              <MainMenuButton
+                label="Leaderboard"
+                iconSrc={MAIN_MENU_ICONS.leaderboard}
+                labelSrc={MAIN_MENU_TEXT.leaderboard}
+                labelStyle="leaderboard"
+                onClick={onLeaderboard}
+              />
+            </div>
+
+            <div className="main-menu-zone main-menu-zone--solo" aria-label="Social">
+              <MainMenuButton
+                label="Friendly Battle"
+                iconSrc={MAIN_MENU_ICONS.friendlyBattle}
+                labelSrc={MAIN_MENU_TEXT.friendlyBattle}
+                labelStyle="friendly-battle"
+                onClick={onFriendBattle}
+              />
+            </div>
+
+            {!loggedIn ? (
+              <div className="main-menu-zone main-menu-zone--duo" aria-label="Account">
+                <MainMenuButton
+                  label="Login"
+                  iconSrc={MAIN_MENU_ICONS.login}
+                  labelSrc={MAIN_MENU_TEXT.login}
+                  labelStyle="login"
+                  onClick={onLogin}
+                  disabled={!cloudConfigured}
+                  title={
+                    cloudConfigured
+                      ? undefined
+                      : 'Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to .env'
+                  }
+                />
+                <MainMenuButton
+                  label="Register"
+                  iconSrc={MAIN_MENU_ICONS.register}
+                  labelSrc={MAIN_MENU_TEXT.register}
+                  labelStyle="register"
+                  onClick={onRegister}
+                  disabled={!cloudConfigured}
+                />
+              </div>
+            ) : (
+              <div className="main-menu-zone main-menu-zone--duo" aria-label="Session">
+                <MainMenuButton
+                  label="Account"
+                  iconSrc={MAIN_MENU_ICONS.account}
+                  labelSrc={MAIN_MENU_TEXT.account}
+                  labelStyle="account"
+                  onClick={onAccount}
+                />
+                <MainMenuButton
+                  label="Logout"
+                  iconSrc={MAIN_MENU_ICONS.logout}
+                  labelSrc={MAIN_MENU_TEXT.logout}
+                  labelStyle="logout"
+                  onClick={onLogout}
+                />
+              </div>
+            )}
+
+            <div className="main-menu-zone main-menu-zone--utility" aria-label="Utility">
+              <MainMenuButton
+                label="Feedback"
+                iconSrc={MAIN_MENU_ICONS.feedback}
+                labelSrc={MAIN_MENU_TEXT.feedback}
+                labelStyle="feedback"
+                onClick={onFeedback}
+                variant="utility"
+              />
+              <MainMenuButton
+                label="Patch Notes"
+                iconSrc={MAIN_MENU_ICONS.patchNotes}
+                labelSrc={MAIN_MENU_TEXT.patchNotes}
+                labelStyle="patch-notes"
+                onClick={onPatchNotes}
+                variant="utility"
+              />
+              <MainMenuButton
+                label="Settings"
+                iconSrc={MAIN_MENU_ICONS.settings}
+                labelSrc={MAIN_MENU_TEXT.settings}
+                labelStyle="settings"
+                onClick={onSettings}
+                variant="utility"
+              />
+            </div>
+          </nav>
+        </div>
+      </div>
 
       {displayName && (
         <p className="title-screen__profile-name">

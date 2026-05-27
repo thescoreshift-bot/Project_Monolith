@@ -1,0 +1,6 @@
+D:
+cd "D:\Project Monolith"
+npm.cmd run build
+git add .
+git commit -m "Update game systems"
+git push
