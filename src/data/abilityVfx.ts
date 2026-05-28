@@ -10,6 +10,8 @@ export type VfxFrame = {
 export type AbilityVfxDef = {
   id: string
   sheetUrl: string
+  /** Optional frame-by-frame PNG sequence (uses one image per frame). */
+  frameUrls?: string[]
   sheetWidth: number
   sheetHeight: number
   frames: VfxFrame[]
@@ -25,40 +27,52 @@ export type AbilityVfxDef = {
   centerFrames?: boolean
 }
 
-const WATER_HYDRO_SHEET = '/assets/vfx/water-hydro.jpg'
-const WATER_JET_SHEET = '/assets/vfx/water-jet.jpg'
 const WATER_WAVE_SHEET = '/assets/vfx/water-wave.jpg'
 const WATER_RIPPLE_SHEET = '/assets/vfx/water-ripple.jpg'
 const WATER_TORNADO_SHEET = '/assets/vfx/water-tornado.jpg'
+const WATER_FRAME_SEQUENCE = [
+  '/assets/vfx/water-frame-1.png',
+  '/assets/vfx/water-frame-2.png',
+  '/assets/vfx/water-frame-3.png',
+  '/assets/vfx/water-frame-4.png',
+  '/assets/vfx/water-frame-5.png',
+  '/assets/vfx/water-frame-6.png',
+  '/assets/vfx/water-frame-7.png',
+  '/assets/vfx/water-frame-8.png',
+  '/assets/vfx/water-frame-9.png',
+] as const
+const WATER_JET_SEQUENCE = [
+  '/assets/vfx/water-jet1.png',
+  '/assets/vfx/water-jet2.png',
+  '/assets/vfx/water-jet3.png',
+  '/assets/vfx/water-jet4.png',
+  '/assets/vfx/water-jet5.png',
+  '/assets/vfx/water-jet6.png',
+] as const
+const CHAIN_SPARK_SEQUENCE = [
+  '/assets/vfx/chain-spark1.png',
+  '/assets/vfx/chain-spark2.png',
+  '/assets/vfx/chain-spark3.png',
+  '/assets/vfx/chain-spark4.png',
+  '/assets/vfx/chain-spark5.png',
+  '/assets/vfx/chain-spark6.png',
+  '/assets/vfx/chain-spark7.png',
+  '/assets/vfx/chain-spark8.png',
+] as const
+const ELECTRIC_ORB_SEQUENCE = [
+  '/assets/vfx/electric-orb1.png',
+  '/assets/vfx/electric-orb2.png',
+  '/assets/vfx/electric-orb3.png',
+  '/assets/vfx/electric-orb4.png',
+  '/assets/vfx/electric-orb5.png',
+  '/assets/vfx/electric-orb6.png',
+  '/assets/vfx/electric-orb7.png',
+] as const
 
-const SHEET_1024 = { sheetWidth: 1024, sheetHeight: 1024 } as const
-const SHEET_JET = { sheetWidth: 1291, sheetHeight: 211 } as const
 const SHEET_WAVE = { sheetWidth: 1295, sheetHeight: 291 } as const
 const SHEET_RIPPLE = { sheetWidth: 1283, sheetHeight: 191 } as const
 const SHEET_TORNADO = { sheetWidth: 1274, sheetHeight: 292 } as const
 
-/** 1024×1024 — projectile stream + massive splash (9 frames). */
-const WH = {
-  f0: { x: 82, y: 117, w: 131, h: 44 },
-  f1: { x: 103, y: 159, w: 147, h: 84 },
-  f2: { x: 205, y: 406, w: 162, h: 144 },
-  f3: { x: 308, y: 117, w: 186, h: 158 },
-  f4: { x: 411, y: 43, w: 318, h: 180 },
-  f5: { x: 515, y: 287, w: 432, h: 215, durationMs: 130 },
-  f6: { x: 39, y: 549, w: 358, h: 179 },
-  f7: { x: 626, y: 454, w: 393, h: 194 },
-  f8: { x: 39, y: 843, w: 340, h: 169, durationMs: 100 },
-} as const satisfies Record<string, VfxFrame>
-
-/** 1291×211 — charge stream → orb → launch → impact (6 frames). */
-const WJ = {
-  f0: { x: 52, y: 12, w: 118, h: 175 },
-  f1: { x: 178, y: 13, w: 117, h: 184 },
-  f2: { x: 349, y: 16, w: 135, h: 195 },
-  f3: { x: 539, y: 6, w: 147, h: 194 },
-  f4: { x: 471, y: 32, w: 239, h: 157, durationMs: 85 },
-  f5: { x: 596, y: 43, w: 307, h: 163, durationMs: 110 },
-} as const satisfies Record<string, VfxFrame>
 
 /** 1295×291 — rising curl → S-wave whip + crown splash (5 frames; f4 is one composite). */
 const WW = {
@@ -93,17 +107,6 @@ const WT = {
   f6: { x: 1097, y: 16, w: 177, h: 271, durationMs: 95 },
 } as const satisfies Record<string, VfxFrame>
 
-const HYDRO_HEAVY: VfxFrame[] = [
-  WH.f0,
-  WH.f1,
-  WH.f2,
-  WH.f3,
-  WH.f4,
-  WH.f5,
-  WH.f6,
-  WH.f7,
-  WH.f8,
-]
 const RIPPLE_OPEN: VfxFrame[] = [WR.f0, WR.f1]
 const RIPPLE_FULL: VfxFrame[] = [
   WR.f0,
@@ -127,11 +130,6 @@ const TORNADO_ALL: VfxFrame[] = [
 ]
 const TORNADO_BUILD: VfxFrame[] = [WT.f0, WT.f1, WT.f2, WT.f3, WT.f4, WT.f5]
 const TORNADO_FORM: VfxFrame[] = [WT.f0, WT.f1, WT.f2, WT.f3]
-
-const JET_CHARGE: VfxFrame[] = [WJ.f0, WJ.f1, WJ.f2, WJ.f3]
-/** f4/f5 overlap earlier columns on the sheet — avoid for strip playback. */
-const JET_IMPACT: VfxFrame[] = [WJ.f4, WJ.f5]
-void JET_IMPACT
 
 const WAVE_ALL: VfxFrame[] = [WW.f0, WW.f1, WW.f2, WW.f3, WW.f4]
 const WAVE_WHIP: VfxFrame[] = [WW.f2, WW.f3, WW.f4]
@@ -177,22 +175,6 @@ function abilityVfx(
   }
 }
 
-function hydroVfx(
-  abilityId: string,
-  frames: VfxFrame[],
-  opts?: { maxDisplayWidth?: number; fps?: number },
-): AbilityVfxDef {
-  return abilityVfx(abilityId, WATER_HYDRO_SHEET, SHEET_1024, frames, opts)
-}
-
-function jetVfx(
-  abilityId: string,
-  frames: VfxFrame[],
-  opts?: { maxDisplayWidth?: number; fps?: number },
-): AbilityVfxDef {
-  return abilityVfx(abilityId, WATER_JET_SHEET, SHEET_JET, frames, opts)
-}
-
 function waveVfx(
   abilityId: string,
   frames: VfxFrame[],
@@ -215,6 +197,26 @@ function tornadoVfx(
   opts?: { maxDisplayWidth?: number; fps?: number },
 ): AbilityVfxDef {
   return abilityVfx(abilityId, WATER_TORNADO_SHEET, SHEET_TORNADO, frames, opts)
+}
+
+function sequenceVfx(
+  abilityId: string,
+  frameUrls: readonly string[],
+  opts?: { maxDisplayWidth?: number; fps?: number },
+): AbilityVfxDef {
+  return {
+    id: abilityId,
+    sheetUrl: frameUrls[0] ?? '',
+    frameUrls: [...frameUrls],
+    sheetWidth: 1,
+    sheetHeight: 1,
+    frames: frameUrls.map(() => ({ x: 0, y: 0, w: 1, h: 1 })),
+    fps: opts?.fps ?? 12,
+    maxDisplayWidth: opts?.maxDisplayWidth ?? 300,
+    blendMode: 'screen',
+    skipBlackKey: true,
+    centerFrames: true,
+  }
 }
 
 /** Legacy bubble sheet (kept as fallback reference). */
@@ -242,11 +244,14 @@ export const ABILITY_VFX_BY_ID: Record<string, AbilityVfxDef> = {
   'bubble-hex-legacy': BUBBLE_HEX_LEGACY_VFX,
 
   // —— Water: jet strip (charge orb → launch → splash) ——
-  'bubble-hex': jetVfx('bubble-hex', JET_CHARGE, { maxDisplayWidth: 300, fps: 12 }),
-  /** Charge → launch (f4/f5 overlap earlier columns and read as a sliding strip). */
-  'pressure-wave': jetVfx('pressure-wave', JET_CHARGE, {
+  'bubble-hex': sequenceVfx('bubble-hex', WATER_JET_SEQUENCE, {
+    maxDisplayWidth: 340,
+    fps: 14,
+  }),
+  /** Jet sequence test frames 1..6, rendered on enemy target layer. */
+  'pressure-wave': sequenceVfx('pressure-wave', WATER_JET_SEQUENCE, {
     maxDisplayWidth: 360,
-    fps: 12,
+    fps: 14,
   }),
 
   // —— Water: wave strip (curl → whip arc + impact) ——
@@ -268,8 +273,9 @@ export const ABILITY_VFX_BY_ID: Record<string, AbilityVfxDef> = {
   }),
 
   // —— Water: hydro sheet (wide beam → tidal smash) ——
-  'abyssal-tide-spear': hydroVfx('abyssal-tide-spear', HYDRO_HEAVY, {
+  'abyssal-tide-spear': sequenceVfx('abyssal-tide-spear', WATER_FRAME_SEQUENCE, {
     maxDisplayWidth: 380,
+    fps: 12,
   }),
   'eternal-binding-mist': tornadoVfx('eternal-binding-mist', TORNADO_ALL, {
     maxDisplayWidth: 420,
@@ -280,6 +286,16 @@ export const ABILITY_VFX_BY_ID: Record<string, AbilityVfxDef> = {
     fps: 10,
   }),
   'maelstrom-hex': tornadoVfx('maelstrom-hex', TORNADO_ALL, { maxDisplayWidth: 430 }),
+
+  // —— Electric sequence tests ——
+  'chain-spark': sequenceVfx('chain-spark', CHAIN_SPARK_SEQUENCE, {
+    maxDisplayWidth: 360,
+    fps: 12,
+  }),
+  'bolt-lance': sequenceVfx('bolt-lance', ELECTRIC_ORB_SEQUENCE, {
+    maxDisplayWidth: 340,
+    fps: 12,
+  }),
 }
 
 /** Mastery fallback abilities: `{base}-r{5|10}-{path}-fb` (e.g. Water Fang II). */

@@ -103,6 +103,7 @@ export function AbilitySpriteVfx({
   const [sheetReady, setSheetReady] = useState(false)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const imgRef = useRef<HTMLImageElement | null>(null)
+  const seqImgsRef = useRef<HTMLImageElement[] | null>(null)
 
   const [sheetSize, setSheetSize] = useState<{
     w: number
@@ -129,16 +130,28 @@ export function AbilitySpriteVfx({
   useEffect(() => {
     let cancelled = false
     setSheetReady(false)
-    void loadVfxSheet(def.sheetUrl).then((img) => {
-      if (cancelled) return
-      imgRef.current = img
-      setSheetSize({ w: img.naturalWidth, h: img.naturalHeight })
-      setSheetReady(true)
-    })
+    if (def.frameUrls?.length) {
+      void Promise.all(def.frameUrls.map((url) => loadVfxSheet(url))).then((imgs) => {
+        if (cancelled) return
+        seqImgsRef.current = imgs
+        imgRef.current = null
+        const first = imgs[0]
+        setSheetSize(first ? { w: first.naturalWidth, h: first.naturalHeight } : null)
+        setSheetReady(true)
+      })
+    } else {
+      seqImgsRef.current = null
+      void loadVfxSheet(def.sheetUrl).then((img) => {
+        if (cancelled) return
+        imgRef.current = img
+        setSheetSize({ w: img.naturalWidth, h: img.naturalHeight })
+        setSheetReady(true)
+      })
+    }
     return () => {
       cancelled = true
     }
-  }, [def.sheetUrl])
+  }, [def.sheetUrl, def.frameUrls])
 
   useEffect(() => {
     setFrameIndex(0)
@@ -173,15 +186,37 @@ export function AbilitySpriteVfx({
 
   useEffect(() => {
     const canvas = canvasRef.current
-    const img = imgRef.current
     const frame = def.frames[frameIndex]
-    if (!canvas || !img || !frame || !sheetReady) return
+    if (!canvas || !frame || !sheetReady) return
+
+    const seqImg = def.frameUrls?.length ? seqImgsRef.current?.[frameIndex] ?? null : null
+    const img = seqImg ?? imgRef.current
+    if (!img) return
 
     if (import.meta.env.DEV && def.id === 'splash-strike') {
       console.log('Splash Strike frame', {
         frameIndex,
         crop: frame,
       })
+    }
+
+    if (def.frameUrls?.length) {
+      const stageW = stage.stageW
+      const stageH = stage.stageH
+      if (canvas.width !== stageW || canvas.height !== stageH) {
+        canvas.width = stageW
+        canvas.height = stageH
+      }
+      const ctx = canvas.getContext('2d')
+      if (!ctx) return
+      ctx.clearRect(0, 0, stageW, stageH)
+      ctx.save()
+      ctx.beginPath()
+      ctx.rect(0, 0, stageW, stageH)
+      ctx.clip()
+      ctx.drawImage(img, 0, 0, img.naturalWidth, img.naturalHeight, 0, 0, stageW, stageH)
+      ctx.restore()
+      return
     }
 
     const anchor = def.frames[0]

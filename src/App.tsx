@@ -7111,7 +7111,7 @@ function App() {
           mode={playMode}
           slots={slots}
           selectedSlotId={selectedCharSlot}
-          onSelectSlot={setSelectedCharSlot}
+          onSelectSlot={(id) => setSelectedCharSlot(id)}
           onContinue={handleCharacterContinue}
           onRename={handleCharacterRename}
           onNewGame={handleCharacterNewGame}
