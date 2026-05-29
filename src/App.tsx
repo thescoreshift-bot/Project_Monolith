@@ -503,6 +503,7 @@ import {
   retentionRewardToPayload,
 } from './utils/rewardGrants'
 import './App.css'
+import './styles/mobile-responsive.css'
 
 type PlayMode = 'offline' | 'cloud'
 type RunMode = 'normal' | 'daily' | 'pvp'

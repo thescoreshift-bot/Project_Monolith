@@ -1,0 +1,300 @@
+/**
+ * Touch / narrow-viewport layout fixes.
+ * Desktop (width > 900px) is unchanged — overrides live in max-width media queries only.
+ */
+
+@media (max-width: 900px) {
+  #root {
+    width: 100%;
+    border-inline: none;
+  }
+
+  body {
+    overflow-x: hidden;
+  }
+
+  .app {
+    overflow-x: hidden;
+  }
+
+  /* —— Character select —— */
+  .character-select-screen {
+    overflow-x: hidden;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: max(0.75rem, env(safe-area-inset-top, 0px))
+      max(0.65rem, env(safe-area-inset-right, 0px))
+      max(1rem, env(safe-area-inset-bottom, 0px))
+      max(0.65rem, env(safe-area-inset-left, 0px));
+  }
+
+  .character-select-screen__content {
+    max-width: 100%;
+  }
+
+  .character-select-header__art {
+    max-height: min(16vh, 96px);
+  }
+
+  .character-select-screen__slots {
+    margin-top: 0;
+    gap: 0.75rem;
+  }
+
+  .slot-card {
+    max-height: min(40vh, 440px);
+  }
+
+  .slot-card--filled {
+    max-height: min(42vh, 460px);
+  }
+
+  .character-select-screen__actions {
+    transform: none;
+    margin-top: 0.65rem;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.4rem 0.45rem;
+    max-width: 100%;
+  }
+
+  .character-select-action-btn {
+    min-height: 2.75rem;
+  }
+
+  .character-select-action-btn__img {
+    max-height: 3rem;
+  }
+
+  .character-select-action-btn--primary .character-select-action-btn__img {
+    max-height: 3.35rem;
+  }
+
+  .character-select-screen__upload {
+    margin-top: 0.75rem;
+    padding-top: 0.5rem;
+  }
+
+  .character-select-screen__upload-label {
+    transform: none;
+    margin-bottom: 0.5rem;
+  }
+
+  .character-select-screen__upload-note,
+  .character-select-screen__upload-msg {
+    transform: none;
+  }
+
+  .upload-local-card {
+    transform: none;
+    width: 100%;
+  }
+
+  .upload-local-card__btn {
+    min-width: 0;
+    width: 36%;
+    max-width: none;
+  }
+
+  .upload-local-card__local-stats {
+    font-size: clamp(0.52rem, 2.8vw, 0.68rem);
+  }
+
+  /* —— Main menu —— */
+  .main-menu-screen.title-screen {
+    height: auto;
+    max-height: none;
+    min-height: 100svh;
+    min-height: 100dvh;
+    overflow-x: hidden;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: max(0.5rem, env(safe-area-inset-bottom, 0px));
+  }
+
+  .main-menu-layout {
+    overflow: visible;
+    flex: 0 1 auto;
+  }
+
+  /* —— Combat —— */
+  .combat-screen {
+    overflow-x: hidden;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    max-width: 100%;
+  }
+
+  .combat-screen--battle {
+    min-height: 100svh;
+    min-height: 100dvh;
+    max-height: none;
+    overflow-y: auto;
+    padding: max(0.45rem, env(safe-area-inset-top, 0px)) 0.55rem
+      max(0.55rem, env(safe-area-inset-bottom, 0px));
+  }
+
+  .combat-screen__arena-row {
+    min-height: 0;
+  }
+
+  .vfx-overlay .sprite-viewport--vfx {
+    transform: scale(0.82);
+    transform-origin: center center;
+  }
+
+  /* —— Run map —— */
+  .map-screen {
+    padding: max(0.65rem, env(safe-area-inset-top, 0px)) 0.65rem 1rem;
+    min-height: 100svh;
+    min-height: 100dvh;
+    overflow-x: hidden;
+  }
+
+  .map-screen__top {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .player-panel {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .map-screen__actions {
+    align-items: stretch;
+    width: 100%;
+  }
+
+  .map-screen__actions .btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .map-board {
+    min-height: min(48vh, 420px);
+  }
+
+  .map-board__canvas {
+    min-width: 0;
+    padding: 0.85rem 0.65rem 1rem;
+  }
+
+  .map-board__layers {
+    min-width: 0;
+  }
+
+  .map-board__layer {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.4rem 0.35rem;
+  }
+
+  .map-node {
+    max-width: none;
+    padding: 0.55rem 0.35rem;
+    font-size: 0.78rem;
+  }
+
+  /* —— Shared screens —— */
+  .party-screen,
+  .inventory-screen,
+  .settings-screen,
+  .daily-run-screen,
+  .leaderboard-screen,
+  .run-summary-screen,
+  .patch-notes-screen {
+    padding-left: max(0.75rem, env(safe-area-inset-left, 0px));
+    padding-right: max(0.75rem, env(safe-area-inset-right, 0px));
+  }
+
+  .title-screen {
+    overflow-x: hidden;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-left: max(1rem, env(safe-area-inset-left, 0px));
+    padding-right: max(1rem, env(safe-area-inset-right, 0px));
+  }
+}
+
+@media (max-width: 640px) {
+  .character-select-screen__actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .character-select-screen__actions .character-select-action-btn:first-child {
+    grid-column: 1 / -1;
+  }
+
+  .slot-card {
+    max-height: min(36vh, 380px);
+  }
+
+  .slot-card--filled {
+    max-height: min(38vh, 400px);
+  }
+
+  .slot-card__profile-value {
+    font-size: clamp(0.5rem, 2.6vw, 0.64rem);
+  }
+
+  .slot-card__profile-last-played {
+    transform: translateX(0);
+    left: 18%;
+    right: 42%;
+    font-size: clamp(0.44rem, 2.4vw, 0.56rem);
+  }
+
+  .combat-screen--battle {
+    padding-left: max(0.4rem, env(safe-area-inset-left, 0px));
+    padding-right: max(0.4rem, env(safe-area-inset-right, 0px));
+    gap: 0.5rem;
+  }
+
+  .combat-screen__center-arena {
+    min-height: 72px;
+  }
+
+  .combat-command-grid .ability-card {
+    min-height: 80px;
+  }
+
+  .player-battle-card {
+    grid-template-columns: 72px 1fr;
+  }
+
+  .creature-portrait--combat-party {
+    width: 72px;
+    height: 72px;
+  }
+
+  .map-board__layer {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .player-panel__meta {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .recruitment-card__stats {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-height: 720px) and (max-width: 900px) {
+  .character-select-screen__slots {
+    gap: 0.55rem;
+  }
+
+  .slot-card,
+  .slot-card--filled {
+    max-height: min(34vh, 340px);
+  }
+
+  .character-select-header__art {
+    max-height: 72px;
+  }
+
+  .main-menu-screen {
+    --main-menu-header-max-h: 200px;
+    --main-menu-btn-h: 108px;
+  }
+}
