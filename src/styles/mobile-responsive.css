@@ -134,8 +134,36 @@
     overflow-x: hidden;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
-    padding: max(0.45rem, env(safe-area-inset-top, 0px)) 0.55rem
-      max(0.55rem, env(safe-area-inset-bottom, 0px));
+    /* Top: notch/status bar; bottom: Safari home indicator + URL bar */
+    padding: max(0.85rem, env(safe-area-inset-top, 0px)) 0.55rem
+      max(calc(4.5rem + env(safe-area-inset-bottom, 0px)), env(safe-area-inset-bottom, 0px));
+  }
+
+  .combat-screen__topbar {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.4rem;
+    position: relative;
+    z-index: 5;
+  }
+
+  .combat-screen__topbar-side {
+    order: 1;
+    text-align: center;
+  }
+
+  .combat-action-banner {
+    order: 2;
+    padding: 0.45rem 0.75rem;
+  }
+
+  .combat-screen__flee {
+    order: 3;
+    justify-self: center;
+    align-self: center;
+    margin: 0;
+    z-index: 6;
   }
 
   .combat-screen--battle .combat-screen__topbar,
@@ -156,14 +184,29 @@
 
   .combat-screen__enemy-slot,
   .combat-screen__team-col {
+    position: relative;
     width: 100%;
     max-width: none;
     overflow: visible;
+    z-index: auto;
+  }
+
+  .combat-screen__enemy-slot {
+    z-index: 1;
   }
 
   .combat-screen__team-col {
     justify-self: stretch;
     gap: 0.5rem;
+    z-index: 2;
+  }
+
+  .player-battle-card,
+  .enemy-battle-card {
+    position: relative;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
   }
 
   .combat-screen__center-arena {
@@ -211,6 +254,39 @@
     min-width: 0;
   }
 
+  /* HP bar already shows values — drop duplicate line on narrow screens */
+  .enemy-battle-card__hp-text,
+  .player-battle-card__hp-text {
+    display: none;
+  }
+
+  .enemy-battle-card__hp .hp-bar__text {
+    display: block;
+    font-size: 0.68rem;
+  }
+
+  .enemy-battle-card__matchup {
+    display: none;
+  }
+
+  .enemy-intent {
+    margin-top: 0.35rem;
+    padding: 0.35rem 0.45rem;
+  }
+
+  .enemy-intent__detail,
+  .enemy-intent__type,
+  .enemy-intent__note {
+    display: none;
+  }
+
+  .enemy-battle-card__modifier {
+    margin-top: 0.3rem;
+    padding: 0.28rem 0.4rem;
+    font-size: 0.62rem;
+    line-height: 1.25;
+  }
+
   .enemy-battle-card__name {
     font-size: clamp(0.95rem, 4vw, 1.1rem);
   }
@@ -246,14 +322,28 @@
   .combat-screen__footer {
     display: flex;
     flex-direction: column;
-    gap: 0.55rem;
+    gap: 0.45rem;
     overflow: visible;
+  }
+
+  /* Abilities first — what players need to tap */
+  .combat-screen__footer .combat-command-panel {
+    order: 1;
+  }
+
+  .combat-screen__footer .battle-log--combat {
+    order: 2;
+    max-height: 5.5rem;
+    overflow: hidden;
   }
 
   .combat-command-panel {
     min-height: 0;
     padding: 0.65rem 0.7rem 0.75rem;
     overflow: visible;
+    position: sticky;
+    bottom: max(0.35rem, env(safe-area-inset-bottom, 0px));
+    z-index: 8;
   }
 
   .combat-command-panel__sections {

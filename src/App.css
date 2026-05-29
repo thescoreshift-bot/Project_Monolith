@@ -3727,11 +3727,13 @@
 }
 
 @media (max-width: 1024px) {
+  /* Stack foe / team vertically — side-by-side min widths overflow on phones */
   .combat-screen__arena-row {
-    grid-template-columns: minmax(220px, 1fr) minmax(280px, 1fr);
+    grid-template-columns: 1fr;
     grid-template-areas:
-      'enemy team'
-      'center center';
+      'enemy'
+      'team'
+      'center';
   }
 
   .combat-screen__enemy-slot {
@@ -3741,11 +3743,12 @@
   .combat-screen__team-col {
     grid-area: team;
     max-width: none;
+    justify-self: stretch;
   }
 
   .combat-screen__center-arena {
     grid-area: center;
-    min-height: 140px;
+    min-height: 0;
   }
 
   .combat-screen__footer {
@@ -3776,7 +3779,10 @@
 
   .combat-screen__arena-row {
     grid-template-columns: 1fr;
-    grid-template-areas: unset;
+    grid-template-areas:
+      'enemy'
+      'team'
+      'center';
   }
 
   .combat-screen__team-col {
@@ -3784,7 +3790,8 @@
   }
 
   .combat-screen__center-arena {
-    min-height: 100px;
+    display: none;
+    min-height: 0;
   }
 
   .combat-command-panel {
