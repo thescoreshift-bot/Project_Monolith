@@ -21,16 +21,48 @@ type AbilitySpriteVfxProps = {
 }
 
 const BLACK_KEY_THRESHOLD = 38
+const DEFAULT_VFX_MAX_WIDTH = 280
 
-function resolveStage(def: AbilityVfxDef) {
+function vfxScaleForViewport(): number {
+  if (typeof window === 'undefined') return 1
+  const w = window.innerWidth
+  if (w <= 640) return 0.58
+  if (w <= 900) return 0.72
+  return 1
+}
+
+function useVfxDisplayScale(): number {
+  const [scale, setScale] = useState(() => vfxScaleForViewport())
+
+  useEffect(() => {
+    const update = () => setScale(vfxScaleForViewport())
+    update()
+    window.addEventListener('resize', update)
+    const mq640 = window.matchMedia('(max-width: 640px)')
+    const mq900 = window.matchMedia('(max-width: 900px)')
+    mq640.addEventListener('change', update)
+    mq900.addEventListener('change', update)
+    return () => {
+      window.removeEventListener('resize', update)
+      mq640.removeEventListener('change', update)
+      mq900.removeEventListener('change', update)
+    }
+  }, [])
+
+  return scale
+}
+
+function resolveStage(def: AbilityVfxDef, viewportScale: number) {
   if (def.fixedViewport) {
     return getFixedViewportLayout(
       def.frames,
-      def.fixedViewport.width,
-      def.fixedViewport.height,
+      Math.max(1, Math.round(def.fixedViewport.width * viewportScale)),
+      Math.max(1, Math.round(def.fixedViewport.height * viewportScale)),
     )
   }
-  return getVfxStageLayout(def.frames, def.maxDisplayWidth ?? 280)
+  const baseMax = def.maxDisplayWidth ?? DEFAULT_VFX_MAX_WIDTH
+  const maxW = Math.max(1, Math.round(baseMax * viewportScale))
+  return getVfxStageLayout(def.frames, maxW)
 }
 
 function paintVfxFrame(
@@ -99,6 +131,7 @@ export function AbilitySpriteVfx({
   playKey,
   onComplete,
 }: AbilitySpriteVfxProps) {
+  const viewportScale = useVfxDisplayScale()
   const [frameIndex, setFrameIndex] = useState(0)
   const [sheetReady, setSheetReady] = useState(false)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -120,12 +153,12 @@ export function AbilitySpriteVfx({
       }))
       return getFixedViewportLayout(
         scaled,
-        def.fixedViewport.width,
-        def.fixedViewport.height,
+        Math.max(1, Math.round(def.fixedViewport.width * viewportScale)),
+        Math.max(1, Math.round(def.fixedViewport.height * viewportScale)),
       )
     }
-    return resolveStage(def)
-  }, [def, sheetSize])
+    return resolveStage(def, viewportScale)
+  }, [def, sheetSize, viewportScale])
 
   useEffect(() => {
     let cancelled = false

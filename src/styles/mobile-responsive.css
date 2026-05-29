@@ -116,7 +116,7 @@
     flex: 0 1 auto;
   }
 
-  /* —— Combat —— */
+  /* —— Combat (portraits, VFX, abilities) —— */
   .combat-screen {
     overflow-x: hidden;
     overflow-y: auto;
@@ -125,21 +125,169 @@
   }
 
   .combat-screen--battle {
+    display: flex;
+    flex-direction: column;
     min-height: 100svh;
     min-height: 100dvh;
+    height: auto;
     max-height: none;
+    overflow-x: hidden;
     overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
     padding: max(0.45rem, env(safe-area-inset-top, 0px)) 0.55rem
       max(0.55rem, env(safe-area-inset-bottom, 0px));
   }
 
-  .combat-screen__arena-row {
+  .combat-screen--battle .combat-screen__topbar,
+  .combat-screen--battle .combat-screen__arena-row,
+  .combat-screen--battle .combat-screen__footer {
+    flex-shrink: 0;
     min-height: 0;
+    overflow: visible;
   }
 
-  .vfx-overlay .sprite-viewport--vfx {
-    transform: scale(0.82);
-    transform-origin: center center;
+  .combat-screen__arena-row {
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+    min-height: unset;
+    overflow: visible;
+  }
+
+  .combat-screen__enemy-slot,
+  .combat-screen__team-col {
+    width: 100%;
+    max-width: none;
+    overflow: visible;
+  }
+
+  .combat-screen__team-col {
+    justify-self: stretch;
+    gap: 0.5rem;
+  }
+
+  .combat-screen__center-arena {
+    display: none;
+  }
+
+  .combat-screen__enemy-slot .enemy-battle-card {
+    max-width: none;
+    width: 100%;
+  }
+
+  .combat-screen__enemy-duo {
+    grid-template-columns: 1fr;
+    gap: 0.5rem;
+  }
+
+  /* Side-by-side foe stats + portrait — less vertical clipping */
+  .enemy-battle-card {
+    display: grid;
+    grid-template-columns: minmax(88px, 30vw) minmax(0, 1fr);
+    grid-template-areas:
+      'header header'
+      'portrait body';
+    column-gap: 0.55rem;
+    row-gap: 0.25rem;
+    padding: 0.55rem 0.65rem 0.65rem;
+    overflow: visible;
+  }
+
+  .enemy-battle-card__header {
+    grid-area: header;
+    margin-bottom: 0;
+  }
+
+  .enemy-battle-card__portrait-wrap {
+    grid-area: portrait;
+    align-self: start;
+    margin: 0;
+    min-height: min(132px, 30vw);
+    overflow: visible;
+  }
+
+  .enemy-battle-card__body {
+    grid-area: body;
+    min-width: 0;
+  }
+
+  .enemy-battle-card__name {
+    font-size: clamp(0.95rem, 4vw, 1.1rem);
+  }
+
+  .creature-portrait--combat-lg {
+    width: min(120px, 28vw);
+    height: min(120px, 28vw);
+    margin: 0 auto;
+  }
+
+  .player-battle-card {
+    min-height: 0;
+    grid-template-columns: minmax(72px, 24vw) minmax(0, 1fr);
+    gap: 0.5rem;
+    padding: 0.55rem 0.6rem;
+    overflow: visible;
+  }
+
+  .creature-portrait--combat-party {
+    width: min(80px, 22vw);
+    height: min(80px, 22vw);
+  }
+
+  .combat-screen--battle .creature-portrait {
+    overflow: hidden;
+  }
+
+  .enemy-battle-card__portrait-wrap .vfx-overlay,
+  .sprite-viewport--vfx {
+    overflow: visible;
+  }
+
+  .combat-screen__footer {
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+    overflow: visible;
+  }
+
+  .combat-command-panel {
+    min-height: 0;
+    padding: 0.65rem 0.7rem 0.75rem;
+    overflow: visible;
+  }
+
+  .combat-command-panel__sections {
+    grid-template-columns: 1fr;
+    gap: 0.6rem;
+  }
+
+  .combat-command-section {
+    min-width: 0;
+    overflow: visible;
+  }
+
+  .combat-command-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.5rem;
+  }
+
+  .combat-command-grid .ability-card {
+    min-height: 0;
+    height: auto;
+    padding: 0.55rem 0.6rem;
+    overflow: visible;
+  }
+
+  .combat-command-grid .ability-card__inner {
+    min-width: 0;
+  }
+
+  .combat-command-grid .ability-card__name,
+  .combat-command-grid .ability-card__damage,
+  .combat-command-grid .ability-card__effect {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    white-space: normal;
   }
 
   /* —— Run map —— */
@@ -215,6 +363,62 @@
   }
 }
 
+/* Tablet: single-column arena (avoids 220px+280px side-by-side squeeze) */
+@media (max-width: 1024px) {
+  .combat-screen--battle {
+    display: flex;
+    flex-direction: column;
+    height: auto;
+    max-height: none;
+    overflow-x: hidden;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .combat-screen--battle .combat-screen__topbar,
+  .combat-screen--battle .combat-screen__arena-row,
+  .combat-screen--battle .combat-screen__footer {
+    flex-shrink: 0;
+    overflow: visible;
+  }
+
+  .combat-screen__footer {
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+  }
+
+  .combat-screen__arena-row {
+    display: flex;
+    flex-direction: column;
+    grid-template-columns: 1fr;
+    grid-template-areas: none;
+    gap: 0.55rem;
+    min-height: unset;
+    overflow: visible;
+  }
+
+  .combat-screen__center-arena {
+    display: none;
+  }
+
+  .combat-screen__enemy-slot,
+  .combat-screen__team-col {
+    width: 100%;
+    max-width: none;
+    overflow: visible;
+  }
+
+  .combat-screen__team-col {
+    justify-self: stretch;
+  }
+
+  .combat-screen__enemy-slot .enemy-battle-card {
+    max-width: none;
+    width: 100%;
+  }
+}
+
 @media (max-width: 640px) {
   .character-select-screen__actions {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -246,24 +450,39 @@
   .combat-screen--battle {
     padding-left: max(0.4rem, env(safe-area-inset-left, 0px));
     padding-right: max(0.4rem, env(safe-area-inset-right, 0px));
-    gap: 0.5rem;
+    gap: 0.45rem;
   }
 
-  .combat-screen__center-arena {
-    min-height: 72px;
+  .enemy-battle-card {
+    grid-template-columns: minmax(76px, 26vw) minmax(0, 1fr);
   }
 
-  .combat-command-grid .ability-card {
-    min-height: 80px;
-  }
-
-  .player-battle-card {
-    grid-template-columns: 72px 1fr;
+  .creature-portrait--combat-lg {
+    width: min(100px, 26vw);
+    height: min(100px, 26vw);
   }
 
   .creature-portrait--combat-party {
-    width: 72px;
-    height: 72px;
+    width: min(68px, 20vw);
+    height: min(68px, 20vw);
+  }
+
+  .player-battle-card {
+    grid-template-columns: minmax(68px, 20vw) minmax(0, 1fr);
+  }
+
+  .combat-command-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .combat-command-grid .ability-card {
+    min-height: 0;
+  }
+
+  .enemy-intent__detail,
+  .enemy-battle-card__modifier {
+    font-size: 0.66rem;
+    line-height: 1.3;
   }
 
   .map-board__layer {
@@ -280,6 +499,23 @@
 }
 
 @media (max-height: 720px) and (max-width: 900px) {
+  .combat-screen--battle .combat-action-banner {
+    padding: 0.4rem 0.75rem;
+  }
+
+  .combat-action-banner__title {
+    font-size: 0.82rem;
+  }
+
+  .combat-action-banner__subtitle {
+    font-size: 0.65rem;
+  }
+
+  .creature-portrait--combat-lg {
+    width: min(92px, 24vw);
+    height: min(92px, 24vw);
+  }
+
   .character-select-screen__slots {
     gap: 0.55rem;
   }
