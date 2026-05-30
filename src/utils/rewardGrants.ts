@@ -1,10 +1,26 @@
 import { getGearItem } from '../data/gearItems'
 import { getItemDefinition } from '../data/items'
+import type {
+  EvolutionQueueEntry,
+  PerkDraftQueueEntry,
+} from './creatureProgression'
 import type { TrainerInventory } from './inventorySystem'
 import { addItemToTrainerInventory } from './inventorySystem'
-import { addXpToPartyCreature, type PartyCreature } from './party'
+import type { PartyCreature } from './party'
 import type { RunCreature } from './progression'
-import { addCoins, addXp } from './progression'
+import { addCoins } from './progression'
+import {
+  applyFlatXpProgression,
+  type CreatureLevelUpLine,
+} from './battleRewards'
+
+export type RewardProgressionResult = {
+  levelUpLines: CreatureLevelUpLine[]
+  perkDraftQueue: PerkDraftQueueEntry[]
+  evolutionQueue: EvolutionQueueEntry[]
+  starterLevelBefore: number
+  recruitLevelsBefore: Record<string, number>
+}
 export type QuestRewardPayload = {
   coins?: number
   xpToParty?: number
@@ -87,25 +103,39 @@ export function retentionRewardToPayload(
   }
 }
 
+export type GrantQuestRewardResult = {
+  runState: RunRewardState
+  summary: string
+  progression: RewardProgressionResult | null
+}
+
 /** Apply a quest/archive reward directly to run coins, XP, and trainer inventory. */
 export function grantQuestReward(
   questReward: QuestRewardPayload,
   runState: RunRewardState,
-): { runState: RunRewardState; summary: string } {
+): GrantQuestRewardResult {
   let starter = runState.starter
   let recruits = runState.recruits
   let inventory = runState.inventory
+  let progression: RewardProgressionResult | null = null
 
   if (questReward.coins && questReward.coins > 0) {
     starter = addCoins(starter, questReward.coins)
   }
-  if (questReward.xpToActiveParty && questReward.xpToActiveParty > 0) {
-    starter = addXp(starter, questReward.xpToActiveParty).creature
-  }
-  if (questReward.xpToParty && questReward.xpToParty > 0) {
-    recruits = recruits.map(
-      (r) => addXpToPartyCreature(r, questReward.xpToParty!).creature,
-    )
+
+  const starterXp = questReward.xpToActiveParty ?? 0
+  const recruitXp = questReward.xpToParty ?? 0
+  if (starterXp > 0 || recruitXp > 0) {
+    const xpResult = applyFlatXpProgression(starter, recruits, starterXp, recruitXp)
+    starter = xpResult.starter
+    recruits = xpResult.recruits
+    progression = {
+      levelUpLines: xpResult.levelUpLines,
+      perkDraftQueue: xpResult.perkDraftQueue,
+      evolutionQueue: xpResult.evolutionQueue,
+      starterLevelBefore: xpResult.starterLevelBefore,
+      recruitLevelsBefore: xpResult.recruitLevelsBefore,
+    }
   }
 
   const itemGroups = [
@@ -129,6 +159,7 @@ export function grantQuestReward(
   return {
     runState: { starter, recruits, inventory },
     summary: formatQuestRewardSummary(questReward),
+    progression,
   }
 }
 

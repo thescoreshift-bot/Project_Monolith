@@ -501,6 +501,7 @@ import {
   grantQuestReward,
   hasRetentionGrantValue,
   retentionRewardToPayload,
+  type RewardProgressionResult,
 } from './utils/rewardGrants'
 import './App.css'
 import './styles/mobile-responsive.css'
@@ -640,6 +641,8 @@ function App() {
   const councilPostRewardRef = useRef<{
     gauntletComplete: boolean
   } | null>(null)
+  /** Skips post-battle healing when perk/evolution flow came from quest rewards, not combat. */
+  const progressionFlowSourceRef = useRef<'battle' | 'standalone'>('battle')
   const councilTargetIndexRef = useRef(0)
   const [pendingBossVictory, setPendingBossVictory] = useState(false)
   const [regionCompleteInfo, setRegionCompleteInfo] =
@@ -1943,6 +1946,16 @@ function App() {
       partyRecruitsRef.current = applied.runState.recruits
       setTrainerInventory(applied.runState.inventory)
       trainerInventoryRef.current = applied.runState.inventory
+      if (
+        applied.progression &&
+        beginStandaloneProgressionFlow(
+          applied.runState.starter,
+          applied.runState.recruits,
+          applied.progression,
+        )
+      ) {
+        return retentionState
+      }
       return retentionState
     }
 
@@ -2115,6 +2128,32 @@ function App() {
     void persistRun()
   }
 
+  function beginStandaloneProgressionFlow(
+    starter: RunCreature,
+    recruits: PartyCreature[],
+    progression: RewardProgressionResult,
+  ): boolean {
+    const postQueue = buildPostBattleQueue({
+      perkDraftQueue: progression.perkDraftQueue,
+      evolutionQueue: progression.evolutionQueue,
+      starter,
+      recruits,
+      levelBeforeStarter: progression.starterLevelBefore,
+      recruitLevelsBefore: progression.recruitLevelsBefore,
+      masteryPerkQueue: [],
+      masteryTransformQueue: [],
+    })
+    if (postQueue.length === 0) return false
+
+    setPendingPerkDraftQueue(progression.perkDraftQueue)
+    setPendingEvolutionQueue(progression.evolutionQueue)
+    setPendingPostBattleQueue(postQueue)
+    pendingPostBattleQueueRef.current = postQueue
+    progressionFlowSourceRef.current = 'standalone'
+    processNextPostBattleEvent(starter, recruits, postQueue)
+    return true
+  }
+
   function handleClaimRequest(questId: string) {
     const ctx = buildRequestQuestCtx()
     if (!ctx || !runCreature) return
@@ -2135,7 +2174,22 @@ function App() {
     runCreatureRef.current = result.starter
     partyRecruitsRef.current = result.recruits
     setTrainerInventory(result.inventory)
-    setRequestBoardMessage(`Rewards claimed: ${result.rewardSummary}`)
+    const levelUpNote =
+      result.progression && result.progression.levelUpLines.length > 0
+        ? ` ${result.progression.levelUpLines.map((l: CreatureLevelUpLine) => `${l.name} reached Lv.${l.newLevel}!`).join(' ')}`
+        : ''
+    setRequestBoardMessage(`Rewards claimed: ${result.rewardSummary}.${levelUpNote}`)
+    if (
+      result.progression &&
+      beginStandaloneProgressionFlow(
+        result.starter,
+        result.recruits,
+        result.progression,
+      )
+    ) {
+      void persistRun()
+      return
+    }
     void persistRun()
   }
 
@@ -5961,6 +6015,12 @@ function App() {
     creature: RunCreature,
     recruits: PartyCreature[] = partyRecruitsRef.current,
   ) {
+    if (progressionFlowSourceRef.current === 'standalone') {
+      progressionFlowSourceRef.current = 'battle'
+      finishRunReturn()
+      return
+    }
+
     const councilAfterReward = councilPostRewardRef.current
     if (councilAfterReward) {
       councilPostRewardRef.current = null

@@ -15,6 +15,7 @@ import { getTodayDateKey } from './dailyRun'
 import {
   grantQuestReward,
   type QuestRewardPayload,
+  type RewardProgressionResult,
 } from './rewardGrants'
 import type { QuestEventPayload, QuestEventType } from './questSystem'
 
@@ -501,6 +502,7 @@ export type ClaimRequestResult = {
   recruits: PartyCreature[]
   inventory: TrainerInventory
   rewardSummary: string
+  progression: RewardProgressionResult | null
 }
 
 export function claimRequestQuestReward(
@@ -541,6 +543,7 @@ export function claimRequestQuestReward(
     recruits: granted.runState.recruits,
     inventory: granted.runState.inventory,
     rewardSummary: granted.summary,
+    progression: granted.progression,
   }
 }
 

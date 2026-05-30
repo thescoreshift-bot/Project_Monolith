@@ -167,3 +167,84 @@ export function distributeBattleXp(
     evolutionQueue,
   }
 }
+
+/** Quest / archive flat XP — same perk drafts and evolution checks as battle XP. */
+export function applyFlatXpProgression(
+  starter: RunCreature,
+  recruits: PartyCreature[],
+  starterXp: number,
+  recruitXpPerMember: number,
+): BattleXpResult & {
+  starterLevelBefore: number
+  recruitLevelsBefore: Record<string, number>
+} {
+  const starterLevelBefore = starter.level
+  const recruitLevelsBefore: Record<string, number> = {}
+  for (const recruit of recruits) {
+    recruitLevelsBefore[recruit.id] = recruit.level
+  }
+
+  const levelUpLines: CreatureLevelUpLine[] = []
+  const evolutionQueue: EvolutionQueueEntry[] = []
+  const recruitGains: { id: string; levelsGained: number }[] = []
+  const xpLines: CreatureXpGainLine[] = []
+
+  const starterResult =
+    starterXp > 0
+      ? addXp(starter, starterXp)
+      : { creature: starter, levelsGained: 0, leveledUp: false }
+  let nextStarter = starterResult.creature
+  if (starterXp > 0) {
+    xpLines.push({ name: nextStarter.name, xpGained: starterXp })
+  }
+  if (starterResult.leveledUp) {
+    levelUpLines.push({ name: nextStarter.name, newLevel: nextStarter.level })
+  }
+  appendEvolutionThresholds(
+    evolutionQueue,
+    STARTER_CREATURE_ID,
+    starterLevelBefore,
+    nextStarter,
+  )
+
+  const nextRecruits = recruits.map((recruit) => {
+    if (recruitXpPerMember <= 0) {
+      recruitGains.push({ id: recruit.id, levelsGained: 0 })
+      return recruit
+    }
+    const levelBefore = recruitLevelsBefore[recruit.id] ?? recruit.level
+    const result = addXpToPartyCreature(recruit, recruitXpPerMember)
+    xpLines.push({
+      name: recruit.name,
+      xpGained: recruitXpPerMember,
+      note: 'quest bonus',
+    })
+    if (result.leveledUp) {
+      levelUpLines.push({ name: recruit.name, newLevel: result.creature.level })
+    }
+    recruitGains.push({ id: recruit.id, levelsGained: result.levelsGained })
+    appendEvolutionThresholds(
+      evolutionQueue,
+      recruit.id,
+      levelBefore,
+      result.creature,
+    )
+    return result.creature
+  })
+
+  const perkDraftQueue = buildPerkDraftQueue(
+    starterResult.levelsGained,
+    recruitGains,
+  )
+
+  return {
+    starter: nextStarter,
+    recruits: nextRecruits,
+    xpLines,
+    levelUpLines,
+    perkDraftQueue,
+    evolutionQueue,
+    starterLevelBefore,
+    recruitLevelsBefore,
+  }
+}

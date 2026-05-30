@@ -10,6 +10,7 @@ import { rollShopGearOffers } from './gearSystem'
 import {
   grantQuestReward,
   type QuestRewardPayload,
+  type RewardProgressionResult,
   type RunRewardState,
 } from './rewardGrants'
 
@@ -383,6 +384,7 @@ export type ClaimQuestResult = {
   recruits: PartyCreature[]
   inventory: TrainerInventory
   rewardSummary: string
+  progression: RewardProgressionResult | null
 }
 
 export function claimQuestReward(
@@ -429,6 +431,7 @@ export function claimQuestReward(
     recruits: granted.runState.recruits,
     inventory: granted.runState.inventory,
     rewardSummary: granted.summary,
+    progression: granted.progression,
   }
 }
 
