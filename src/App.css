@@ -11,7 +11,11 @@
   --mono-glow: rgba(78, 232, 200, 0.12);
   --mono-danger: #f87171;
 
+  flex: 1 1 auto;
+  width: 100%;
   min-height: 100svh;
+  min-height: 100dvh;
+  box-sizing: border-box;
   background: var(--mono-bg);
   color: var(--mono-text);
   font-family: var(--sans, system-ui, sans-serif);

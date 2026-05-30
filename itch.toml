@@ -1,0 +1,12 @@
+# itch.io Butler config (optional — for CLI uploads)
+# 1. Install Butler: https://itch.io/docs/butler/
+# 2. Replace YOUR_USERNAME and your-game-slug below
+# 3. Run: npm run build:itch
+# 4. Run: butler push itch.toml -u YOUR_USERNAME/your-game-slug
+
+[project]
+title = "Project Monolith"
+
+[[targets]]
+platform = "web"
+path = "project-monolith-itch.zip"

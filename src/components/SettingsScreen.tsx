@@ -1,4 +1,10 @@
+import { useEffect, useState } from 'react'
 import { APP_VERSION_LABEL } from '../utils/version'
+import {
+  isAppFullscreen,
+  isFullscreenSupported,
+  toggleAppFullscreen,
+} from '../utils/fullscreen'
 
 type SettingsScreenProps = {
   tutorialCompleted: boolean
@@ -25,6 +31,14 @@ export function SettingsScreen({
   onOpenFeedback,
   onBack,
 }: SettingsScreenProps) {
+  const [fullscreen, setFullscreen] = useState(isAppFullscreen)
+
+  useEffect(() => {
+    const sync = () => setFullscreen(isAppFullscreen())
+    document.addEventListener('fullscreenchange', sync)
+    return () => document.removeEventListener('fullscreenchange', sync)
+  }, [])
+
   return (
     <main className="settings-screen">
       <header className="screen-header">
@@ -69,6 +83,22 @@ export function SettingsScreen({
           Shortens the pre-battle intro. You can still tap the screen to skip.
         </p>
       </section>
+
+      {isFullscreenSupported() ? (
+        <section className="settings-screen__section">
+          <h2 className="panel-label">Display</h2>
+          <button
+            type="button"
+            className="btn btn--small"
+            onClick={() => void toggleAppFullscreen()}
+          >
+            {fullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+          </button>
+          <p className="settings-screen__hint">
+            On itch.io you can also use the fullscreen button below the game frame.
+          </p>
+        </section>
+      ) : null}
 
       <section className="settings-screen__section">
         <h2 className="panel-label">Testing</h2>

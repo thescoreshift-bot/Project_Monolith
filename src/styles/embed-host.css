@@ -1,0 +1,38 @@
+/**
+ * itch.io / iframe embed — fill the host frame without a fixed pixel column.
+ */
+
+html.is-embedded,
+html.is-embedded body {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  background: #0a0c12;
+}
+
+html.is-embedded #root {
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  min-height: 0;
+  margin: 0;
+  border: none;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+html.is-embedded .app {
+  width: 100%;
+  min-height: 100%;
+  box-sizing: border-box;
+}
+
+html.is-embedded .main-menu-screen.title-screen,
+html.is-embedded .combat-screen--battle,
+html.is-embedded .character-select-screen,
+html.is-embedded .map-screen {
+  min-height: 100%;
+}

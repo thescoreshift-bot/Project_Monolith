@@ -1,6 +1,7 @@
 # Dependencies & build output
 node_modules
 dist
+project-monolith-itch.zip
 
 # Secrets (never commit)
 .env
