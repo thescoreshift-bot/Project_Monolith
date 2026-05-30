@@ -1,4 +1,6 @@
 /** Background music loop tracks (files in /public/audio/). */
+import { publicAsset } from './publicAsset'
+
 export type BgmTrackId = 'main_menu' | 'combat_3' | 'healing_stationary' | 'game_bonus'
 
 /** Short event stingers (non-looping). */
@@ -89,7 +91,7 @@ export function playBgm(track: BgmTrackId): void {
   stopBgm()
 
   const def = BGM_TRACKS[track]
-  const el = new Audio(def.src)
+  const el = new Audio(publicAsset(def.src))
   el.loop = true
   el.volume = def.volume
   el.preload = 'auto'
@@ -110,7 +112,7 @@ export function playBgm(track: BgmTrackId): void {
 export function playSfx(track: SfxTrackId): void {
   if (!isMusicEnabled()) return
   const def = SFX_TRACKS[track]
-  const el = new Audio(def.src)
+  const el = new Audio(publicAsset(def.src))
   el.volume = def.volume
   el.preload = 'auto'
   const play = () => {
@@ -127,7 +129,7 @@ const ABILITY_SFX_VOLUME = 0.62
 /** Combat ability sound (one-shot). sfxKey is a file stem under /audio/sfx/. */
 export function playAbilitySfx(sfxKey: string): void {
   if (!isMusicEnabled() || !sfxKey) return
-  const el = new Audio(`/audio/sfx/${sfxKey}.mp3`)
+  const el = new Audio(publicAsset(`/audio/sfx/${sfxKey}.mp3`))
   el.volume = ABILITY_SFX_VOLUME
   const play = () => {
     if (!audioUnlocked) return
@@ -168,9 +170,9 @@ const ENCOUNTER_BATTLE_VOLUME = 0.36
 export type EncounterAudioProfile = 'battleRandom' | 'eliteBoss'
 
 function encounterMusicSrc(profile: EncounterAudioProfile): string {
-  if (profile === 'eliteBoss') return '/audio/elite_boss_encounter.mp3'
+  if (profile === 'eliteBoss') return publicAsset('/audio/elite_boss_encounter.mp3')
   const n = 1 + Math.floor(Math.random() * 3)
-  return `/audio/battle_encounter${n}.mp3`
+  return publicAsset(`/audio/battle_encounter${n}.mp3`)
 }
 
 /** Looping battle music from encounter through fight until stopEncounterBattleMusic(). */
@@ -187,7 +189,7 @@ export function startEncounterBattleMusic(
   stopEncounterBattleMusic()
   stopBgm()
 
-  const el = new Audio(src)
+  const el = new Audio(publicAsset(src))
   el.loop = true
   el.volume = ENCOUNTER_BATTLE_VOLUME
   el.preload = 'auto'

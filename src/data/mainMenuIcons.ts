@@ -1,5 +1,7 @@
 /** Menu emblem art (public/assets/menu/). */
-export const MAIN_MENU_ICONS = {
+import { deepPublicAssets } from '../utils/publicAsset'
+
+export const MAIN_MENU_ICONS = deepPublicAssets({
   dailyRun: '/assets/menu/Daily_Run.png',
   play: '/assets/menu/Play.png',
   offline: '/assets/menu/Offline.png',
@@ -13,10 +15,10 @@ export const MAIN_MENU_ICONS = {
   feedback: '/assets/menu/Feedback.png',
   patchNotes: '/assets/menu/Patch_Notes.png',
   settings: '/assets/menu/Settings.png',
-} as const
+})
 
 /** Menu label art — replaces CSS gradient text (public/assets/menu/). */
-export const MAIN_MENU_TEXT = {
+export const MAIN_MENU_TEXT = deepPublicAssets({
   dailyRun: '/assets/menu/Daily_Run_Text.png',
   play: '/assets/menu/Play_Text.png',
   offline: '/assets/menu/Offline_Text.png',
@@ -30,4 +32,4 @@ export const MAIN_MENU_TEXT = {
   feedback: '/assets/menu/Feedback_Text.png',
   patchNotes: '/assets/menu/Patch_Notes_Text.png',
   settings: '/assets/menu/Settings_Text.png',
-} as const
+})

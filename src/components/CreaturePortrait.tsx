@@ -4,6 +4,7 @@ import {
   pickCombatSpriteAnim,
   type CreatureSpriteSheetSet,
 } from '../types/creatureSprites'
+import { publicAsset } from '../utils/publicAsset'
 import { SpriteSheet } from './SpriteSheet'
 
 export type CreaturePortraitSize =
@@ -77,8 +78,10 @@ export function CreaturePortrait({
   const useSprite =
     !failed && !sheetFailed && anim != null && anim.frameCount > 1
 
-  const src = !unseen && portraitUrl && !failed ? portraitUrl : null
-  const silhouetteSrc = silhouetteUrl && !failed ? silhouetteUrl : null
+  const src =
+    !unseen && portraitUrl && !failed ? publicAsset(portraitUrl) : null
+  const silhouetteSrc =
+    silhouetteUrl && !failed ? publicAsset(silhouetteUrl) : null
 
   const shellClass = [
     'creature-portrait',

@@ -1,5 +1,6 @@
 import type { EvolutionBranchCategory, StatModifiers } from './perks'
 import { ALL_RECRUIT_EVOLUTION_FORMS } from './recruitEvolutions'
+import { deepPublicAssets } from '../utils/publicAsset'
 
 export type { EvolutionBranchCategory } from './perks'
 
@@ -318,13 +319,13 @@ const GROUND_BRANCHES: Record<EvolutionBranchCategory, BranchTemplate> = {
   },
 }
 
-export const ALL_EVOLUTION_FORMS: EvolutionForm[] = [
+export const ALL_EVOLUTION_FORMS: EvolutionForm[] = deepPublicAssets([
   ...buildStarterEvolutions('fire', FIRE_BRANCHES),
   ...buildStarterEvolutions('water', WATER_BRANCHES),
   ...buildStarterEvolutions('grass', GRASS_BRANCHES),
   ...buildStarterEvolutions('electric', ELECTRIC_BRANCHES),
   ...buildStarterEvolutions('ground', GROUND_BRANCHES),
-]
+])
 
 const EVOLUTION_BY_KEY = new Map(
   ALL_EVOLUTION_FORMS.map((f) => [

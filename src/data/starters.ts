@@ -1,3 +1,5 @@
+import { deepPublicAssets } from '../utils/publicAsset'
+
 export type ElementType = 'Fire' | 'Water' | 'Grass' | 'Electric' | 'Ground'
 
 export type StarterStats = {
@@ -22,7 +24,7 @@ export type Starter = {
   silhouetteUrl?: string
 }
 
-export const STARTERS: Starter[] = [
+export const STARTERS: Starter[] = deepPublicAssets([
   {
     id: 'fire',
     name: 'Cinderex',
@@ -78,4 +80,4 @@ export const STARTERS: Starter[] = [
     abilityId: 'stone-nudge',
     portraitUrl: '/assets/creatures/starters/ground-base.png',
   },
-]
+])

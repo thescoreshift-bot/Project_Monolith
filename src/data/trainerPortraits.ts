@@ -1,6 +1,7 @@
 import type { MapNode } from './nodeMap'
 import { GYM_NPC_TEMPLATES } from './gymRoster'
 import { getGymForBadge } from './regionGyms'
+import { deepPublicAssets } from '../utils/publicAsset'
 
 /** Full-body trainer / gym leader portraits keyed by enemy template id. */
 const VERDANT_GYM_PORTRAITS: Record<string, string> = {
@@ -22,9 +23,9 @@ const VERDANT_GYM_PORTRAITS: Record<string, string> = {
   'gym-leader-apex': '/assets/trainers/verdant-circuit/gym-leader-apex.png',
 }
 
-const GYM_TRAINER_PORTRAITS: Record<string, string> = {
+const GYM_TRAINER_PORTRAITS: Record<string, string> = deepPublicAssets({
   ...VERDANT_GYM_PORTRAITS,
-}
+})
 
 export function getGymTrainerPortraitUrl(enemyTemplateId: string): string | null {
   return GYM_TRAINER_PORTRAITS[enemyTemplateId] ?? null

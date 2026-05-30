@@ -10,6 +10,7 @@ import {
   loadSpriteSheetImage,
   resolveStripFrameDimensions,
 } from '../utils/spriteSheetUtils'
+import { publicAsset } from '../utils/publicAsset'
 
 export type SpriteFrameCrop = {
   x: number
@@ -71,6 +72,7 @@ export function SpriteSheet({
   onLoadFailed,
   blendMode,
 }: SpriteSheetProps) {
+  const resolvedSrc = publicAsset(src)
   const cropMode = Boolean(frameCrops && frameCrops.length > 0)
   const effectiveCount = cropMode ? frameCrops!.length : frameCount
 
@@ -89,7 +91,7 @@ export function SpriteSheet({
     setFailed(false)
 
     let cancelled = false
-    void loadSpriteSheetImage(src)
+    void loadSpriteSheetImage(resolvedSrc)
       .then((img) => {
         if (cancelled) return
         setNaturalSize({ w: img.naturalWidth, h: img.naturalHeight })
@@ -104,7 +106,7 @@ export function SpriteSheet({
     return () => {
       cancelled = true
     }
-  }, [src, playKey, onLoadFailed])
+  }, [resolvedSrc, playKey, onLoadFailed])
 
   const stripLayout = useMemo(() => {
     if (!loaded || cropMode) return null
@@ -235,7 +237,7 @@ export function SpriteSheet({
       return {
         width: viewportW,
         height: viewportH,
-        backgroundImage: `url(${src})`,
+        backgroundImage: `url(${resolvedSrc})`,
         backgroundRepeat: 'no-repeat',
         backgroundSize: `${sheetWidthScaled}px ${sheetHeightScaled}px`,
         backgroundPosition: `${-Math.round(crop.x * scale)}px ${-Math.round(crop.y * scale)}px`,
@@ -256,7 +258,7 @@ export function SpriteSheet({
       return {
         width: viewportW,
         height: viewportH,
-        backgroundImage: `url(${src})`,
+        backgroundImage: `url(${resolvedSrc})`,
         backgroundRepeat: 'no-repeat',
         backgroundSize: `${sheetWidthScaled}px ${sheetHeightScaled}px`,
         backgroundPosition: `${-Math.round(offsetX)}px 0px`,

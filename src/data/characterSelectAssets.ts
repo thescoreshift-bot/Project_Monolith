@@ -2,7 +2,9 @@
  * Character select scene art (place PNGs in /public/assets/character-select/).
  * Wire paths here, then reference from StarterSelectScreen / starters as needed.
  */
-export const CHARACTER_SELECT_ASSETS = {
+import { deepPublicAssets } from '../utils/publicAsset'
+
+export const CHARACTER_SELECT_ASSETS = deepPublicAssets({
   /** Full-screen background for the save-slot character select screen. */
   background: '/assets/character-select/character-select-background.png',
   /** Title banner — replaces the “Character Select” heading text. */
@@ -33,6 +35,6 @@ export const CHARACTER_SELECT_ASSETS = {
     electric: '/assets/creatures/starters/electric-base.png',
     ground: '/assets/creatures/starters/ground-base.png',
   },
-} as const
+})
 
 export type CharacterSelectStarterId = keyof typeof CHARACTER_SELECT_ASSETS.portraits

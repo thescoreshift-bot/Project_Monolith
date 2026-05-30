@@ -1,6 +1,7 @@
 import type { EvolutionBranchCategory, EvolutionForm } from './evolutions'
 import type { StatModifiers } from './perks'
 import { normalizeRecruitTemplateId, resolveRecruitTemplateId } from './recruitPortraits'
+import { deepPublicAssets } from '../utils/publicAsset'
 
 type BranchTemplate = Omit<
   EvolutionForm,
@@ -299,13 +300,13 @@ export const RECRUIT_EVOLUTION_TEMPLATE_IDS = new Set([
   'driftwisp',
 ])
 
-export const ALL_RECRUIT_EVOLUTION_FORMS: EvolutionForm[] = [
+export const ALL_RECRUIT_EVOLUTION_FORMS: EvolutionForm[] = deepPublicAssets([
   ...buildRecruitEvolutions('bristlebug', BRISTLEBUG_BRANCHES),
   ...buildRecruitEvolutions('ashling', ASHLING_BRANCHES),
   ...buildRecruitEvolutions('pebblemaw', PEBBLEMAW_BRANCHES),
   ...buildRecruitEvolutions('voltimp', VOLTIMP_BRANCHES),
   ...buildRecruitEvolutions('driftwisp', DRIFTWISP_BRANCHES),
-]
+])
 
 const RECRUIT_EVOLUTION_BY_KEY = new Map(
   ALL_RECRUIT_EVOLUTION_FORMS.map((f) => [

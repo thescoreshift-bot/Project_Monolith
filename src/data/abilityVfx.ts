@@ -240,7 +240,9 @@ const BUBBLE_HEX_LEGACY_VFX: AbilityVfxDef = {
   ],
 }
 
-export const ABILITY_VFX_BY_ID: Record<string, AbilityVfxDef> = {
+import { deepPublicAssets } from '../utils/publicAsset'
+
+const ABILITY_VFX_BY_ID_RAW: Record<string, AbilityVfxDef> = {
   'bubble-hex-legacy': BUBBLE_HEX_LEGACY_VFX,
 
   // —— Water: jet strip (charge orb → launch → splash) ——
@@ -297,6 +299,9 @@ export const ABILITY_VFX_BY_ID: Record<string, AbilityVfxDef> = {
     fps: 12,
   }),
 }
+
+export const ABILITY_VFX_BY_ID: Record<string, AbilityVfxDef> =
+  deepPublicAssets(ABILITY_VFX_BY_ID_RAW)
 
 /** Mastery fallback abilities: `{base}-r{5|10}-{path}-fb` (e.g. Water Fang II). */
 export function masteryFallbackBaseAbilityId(abilityId: string): string | null {

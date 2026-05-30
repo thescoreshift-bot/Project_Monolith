@@ -1,3 +1,5 @@
+import { publicAsset } from './publicAsset'
+
 export type ResolvedSpriteDimensions = {
   frameWidth: number
   frameHeight: number
@@ -82,7 +84,8 @@ export function resolveStripFrameDimensions(
 const imageLoadCache = new Map<string, Promise<HTMLImageElement>>()
 
 export function loadSpriteSheetImage(url: string): Promise<HTMLImageElement> {
-  const cached = imageLoadCache.get(url)
+  const resolved = publicAsset(url)
+  const cached = imageLoadCache.get(resolved)
   if (cached) return cached
 
   const promise = new Promise<HTMLImageElement>((resolve, reject) => {
@@ -90,8 +93,8 @@ export function loadSpriteSheetImage(url: string): Promise<HTMLImageElement> {
     img.decoding = 'async'
     img.onload = () => resolve(img)
     img.onerror = () => reject(new Error(`Failed to load sprite sheet: ${url}`))
-    img.src = url
+    img.src = resolved
   })
-  imageLoadCache.set(url, promise)
+  imageLoadCache.set(resolved, promise)
   return promise
 }

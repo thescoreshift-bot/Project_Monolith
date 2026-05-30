@@ -14,6 +14,7 @@ import {
 } from './recruitPortraits'
 import type { ElementType, Starter } from './starters'
 import type { EvolutionHistoryEntry } from '../utils/progression'
+import { deepPublicAssets } from '../utils/publicAsset'
 
 const NPC_BRANCH_PRIORITY: EvolutionBranchCategory[] = [
   'offense',
@@ -131,13 +132,13 @@ export function resolveNpcCreatureDisplay(
   return { name: baseName, portraitUrl: basePortrait }
 }
 
-export const STARTER_PORTRAIT_URLS: Record<string, string> = {
+export const STARTER_PORTRAIT_URLS: Record<string, string> = deepPublicAssets({
   fire: '/assets/creatures/starters/fire-base.png',
   water: '/assets/creatures/starters/water-base.png',
   grass: '/assets/creatures/starters/grass-base.png',
   electric: '/assets/creatures/starters/electric-base.png',
   ground: '/assets/creatures/starters/ground-base.png',
-}
+})
 
 const STARTER_FAMILY_IDS = new Set([
   'fire-line',

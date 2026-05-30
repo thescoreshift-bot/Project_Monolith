@@ -1,3 +1,5 @@
+import { publicAsset } from '../utils/publicAsset'
+
 export type NodeType =
   | 'battle'
   | 'elite'
@@ -128,7 +130,7 @@ export function nodeTypeToIconPath(type: NodeType): string {
   boss: '/assets/map-nodes/boss.png',
   monolithCouncil: '/assets/map-nodes/boss.png',
 }
-  return icons[type]
+  return publicAsset(icons[type])
 }
 
 export function isDramaticNodeType(type: NodeType): boolean {

@@ -1,2 +1,6 @@
+import { publicAsset } from '../utils/publicAsset'
+
 /** Decorative title banner — not interactive (public/assets/menu/). */
-export const MAIN_MENU_HEADER_SRC = '/assets/menu/Project_Monolith_Header.png'
+export const MAIN_MENU_HEADER_SRC = publicAsset(
+  '/assets/menu/Project_Monolith_Header.png',
+)
