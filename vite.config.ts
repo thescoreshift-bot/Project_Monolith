@@ -3,6 +3,8 @@ import react from '@vitejs/plugin-react'
 
 // https://vite.dev/config/
 export default defineConfig({
+  // Relative asset paths — required for itch.io HTML uploads (not served from domain root).
+  base: './',
   plugins: [react()],
   server: {
     port: 5173,
